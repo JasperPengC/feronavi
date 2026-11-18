@@ -1,0 +1,50 @@
+# 独立开发项目；不复用生产数据卷或发布宿主机数据库端口。
+name: feronavi-devcontainer
+services:
+  app:
+    build:
+      context: ..
+      target: development
+    init: true
+    command: ["sleep", "infinity"]
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://feronavi:devcontainer-local@db:5432/feronavi
+      TEST_DATABASE_ADMIN_URL: postgres://feronavi:devcontainer-local@db:5432/postgres
+      REDIS_URL: redis://cache:6379
+      DATA_DIR: /data
+    volumes:
+      - ..:/workspace:cached
+      - dependencies:/workspace/node_modules
+      - app-data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+  db:
+    image: ghcr.io/${FERONAVI_GH_OWNER:-feronavi}/feronavi-db:${PG_MAJOR:-16}
+    environment:
+      POSTGRES_DB: feronavi
+      POSTGRES_USER: feronavi
+      POSTGRES_PASSWORD: devcontainer-local
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U feronavi -d feronavi"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  cache:
+    image: valkey/valkey:8-alpine
+    command: ["valkey-server", "--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+volumes:
+  dependencies:
+  app-data:
+  database:

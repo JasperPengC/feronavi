@@ -1,0 +1,26 @@
+node_modules
+**/node_modules
+.pnpm-store
+.workbuddy-ai
+.DS_Store
+.git
+.cache
+.env
+.env.*
+!.env.example
+dist
+dist-server
+coverage
+test-results
+playwright-report
+data
+logs
+*.log
+docs-site
+# 历史文档与视觉验收素材不参与应用构建；现行 public/brand 保留。
+docs/archive
+docs/evidence
+docs/brand
+docs/visual-baseline
+docs/reference-youqu
+docs/screenshots

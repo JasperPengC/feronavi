@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Feronavi</title>
+    <meta name="theme-color" content="#4968e8" />
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48 64x64 128x128 256x256" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <!--
+      ⚠️ 主题必须在 React 挂载【之前】写入 <html class>。
+      SPA 没有 SSR，若等 React 起来再设主题，用户会先看到一帧默认色再被切走（FOUC）。
+      这就是第 0.6 节验收清单里那条「主题无闪烁」的落点。
+    -->
+    <script>
+      (function () {
+        try {
+          var t = document.cookie.match(/(?:^|;\s*)feronavi_theme=([^;]+)/);
+          var theme = t ? decodeURIComponent(t[1]) : "auto";
+          // 兼容历史/服务端值 "system"：它等价于客户端的 "auto"
+          var auto = theme === "auto" || theme === "system" || (theme !== "dark" && theme !== "light");
+          var dark = theme === "dark" || (auto && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.className = dark ? "theme-dark" : "theme-light";
+        } catch (e) {
+          document.documentElement.className = "theme-light";
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root">
+      <!--
+        启动占位（P2-2）：SPA 无 SSR，JS 解析完成前 #root 是空白的——大项目首屏会白屏 1-3 秒
+        （2026-11-01 全站走查实测）。这里放一个品牌启动屏，React 挂载后被整体替换。
+        看门狗（下方）相应改为检测这块占位是否还在，而不是 root 是否为空。
+      -->
+      <div id="boot-splash" aria-hidden="true">
+        <img src="/brand/feronavi-icon.svg" width="44" height="44" alt="" />
+        <span>正在加载 Feronavi…</span>
+      </div>
+      <style>
+        #boot-splash {
+          position: fixed; inset: 0; display: flex; flex-direction: column;
+          align-items: center; justify-content: center; gap: 14px;
+          font: 13px/1.6 system-ui, -apple-system, "PingFang SC", sans-serif;
+          color: #565b63; user-select: none;
+        }
+        .theme-dark #boot-splash { color: #9aa1ab; }
+        #boot-splash img { animation: boot-pulse 1.4s ease-in-out infinite; }
+        @keyframes boot-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+      </style>
+    </div>
+    <noscript>
+      <div style="padding:32px;font-family:system-ui">
+        本应用需要 JavaScript 才能运行，请在浏览器设置中启用后刷新。
+      </div>
+    </noscript>
+    <script type="module" src="/src/client/main.tsx"></script>
+    <!--
+      ⚠️ 启动看门狗（D4）：脚本若加载失败或执行报错，用户看到的会是**纯黑屏**，
+      控制台之外毫无线索（实测踩到：不存在的 JS 曾返回 HTML，浏览器按 nosniff 拒绝执行）。
+      这里兜一层：若若干秒后 #root 仍为空，或捕获到脚本错误，直接**把原因显示在页面上**。
+      刻意不依赖任何框架 —— 它要能在 React 完全没起来的场景下工作。
+    -->
+    <script>
+      (function () {
+        var shown = false;
+        function show(title, detail) {
+          if (shown) return;
+          var root = document.getElementById("root");
+          // React 已经渲染出内容（启动占位被替换掉）就不打扰
+          if (root && !document.getElementById("boot-splash")) return;
+          shown = true;
+          var box = document.createElement("div");
+          box.setAttribute("role", "alert");
+          box.style.cssText =
+            "padding:24px 28px;font-family:system-ui,sans-serif;line-height:1.7;" +
+            "max-width:640px;margin:48px auto;border:1px solid #d4d4d8;border-radius:8px;" +
+            "background:#fff;color:#18181b";
+          box.innerHTML =
+            '<h2 style="margin:0 0 8px;font-size:18px">页面未能启动</h2>' +
+            '<p style="margin:0 0 12px">' + title + "</p>" +
+            (detail ? '<pre style="margin:0 0 12px;padding:12px;background:#f4f4f5;border-radius:6px;' +
+              'font-size:12px;overflow:auto;max-height:180px;white-space:pre-wrap">' + detail + "</pre>" : "") +
+            '<p style="margin:0;color:#71717a;font-size:13px">' +
+            "最常见的原因是浏览器缓存了旧版页面（重新部署后资源名已变化）。<br>" +
+            "请<strong>强制刷新</strong>：macOS 按 <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>，" +
+            "Windows 按 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>。" +
+            "</p>";
+          document.body.appendChild(box);
+        }
+
+        window.addEventListener("error", function (e) {
+          var msg = e && e.message ? e.message : "未知错误";
+          var src = e && e.filename ? e.filename.replace(location.origin, "") : "";
+          show("页面脚本执行出错。", (src ? src + "\n" : "") + msg);
+        });
+        window.addEventListener("unhandledrejection", function (e) {
+          var r = e && e.reason;
+          show("页面脚本出现未处理的错误。", r && r.message ? r.message : String(r));
+        });
+        // 6 秒后仍未挂载 —— 多半是脚本根本没加载成功
+        setTimeout(function () {
+          show("页面脚本未能加载。", "已等待 6 秒，#root 仍为空。");
+        }, 6000);
+      })();
+    </script>
+  </body>
+</html>

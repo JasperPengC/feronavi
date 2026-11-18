@@ -1,0 +1,184 @@
+/* 全局设计令牌：颜色、排版、尺寸和主题变量。控件与页面规则在各自所有权文件中。 */
+:root {
+  --radius-xs: 5px;
+  --radius-sm: 10px;
+  --radius-md: 10px;
+  --radius: 16px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+  --space-1: 4px;  --space-2: 8px;   --space-3: 12px;
+  --space-4: 16px; --space-5: 24px;  --space-6: 32px;
+  --page-inset: 24px;
+  --table-cell-inset: 16px;
+  --card-padding: 20px;
+  --card-padding-compact: 12px;
+  --section-gap: 16px;
+  --control-height: 36px;
+  --control-height-sm: 32px;
+  --focus-ring: var(--primary);
+  --focus-width: 2px;
+  --focus-offset: 2px;
+  --metric-card-height: 118px;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+               "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --text-label: 12px; --text-xs: 12px; --text-sm: 13px; --text-base: 14px;
+  --text-md: 15px; --text-lg: 16px; --text-xl: 23px; --text-2xl: 26px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --floating-filter: none;
+  --glass-filter: none;
+}
+.theme-light {
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f5f5f7;
+  --surface-3: #eaeaee;
+  --line: #e7e7ec;
+  --line-strong: #c9cad2;
+  --text: #202126;
+  --text-soft: #41434d;
+  --text-faint: #676974;
+  --blue: #0066cc;
+  --blue-bright: #005bb8;
+  --violet: #6748a5;
+  --cyan: #0c7165;
+  --green: #19704d;
+  --amber: #8b530e;
+  --red: #b33149;
+  --surface-chrome: #f7f8fb;
+  --surface-workbench: #e9edf3;
+  --surface-panel: #ffffff;
+  --surface-raised: #f5f5f7;
+  --surface-hover: #ededf2;
+  --surface-floating: #ffffff;
+  --border-floating: rgba(49, 65, 88, 0.12);
+  --shadow-popover: 0 12px 36px rgba(26, 39, 61, 0.12), 0 2px 6px rgba(26, 39, 61, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --shadow-tooltip: 0 4px 16px rgba(26, 39, 61, 0.12);
+  --bg-subtle: #f1f2f6;
+  --bg-muted: #eaeaee;
+  --text-muted: #5e606c;
+  --primary: #0066cc;
+  --primary-hover: #005bb8;
+  --primary-soft-text: #005bb8;
+  --primary-fg: #ffffff;
+  --primary-soft: #e8f1fc;
+  --danger: #b33149;
+  --danger-bg: #fff0f2;
+  --success: #19704d;
+  --success-text: #14593d;
+  --warning: #8b530e;
+  --info: #0c7165;
+  --neutral: #5e606c;
+  --border: #e7e7ec;
+  --border-strong: #c9cad2;
+  --control-bg: #ffffff;
+  --control-border: #d0d1da;
+  --control-border-hover: #9295a3;
+  --overlay: rgba(22, 27, 36, 0.32);
+  --shadow: 0 2px 3px rgba(27, 31, 47, 0.025), 0 8px 24px rgba(27, 31, 47, 0.035);
+  --shadow-float: 0 16px 48px rgba(20, 27, 40, 0.16);
+  --sidebar-bg: #f7f8fb;
+  --content-bg: #e9edf3;
+  --canvas-wash: var(--surface-workbench);
+  --glass-surface: #f8f9fc;
+  --glass-selected: #ffffff;
+  --glass-highlight: rgba(255, 255, 255, 0.92);
+  --glass-edge: rgba(91, 101, 128, 0.12);
+  --glass-shadow: 0 2px 5px rgba(33, 42, 67, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  --selection-shadow: 0 1px 3px rgba(29, 38, 61, 0.1), 0 3px 10px rgba(29, 38, 61, 0.04), inset 0 1px 0 #ffffff;
+}
+.theme-dark {
+  color-scheme: dark;
+  --bg: #20242b;
+  --surface: #2d333d;
+  --surface-2: #363e49;
+  --surface-3: #414b58;
+  --line: #46515f;
+  --line-strong: #626f80;
+  --text: #f1f1f5;
+  --text-soft: #d1d8e2;
+  --text-faint: #b7bfcc;
+  --blue: #7db5ff;
+  --blue-bright: #9bc6ff;
+  --violet: #c3a4f2;
+  --cyan: #78d4bf;
+  --green: #78d3a5;
+  --amber: #edbd77;
+  --red: #f494a6;
+  --surface-chrome: #111318;
+  --surface-workbench: #20242b;
+  --surface-panel: #2d333d;
+  --surface-raised: #363e49;
+  --surface-hover: #3b4552;
+  --surface-floating: #2d333d;
+  --border-floating: rgba(183, 200, 224, 0.18);
+  --shadow-popover: 0 14px 40px rgba(0, 0, 0, 0.32), 0 2px 8px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-tooltip: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --bg-subtle: #363e49;
+  --bg-muted: #414b58;
+  --text-muted: #c2c8d2;
+  --primary: #7db5ff;
+  --primary-hover: #9bc6ff;
+  --primary-soft-text: #a8cfff;
+  --primary-fg: #101e32;
+  --primary-soft: #233c5b;
+  --danger: #f494a6;
+  --danger-bg: #3a242d;
+  --success: #78d3a5;
+  --success-text: #a6e7c8;
+  --warning: #edbd77;
+  --info: #78d4bf;
+  --neutral: #c2c8d2;
+  --border: #46515f;
+  --border-strong: #626f80;
+  --control-bg: #2d333d;
+  --control-border: #778291;
+  --control-border-hover: #a0abba;
+  --overlay: rgba(3, 5, 9, 0.65);
+  --shadow: 0 2px 6px rgba(0, 0, 0, 0.16);
+  --shadow-float: 0 16px 48px rgba(0, 0, 0, 0.4);
+  --sidebar-bg: #111318;
+  --content-bg: #20242b;
+  --canvas-wash: var(--surface-workbench);
+  --glass-surface: #303843;
+  --glass-selected: #485362;
+  --glass-highlight: rgba(255, 255, 255, 0.11);
+  --glass-edge: rgba(255, 255, 255, 0.09);
+  --glass-shadow: 0 2px 6px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --selection-shadow: 0 2px 5px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+/* 透明材质仅供导航浮层；正文、表单和表格保持实色。 */
+@supports (backdrop-filter: blur(18px)) {
+  .theme-light, .theme-dark {
+    --surface-floating: color-mix(in srgb, var(--surface-panel) 90%, transparent);
+    --glass-surface: color-mix(in srgb, var(--surface-panel) 65%, transparent);
+    --glass-filter: blur(24px) saturate(140%);
+    --floating-filter: blur(18px) saturate(115%);
+  }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .theme-light, .theme-dark { --surface-floating: var(--surface-panel); --floating-filter: none; --glass-surface: var(--surface-raised); --glass-filter: none; }
+}
+@media (prefers-contrast: more) {
+  .theme-light, .theme-dark { --border-floating: var(--text-muted); }
+}
+:root {
+  --dur-1: 120ms;
+  --dur-2: 180ms;
+}
+@media (max-width: 860px) {
+  :root { --metric-card-height: 106px; }
+}
+@media (max-width: 560px) {
+  :root { --card-padding: 14px; }
+  :root { --metric-card-height: 102px; }
+}
+:root { --ease-out: cubic-bezier(0.2, 0, 0, 1); }
+
+/* 主体间距在外壳和加载态共用，页面不再额外垫高底部。 */
+@media (max-width: 1024px) { :root { --page-inset: 20px; } }
+@media (max-width: 760px) { :root { --page-inset: 16px; } }

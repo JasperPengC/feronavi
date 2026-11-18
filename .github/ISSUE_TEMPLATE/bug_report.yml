@@ -1,0 +1,49 @@
+name: Bug report
+description: 报告可复现的问题
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请先确认不是配置问题，并删去日志中的令牌、密码、内网地址。
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么
+      description: 实际表现与预期表现
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开 …
+        2. 点击 …
+        3. 看到 …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本 / commit
+      placeholder: v0.1.0 或 commit sha
+  - type: dropdown
+    id: deploy
+    attributes:
+      label: 部署方式
+      options:
+        - Docker Compose
+        - 本地开发
+        - 其他
+  - type: input
+    id: browser
+    attributes:
+      label: 浏览器 / 系统
+      placeholder: Chrome 130 / macOS 15
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志或截图
+      description: 请先脱敏

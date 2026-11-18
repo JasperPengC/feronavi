@@ -1,0 +1,166 @@
+# ─────────────────────────────────────────────────────────────
+# Feronavi · 版本控制排除清单
+#
+# 设计思路：**点开头的文件与目录默认全部忽略，只显式放行工程必需的配置**。
+#
+#   之所以不逐一列举具体工具，是因为本地工具与编辑器目录层出不穷，
+#   列举永远追不上；兜底规则能覆盖现在和将来出现的全部形态。
+#
+# 下列目录/文件会被兜底规则自动排除（仅供阅读，无需在此逐条添加）：
+#   .claude/  .codex/  .cursor/  .aider*/  .continue/  .windsurf/  .idea/
+#   .history/  .cache/  CLAUDE.md  AGENTS.md  以及任何其它本地形态
+#
+# ⚠️ 新增**需要入库**的点开头文件或目录时，必须在下面补一条 `!` 放行规则，
+#    否则它不会被提交 —— CI 钩子或配置文件静默失效通常就是这么来的。
+# ─────────────────────────────────────────────────────────────
+
+# ── ① 点开头的目录与文件：默认忽略 ───────────────────────────
+.*/
+.*
+
+# ── ② 显式放行：工程配置（必须写在排除之后）──────────────────
+#
+# 这里放行的是**项目自身需要的配置**，与使用什么工具无关。
+# 新增同类文件时照此追加即可。
+
+# 仓库与版本控制
+!.gitignore
+!.gitattributes
+!.gitmessage
+!.git-blame-ignore-revs
+!.mailmap
+
+# 代码风格与静态检查
+!.editorconfig
+!.prettierrc
+!.prettierrc.json
+!.prettierrc.js
+!.prettierignore
+!.eslintrc
+!.eslintrc.json
+!.eslintrc.cjs
+!.eslintignore
+!.stylelintrc
+!.stylelintrc.json
+!.markdownlint.json
+!.markdownlintignore
+
+# 运行时与包管理
+!.nvmrc
+!.node-version
+!.npmrc
+!.pnpmfile.cjs
+!.browserslistrc
+!.tool-versions
+
+# 环境变量模板（真实 .env 永不入库）
+!.env.example
+
+# 提交前检查
+!.husky/
+!.lintstagedrc
+!.lintstagedrc.json
+!.lintstagedrc.cjs
+
+# 容器
+!/.dockerignore
+!/.devcontainer/
+
+# CI 与编辑器共享配置
+!/.github/
+!/.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# 版本与变更记录
+!.changeset/
+!.versionrc
+
+# ── ③ 上述放行的目录/文件中，仍需排除的运行时产物 ─────────────
+# husky 的自动生成部分不入库（只提交 hooks 定义本身）
+/.husky/_/
+/.changeset/*.md.tmp
+
+# ── ③ 工具专属的协作/指令文件 ────────────────────────────────
+# 项目的协作约定统一写在 CONTRIBUTING.md，不使用工具专属文件
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+.copilot-instructions.md
+.cursorrules
+.aider.conf.yml
+
+# ── ④ 操作系统与本机垃圾 ─────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+*.swp
+*~
+
+# ── ⑤ 依赖与构建产物 ─────────────────────────────────────────
+node_modules/
+.pnpm-store/
+.next/
+out/
+dist/
+# 服务端 tsc 构建产物（tsconfig.server.json outDir）
+dist-server/
+build/
+coverage/
+*.tsbuildinfo
+
+# ── ⑥ 环境变量与密钥（**绝不入库**：本地配置、数据库口令、第三方 key）──
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# ── ⑦ 运行期数据（本地起 compose 时会生成）──────────────────
+data/
+*.log
+logs/
+
+# 历史资料归档：清单和说明入库，tarball 只留在本地作为可恢复快照。
+docs/archive/**/*.tar.gz
+
+# 开源快照只保留 README 展示所需截图；计划、审计、验收和过程资料留在本机。
+docs/*
+!docs/screenshots/
+docs/screenshots/*
+!docs/screenshots/01-workbench-dark.png
+!docs/screenshots/02-project-overview.png
+!docs/screenshots/03-board.png
+!docs/screenshots/04-wiki-dark.png
+!docs/screenshots/05-insights.png
+!docs/screenshots/06-login.png
+!docs/screenshots/07-settings.png
+!docs/screenshots/08-timeline.png
+!docs/screenshots/09-projects.png
+!docs/screenshots/10-workbench-light.png
+!docs/screenshots/11-wiki-light.png
+!docs/screenshots/12-assistant.png
+
+# 历史截图附件：报告和引用的关键图入库，成批截图留在本机 .cache。
+/docs/evidence/2026-11-07-site-refinement/*.png
+/docs/evidence/2026-11-07-site-refinement/*.jpg
+/docs/evidence/2026-11-07-site-refinement/**/*.png
+/docs/evidence/2026-11-07-site-refinement/**/*.jpg
+/docs/evidence/2026-11-07-visual-refinement/*.png
+
+# ── ⑧ 编辑器个人配置（保留共享的 extensions.json / settings.json）──
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+
+# ── ⑨ 测试与工具的临时产物 ───────────────────────────────────
+playwright-report/
+test-results/
+.turbo/
+.eslintcache
+docs-site/

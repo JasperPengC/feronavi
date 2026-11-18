@@ -1,0 +1,11 @@
+# 只用于独立 CI 项目：docker compose -p feronavi-ci -f compose.yaml -f compose.ci.yaml up --wait
+services:
+  app:
+    image: feronavi-app:ci
+    environment:
+      IPGEO_UPDATE_INTERVAL_MS: "0"
+      UPDATE_CHECK_INTERVAL_MS: "0"
+  worker:
+    image: feronavi-app:ci
+  db:
+    image: feronavi-db:ci

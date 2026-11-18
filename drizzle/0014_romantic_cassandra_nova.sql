@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "metric_snapshot_project_scope_uniq" ON "metric_snapshot" USING btree ("iteration_id","snapshot_date") WHERE "metric_snapshot"."member_id" IS NULL;

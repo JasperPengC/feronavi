@@ -1,0 +1,1 @@
+ALTER TABLE "project" ADD COLUMN "lead_member_id" uuid;

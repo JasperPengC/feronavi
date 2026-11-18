@@ -1,0 +1,1 @@
+ALTER TABLE "im_channel" ADD COLUMN "recipients" text;

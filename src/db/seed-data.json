@@ -1,0 +1,756 @@
+{
+  "permissions": [
+    {
+      "key": "org:manage",
+      "group": "身份与组织",
+      "description": "修改组织设置（名称、Logo、默认语言与时区）",
+      "sortOrder": 1
+    },
+    {
+      "key": "member:invite",
+      "group": "身份与组织",
+      "description": "邀请新成员加入组织",
+      "sortOrder": 2
+    },
+    {
+      "key": "member:manage",
+      "group": "身份与组织",
+      "description": "管理成员（禁用、启用、删除匿名化、转派内容）",
+      "sortOrder": 3
+    },
+    {
+      "key": "role:manage",
+      "group": "身份与组织",
+      "description": "创建、修改、删除角色与权限分配",
+      "sortOrder": 4
+    },
+    {
+      "key": "apikey:manage_own",
+      "group": "身份与组织",
+      "description": "管理自己的 API 令牌",
+      "sortOrder": 5
+    },
+    {
+      "key": "apikey:manage_any",
+      "group": "身份与组织",
+      "description": "管理任何成员的 API 令牌",
+      "sortOrder": 6
+    },
+    {
+      "key": "project:create",
+      "group": "项目",
+      "description": "创建项目",
+      "sortOrder": 7
+    },
+    {
+      "key": "project:update",
+      "group": "项目",
+      "description": "修改项目基本信息",
+      "sortOrder": 8
+    },
+    {
+      "key": "project:archive",
+      "group": "项目",
+      "description": "归档与取消归档项目",
+      "sortOrder": 9
+    },
+    {
+      "key": "project:delete",
+      "group": "项目",
+      "description": "删除项目（预留给删除端点；当前实现只有归档，服务端尚未消费此键）",
+      "sortOrder": 10
+    },
+    {
+      "key": "project:manage_member",
+      "group": "项目",
+      "description": "管理项目成员",
+      "sortOrder": 11
+    },
+    {
+      "key": "project:manage_status",
+      "group": "项目",
+      "description": "配置项目状态定义",
+      "sortOrder": 12
+    },
+    {
+      "key": "work_item:create",
+      "group": "工作项",
+      "description": "创建与复制工作项",
+      "sortOrder": 13
+    },
+    {
+      "key": "work_item:update_own",
+      "group": "工作项",
+      "description": "修改自己创建的工作项",
+      "sortOrder": 14
+    },
+    {
+      "key": "work_item:update_any",
+      "group": "工作项",
+      "description": "修改任何工作项",
+      "sortOrder": 15
+    },
+    {
+      "key": "work_item:delete",
+      "group": "工作项",
+      "description": "删除工作项",
+      "sortOrder": 16
+    },
+    {
+      "key": "work_item:transition",
+      "group": "工作项",
+      "description": "执行工作流状态迁移",
+      "sortOrder": 17
+    },
+    {
+      "key": "work_item:assign",
+      "group": "工作项",
+      "description": "指派工作项给他人",
+      "sortOrder": 18
+    },
+    {
+      "key": "work_item:manage_workflow",
+      "group": "工作项",
+      "description": "配置项目的工作流与状态",
+      "sortOrder": 19
+    },
+    {
+      "key": "work_item:manage_field",
+      "group": "工作项",
+      "description": "配置工作项自定义字段",
+      "sortOrder": 20
+    },
+    {
+      "key": "milestone:manage",
+      "group": "计划",
+      "description": "管理里程碑",
+      "sortOrder": 21
+    },
+    {
+      "key": "iteration:manage",
+      "group": "计划",
+      "description": "管理迭代",
+      "sortOrder": 22
+    },
+    {
+      "key": "release:manage",
+      "group": "计划",
+      "description": "管理版本",
+      "sortOrder": 23
+    },
+    {
+      "key": "module:manage",
+      "group": "计划",
+      "description": "管理模块",
+      "sortOrder": 24
+    },
+    {
+      "key": "idea:submit",
+      "group": "想法",
+      "description": "提交想法",
+      "sortOrder": 25
+    },
+    {
+      "key": "idea:vote",
+      "group": "想法",
+      "description": "为想法投票",
+      "sortOrder": 26
+    },
+    {
+      "key": "idea:manage",
+      "group": "想法",
+      "description": "管理想法（改状态、转工作项）",
+      "sortOrder": 27
+    },
+    {
+      "key": "page:create",
+      "group": "知识库",
+      "description": "创建知识库页面",
+      "sortOrder": 28
+    },
+    {
+      "key": "page:update_own",
+      "group": "知识库",
+      "description": "修改自己创建的页面",
+      "sortOrder": 29
+    },
+    {
+      "key": "page:update_any",
+      "group": "知识库",
+      "description": "修改任何页面",
+      "sortOrder": 30
+    },
+    {
+      "key": "page:manage_permission",
+      "group": "知识库",
+      "description": "配置页面的访问权限",
+      "sortOrder": 31
+    },
+    {
+      "key": "page:manage_visibility",
+      "group": "知识库",
+      "description": "调整页面在目录树中的可见性",
+      "sortOrder": 32
+    },
+    {
+      "key": "comment:create",
+      "group": "协作",
+      "description": "发表评论",
+      "sortOrder": 33
+    },
+    {
+      "key": "comment:update_own",
+      "group": "协作",
+      "description": "修改自己的评论",
+      "sortOrder": 34
+    },
+    {
+      "key": "comment:delete_any",
+      "group": "协作",
+      "description": "删除任何评论",
+      "sortOrder": 35
+    },
+    {
+      "key": "attachment:upload",
+      "group": "协作",
+      "description": "上传附件（访客角色不持有；服务端上传路径强制校验此键）",
+      "sortOrder": 36
+    },
+    {
+      "key": "attachment:download_restricted",
+      "group": "协作",
+      "description": "下载受限附件（预留给附件级授权；当前授权走目标对象的可见性/ACL，不消费此键）",
+      "sortOrder": 37
+    },
+    {
+      "key": "dashboard:manage",
+      "group": "洞察",
+      "description": "创建与配置仪表盘",
+      "sortOrder": 38
+    },
+    {
+      "key": "audit:read",
+      "group": "洞察",
+      "description": "查看审计日志",
+      "sortOrder": 39
+    },
+    {
+      "key": "activity:read",
+      "group": "洞察",
+      "description": "查看活动流",
+      "sortOrder": 40
+    },
+    {
+      "key": "notification:send",
+      "group": "平台",
+      "description": "发送群发通知与公告",
+      "sortOrder": 41
+    },
+    {
+      "key": "integration:manage",
+      "group": "平台",
+      "description": "管理 Webhook 与第三方集成",
+      "sortOrder": 42
+    },
+    {
+      "key": "ai:configure",
+      "group": "平台",
+      "description": "配置 AI 提供商与检索参数",
+      "sortOrder": 43
+    },
+    {
+      "key": "setting:manage",
+      "group": "平台",
+      "description": "修改系统设置",
+      "sortOrder": 44
+    },
+    {
+      "key": "telemetry:manage",
+      "group": "平台",
+      "description": "管理遥测与匿名上报（预留给遥测开关；当前未消费此键）",
+      "sortOrder": 45
+    },
+    {
+      "key": "api:read",
+      "group": "API",
+      "description": "通过 API 读取数据（预留给令牌授权；当前 MCP/API 令牌按 tier 分级与项目白名单鉴权，不消费此键）",
+      "sortOrder": 46
+    },
+    {
+      "key": "api:write",
+      "group": "API",
+      "description": "通过 API 写入数据（预留给令牌授权；当前 MCP/API 令牌按 tier 分级与项目白名单鉴权，不消费此键）",
+      "sortOrder": 47
+    }
+  ],
+  "roles": [
+    {
+      "key": "ADMIN",
+      "perms": [
+        "activity:read",
+        "ai:configure",
+        "api:read",
+        "api:write",
+        "apikey:manage_any",
+        "apikey:manage_own",
+        "attachment:download_restricted",
+        "attachment:upload",
+        "audit:read",
+        "comment:create",
+        "comment:delete_any",
+        "comment:update_own",
+        "dashboard:manage",
+        "idea:manage",
+        "idea:submit",
+        "idea:vote",
+        "integration:manage",
+        "iteration:manage",
+        "member:invite",
+        "member:manage",
+        "milestone:manage",
+        "module:manage",
+        "notification:send",
+        "org:manage",
+        "page:create",
+        "page:manage_permission",
+        "page:manage_visibility",
+        "page:update_any",
+        "page:update_own",
+        "project:archive",
+        "project:create",
+        "project:delete",
+        "project:manage_member",
+        "project:manage_status",
+        "project:update",
+        "release:manage",
+        "role:manage",
+        "setting:manage",
+        "telemetry:manage",
+        "work_item:assign",
+        "work_item:create",
+        "work_item:delete",
+        "work_item:manage_field",
+        "work_item:manage_workflow",
+        "work_item:transition",
+        "work_item:update_any",
+        "work_item:update_own"
+      ]
+    },
+    {
+      "key": "PM",
+      "perms": [
+        "activity:read",
+        "api:read",
+        "api:write",
+        "apikey:manage_own",
+        "attachment:download_restricted",
+        "attachment:upload",
+        "comment:create",
+        "comment:delete_any",
+        "comment:update_own",
+        "dashboard:manage",
+        "idea:manage",
+        "idea:submit",
+        "idea:vote",
+        "iteration:manage",
+        "milestone:manage",
+        "module:manage",
+        "page:create",
+        "page:manage_permission",
+        "page:manage_visibility",
+        "page:update_any",
+        "page:update_own",
+        "project:archive",
+        "project:create",
+        "project:manage_member",
+        "project:manage_status",
+        "project:update",
+        "release:manage",
+        "work_item:assign",
+        "work_item:create",
+        "work_item:delete",
+        "work_item:transition",
+        "work_item:update_any",
+        "work_item:update_own"
+      ]
+    },
+    {
+      "key": "MEMBER",
+      "perms": [
+        "activity:read",
+        "api:read",
+        "api:write",
+        "apikey:manage_own",
+        "attachment:download_restricted",
+        "attachment:upload",
+        "comment:create",
+        "comment:update_own",
+        "idea:submit",
+        "idea:vote",
+        "page:create",
+        "page:update_own",
+        "work_item:create",
+        "work_item:transition",
+        "work_item:update_own"
+      ]
+    },
+    {
+      "key": "GUEST",
+      "perms": [
+        "activity:read",
+        "api:read",
+        "apikey:manage_own",
+        "idea:submit",
+        "idea:vote"
+      ]
+    }
+  ],
+  "workflows": [
+    {
+      "key": "TASK_DEFAULT",
+      "name": "简单任务流",
+      "states": [
+        [
+          "TODO",
+          "待办",
+          "NOT_STARTED",
+          "neutral"
+        ],
+        [
+          "IN_PROGRESS",
+          "进行中",
+          "IN_PROGRESS",
+          "info"
+        ],
+        [
+          "BLOCKED",
+          "已阻塞",
+          "IN_PROGRESS",
+          "warning"
+        ],
+        [
+          "DONE",
+          "已完成",
+          "TERMINAL",
+          "success"
+        ],
+        [
+          "CANCELLED",
+          "已取消",
+          "TERMINAL",
+          "danger"
+        ]
+      ],
+      "transitions": [
+        [
+          "TODO",
+          [
+            "IN_PROGRESS",
+            "CANCELLED"
+          ]
+        ],
+        [
+          "IN_PROGRESS",
+          [
+            "BLOCKED",
+            "DONE",
+            "TODO",
+            "CANCELLED"
+          ]
+        ],
+        [
+          "BLOCKED",
+          [
+            "IN_PROGRESS",
+            "CANCELLED"
+          ]
+        ],
+        [
+          "DONE",
+          [
+            "IN_PROGRESS"
+          ]
+        ],
+        [
+          "CANCELLED",
+          [
+            "TODO"
+          ]
+        ]
+      ],
+      "appliesToType": "TASK"
+    },
+    {
+      "key": "DEFECT_DEFAULT",
+      "name": "缺陷流",
+      "states": [
+        [
+          "NEW",
+          "新建",
+          "NOT_STARTED",
+          "neutral"
+        ],
+        [
+          "IN_PROGRESS",
+          "处理中",
+          "IN_PROGRESS",
+          "info"
+        ],
+        [
+          "BLOCKED",
+          "已阻塞",
+          "IN_PROGRESS",
+          "warning"
+        ],
+        [
+          "FIXED",
+          "已修复",
+          "IN_PROGRESS",
+          "info"
+        ],
+        [
+          "VERIFIED",
+          "已验证",
+          "IN_PROGRESS",
+          "info"
+        ],
+        [
+          "REOPENED",
+          "已重开",
+          "IN_PROGRESS",
+          "info"
+        ],
+        [
+          "CLOSED",
+          "已关闭",
+          "TERMINAL",
+          "success"
+        ],
+        [
+          "REJECTED",
+          "已驳回",
+          "TERMINAL",
+          "danger"
+        ],
+        [
+          "CANCELLED",
+          "已取消",
+          "TERMINAL",
+          "danger"
+        ]
+      ],
+      "transitions": [
+        [
+          "NEW",
+          [
+            "IN_PROGRESS",
+            "REJECTED",
+            "CANCELLED"
+          ]
+        ],
+        [
+          "IN_PROGRESS",
+          [
+            "BLOCKED",
+            "FIXED",
+            "REJECTED",
+            "NEW"
+          ]
+        ],
+        [
+          "BLOCKED",
+          [
+            "IN_PROGRESS",
+            "CANCELLED"
+          ]
+        ],
+        [
+          "FIXED",
+          [
+            "VERIFIED",
+            "REOPENED"
+          ]
+        ],
+        [
+          "VERIFIED",
+          [
+            "CLOSED",
+            "REOPENED"
+          ]
+        ],
+        [
+          "CLOSED",
+          [
+            "REOPENED"
+          ]
+        ],
+        [
+          "REOPENED",
+          [
+            "IN_PROGRESS"
+          ]
+        ],
+        [
+          "REJECTED",
+          [
+            "REOPENED"
+          ]
+        ],
+        [
+          "CANCELLED",
+          [
+            "REOPENED"
+          ]
+        ]
+      ],
+      "appliesToType": "DEFECT"
+    },
+    {
+      "key": "REQUIREMENT_DEFAULT",
+      "name": "需求流",
+      "states": [
+        [
+          "DRAFT",
+          "草稿",
+          "NOT_STARTED",
+          "neutral"
+        ],
+        [
+          "CONFIRMED",
+          "已确认",
+          "IN_PROGRESS",
+          "info"
+        ],
+        [
+          "SCHEDULED",
+          "已排期",
+          "IN_PROGRESS",
+          "info"
+        ],
+        [
+          "IN_PROGRESS",
+          "进行中",
+          "IN_PROGRESS",
+          "info"
+        ],
+        [
+          "DELIVERED",
+          "已交付",
+          "IN_PROGRESS",
+          "info"
+        ],
+        [
+          "VERIFIED",
+          "已验证",
+          "IN_PROGRESS",
+          "info"
+        ],
+        [
+          "REJECTED",
+          "已驳回",
+          "TERMINAL",
+          "danger"
+        ],
+        [
+          "CANCELLED",
+          "已取消",
+          "TERMINAL",
+          "danger"
+        ]
+      ],
+      "transitions": [
+        [
+          "DRAFT",
+          [
+            "CONFIRMED",
+            "REJECTED"
+          ]
+        ],
+        [
+          "CONFIRMED",
+          [
+            "SCHEDULED",
+            "REJECTED"
+          ]
+        ],
+        [
+          "SCHEDULED",
+          [
+            "IN_PROGRESS",
+            "CONFIRMED"
+          ]
+        ],
+        [
+          "IN_PROGRESS",
+          [
+            "DELIVERED",
+            "SCHEDULED"
+          ]
+        ],
+        [
+          "DELIVERED",
+          [
+            "VERIFIED",
+            "IN_PROGRESS"
+          ]
+        ],
+        [
+          "VERIFIED",
+          [
+            "IN_PROGRESS"
+          ]
+        ],
+        [
+          "REJECTED",
+          [
+            "DRAFT"
+          ]
+        ],
+        [
+          "CANCELLED",
+          [
+            "DRAFT"
+          ]
+        ]
+      ],
+      "appliesToType": "REQUIREMENT"
+    }
+  ],
+  "projectStatuses": [
+    [
+      "PLANNED",
+      "已规划",
+      "NOT_STARTED",
+      "neutral",
+      1
+    ],
+    [
+      "ACTIVE",
+      "进行中",
+      "IN_PROGRESS",
+      "info",
+      2
+    ],
+    [
+      "ON_HOLD",
+      "已暂停",
+      "IN_PROGRESS",
+      "warning",
+      3
+    ],
+    [
+      "COMPLETED",
+      "已完成",
+      "TERMINAL",
+      "success",
+      4
+    ],
+    [
+      "CANCELLED",
+      "已取消",
+      "TERMINAL",
+      "danger",
+      5
+    ]
+  ]
+}

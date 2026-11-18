@@ -1,0 +1,151 @@
+# ─────────────────────────────────────────────────────────────
+# Feronavi · CI
+#
+# 四道关：工具链门禁 → 静态检查 → 隔离数据库集成 → 浏览器关键路径
+#
+# 说明：本工作流只校验本仓库内的代码与配置。
+# ─────────────────────────────────────────────────────────────
+name: ci
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  # ── ① 工具链门禁：Node / pnpm 大版本不符即失败（避免"我这里能跑"）──
+  toolchain:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: 校验 engines / packageManager
+        run: |
+          node -e "
+            const p = require('./package.json');
+            const e = p.engines && p.engines.node;
+            if (!e || !e.includes('24')) throw new Error('engines.node 必须锁定 Node 24：' + e);
+            if (!p.packageManager || !p.packageManager.startsWith('pnpm@10'))
+              throw new Error('packageManager 必须锁定 pnpm 10：' + p.packageManager);
+            console.log('工具链门禁通过：', e, p.packageManager);
+          "
+      - run: pnpm install --frozen-lockfile
+
+  # ── ② 静态检查 + 单测 + 依赖许可证 ──────────────────────────
+  quality:
+    needs: toolchain
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test:coverage
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage
+      - name: 依赖许可证扫描（不兼容即阻断）
+        run: |
+          pnpm dlx license-checker-rseidelsohn \
+            --failOn "GPL-2.0-only;GPL-2.0;GPL-2.0+;SSPL-1.0;BUSL-1.1;Elastic-2.0" \
+            --production
+
+  # ── ③ 集成：真数据库（含分词与向量）+ 迁移 + 种子计数门禁 ────
+  integration:
+    needs: toolchain
+    runs-on: ubuntu-24.04
+    # 数据库镜像在 CI 内构建（带层缓存），不依赖已发布镜像
+    env:
+      TEST_DATABASE_ADMIN_URL: postgres://feronavi:ci-only-password@127.0.0.1:5432/postgres
+      DB_PASSWORD: ci-only-password
+      APP_PORT: "33000"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install openpyxl==3.1.5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: docker/setup-buildx-action@v3
+      - name: 构建数据库镜像（带层缓存）
+        uses: docker/build-push-action@v6
+        with:
+          # 上下文是仓库根：Dockerfile 要 COPY 根目录的 LICENSE
+          context: .
+          file: docker/db/Dockerfile
+          load: true
+          tags: feronavi-db:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: 启动数据库并等待就绪
+        run: |
+          docker run -d --name db -e POSTGRES_DB=feronavi -e POSTGRES_USER=feronavi -e POSTGRES_PASSWORD=ci-only-password -e POSTGRES_INITDB_ARGS="--encoding=UTF8 --locale=C.UTF-8" -p 5432:5432 feronavi-db:ci
+          for attempt in $(seq 1 60); do
+            if docker exec db pg_isready -U feronavi -d feronavi; then break; fi
+            sleep 2
+          done
+          docker exec db pg_isready -U feronavi -d feronavi
+      - name: 确认两个扩展可用
+        run: |
+          docker exec db psql -U feronavi -d feronavi -tAc "select 1 from pg_extension where extname='vector'" | grep -qx 1
+          docker exec db psql -U feronavi -d feronavi -tAc "select 1 from pg_extension where extname='zhparser'" | grep -qx 1
+      - run: pnpm test:integration
+      # 浏览器套件另建新库和临时构建目录，测试当前源码编译出的服务。
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - name: 构建生产应用镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          load: true
+          tags: feronavi-app:ci
+          cache-from: type=gha,scope=app
+          cache-to: type=gha,scope=app,mode=max
+      - name: 验证镜像中的运行入口与静态文件
+        run: docker run --rm --entrypoint node feronavi-app:ci -e "const fs = require('node:fs'); for (const path of ['dist-server/server/server.js', 'dist-server/server/worker.js', 'dist-server/db/seed-data.json', 'dist/index.html', 'drizzle/meta/_journal.json']) fs.accessSync(path)"
+      - name: 全新数据卷启动 Compose 应用与独立 worker
+        run: |
+          docker compose -p feronavi-ci -f compose.yaml -f compose.ci.yaml up -d --wait --wait-timeout 180
+          curl --fail http://127.0.0.1:33000/setup -o /tmp/feronavi-setup.html
+          docker compose -p feronavi-ci -f compose.yaml -f compose.ci.yaml ps --status running --services | grep -qx worker
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-results
+          path: |
+            test-results
+            playwright-report
+      - name: 失败时留日志
+        if: failure()
+        run: |
+          docker logs db
+          docker compose -p feronavi-ci -f compose.yaml -f compose.ci.yaml logs --no-color --tail=100
+      - name: 清理数据库容器
+        if: always()
+        run: |
+          docker rm -f db
+          docker compose -p feronavi-ci -f compose.yaml -f compose.ci.yaml down --volumes

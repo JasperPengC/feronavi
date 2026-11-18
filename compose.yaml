@@ -1,0 +1,126 @@
+# ─────────────────────────────────────────────────────────────
+# Feronavi · 自托管编排（主路径：docker compose up -d）
+#
+# 四个服务：app · worker · db · cache
+#
+# 镜像来源：默认**拉取预编译镜像**（GHCR，amd64 + arm64 均已构建并通过功能验证）。
+#   数据库镜像尤其必须预编译 —— 它要编译 PostgreSQL 扩展与 SCWS，自建一次十几分钟，
+#   且 arm64 需要交叉编译环境，不能把这份负担转给每个部署者。
+#   需要自行构建时，取消对应服务下的 build: 注释（见 CONTRIBUTING）。
+#
+# ⚠️ 只有 app 暴露端口，且只绑 127.0.0.1 —— 对公网一律经反向代理
+#    （见 docs/deploy.md，含 nginx 与 Caddy 两份可直接复制的配置）
+# ─────────────────────────────────────────────────────────────
+
+services:
+  app:
+    image: ghcr.io/${FERONAVI_GH_OWNER:-feronavi}/feronavi-app:${FERONAVI_VERSION:-latest}
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://feronavi:${DB_PASSWORD:?DB_PASSWORD 必须设置}@db:5432/feronavi
+      REDIS_URL: redis://cache:6379
+      DATA_DIR: /data
+      NODE_ENV: production
+      # 消费交给独立 worker；HTTP 进程仍负责 SLA / cron 等调度。
+      JOB_WORKER_INTERVAL_MS: "0"
+      # 反向代理可信网段：默认只信本机；反代在别的机器上时必须显式改写
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-127.0.0.1/32,::1/128}
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    volumes:
+      # 密钥、附件、安装标记都在这里 —— 备份必须包含它
+      - feronavi-data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/v1/system/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  worker:
+    # 与 app 同镜像、不同入口 —— 避免两套依赖漂移
+    image: ghcr.io/${FERONAVI_GH_OWNER:-feronavi}/feronavi-app:${FERONAVI_VERSION:-latest}
+    command: ["node", "dist-server/server/worker.js"]
+    environment:
+      DATABASE_URL: postgres://feronavi:${DB_PASSWORD:?DB_PASSWORD 必须设置}@db:5432/feronavi
+      REDIS_URL: redis://cache:6379
+      DATA_DIR: /data
+      NODE_ENV: production
+      JOB_WORKER_INTERVAL_MS: ${JOB_WORKER_INTERVAL_MS:-5000}
+    volumes:
+      - feronavi-data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: ghcr.io/${FERONAVI_GH_OWNER:-feronavi}/feronavi-db:${PG_MAJOR:-16}
+    # build:
+    #   # ⚠️ 上下文必须是【仓库根】：Dockerfile 要 COPY 根目录的 LICENSE
+    #   context: .
+    #   dockerfile: docker/db/Dockerfile
+    #   args:
+    #     PG_MAJOR: ${PG_MAJOR:-16}
+    #     # 网络不稳定时可改用镜像站，例如 mirrors.aliyun.com
+    #     APT_MIRROR: ${APT_MIRROR:-}
+    environment:
+      POSTGRES_DB: feronavi
+      POSTGRES_USER: feronavi
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 必须设置}
+      # ⚠️ 必须 UTF8 + C.UTF-8：非 UTF-8 locale 会让中文分词直接失效
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
+    volumes:
+      - feronavi-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U feronavi -d feronavi"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    # 不暴露端口：只有 app/worker 需要连它
+
+  cache:
+    image: valkey/valkey:8-alpine
+    # ⚠️ maxmemory-policy 必须是 noeviction：写成 allkeys-lru 会在内存吃紧时
+    #    **静默淘汰队列任务**
+    command:
+      - valkey-server
+      - --maxmemory
+      - ${VALKEY_MAXMEMORY:-512mb}
+      - --maxmemory-policy
+      - noeviction
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+    volumes:
+      - feronavi-cache:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  feronavi-data:
+  feronavi-db:
+  feronavi-cache:

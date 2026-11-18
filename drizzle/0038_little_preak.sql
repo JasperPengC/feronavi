@@ -1,0 +1,2 @@
+ALTER TABLE "job" ADD CONSTRAINT "job_status_check" CHECK ("job"."status" in ('PENDING','RUNNING','SUCCEEDED','FAILED','DEAD'));--> statement-breakpoint
+ALTER TABLE "job" ADD CONSTRAINT "job_attempts_check" CHECK ("job"."attempts" >= 0 and "job"."max_attempts" >= 1);

@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": false,
+    "rewriteRelativeImportExtensions": true,
+    "noEmit": false,
+    "outDir": "dist-server",
+    "rootDir": "src",
+    "types": ["node"],
+    "jsx": "react-jsx"
+  },
+  "include": ["src/server/**/*.ts", "src/shared/**/*.ts"]
+}

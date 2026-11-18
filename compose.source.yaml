@@ -1,0 +1,23 @@
+# Build the app and PostgreSQL extensions from this checkout, without unpublished registry images.
+# docker compose -f compose.yaml -f compose.source.yaml up -d --build
+services:
+  app:
+    image: feronavi-app:source
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: Dockerfile
+  worker:
+    image: feronavi-app:source
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: Dockerfile
+  db:
+    image: feronavi-db:source
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: docker/db/Dockerfile
+      args:
+        PG_MAJOR: ${PG_MAJOR:-16}

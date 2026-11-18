@@ -1,0 +1,66 @@
+NOTICE
+
+Feronavi
+Copyright (C) 2026 Feronavi contributors
+
+本产品包含由第三方开发的软件。以下组件的版权归其各自所有者，
+并在下方所列许可证下使用。
+
+
+数据库镜像中的扩展
+==================
+
+PostgreSQL 16
+    PostgreSQL License — 数据库本体
+
+pgvector 0.8.7
+    PostgreSQL License — 向量检索（语义搜索）
+
+zhparser 2.3
+    PostgreSQL License — 中文分词（全文检索）
+
+SCWS 1.2.3
+    BSD（3 条款）— zhparser 依赖的中文分词库，随镜像分发
+
+注：zhparser 的 GitHub 仓库根目录未提供 LICENSE 文件，仅有 COPYRIGHT，
+    其内容为 PostgreSQL License。
+
+    SCWS 未随其源码包提供标准命名的许可证文件，但 COPYING 声明为 BSD 许可证：
+    Copyright (C) 2007-2013 hightman / All rights reserved
+    条款为标准三条款 BSD（保留版权声明、保留免责声明、
+    不得以项目名称为衍生产品背书）。
+
+
+缓存与队列
+==========
+
+Valkey 8
+    BSD-3-Clause
+
+
+运行时依赖（JavaScript）
+========================
+
+应用代码尚未开始，JavaScript 依赖清单随 package.json 与锁文件一并提供。
+CI 会执行许可证扫描，遇到与本项目不兼容的许可证
+（如 GPL-2.0-only、SSPL、BUSL、Elastic License）将阻断构建。
+
+
+界面组件
+========
+
+src/components/ui/** 中的部分组件基于 shadcn/ui（MIT，https://ui.shadcn.com）。
+该项目的组件以源码形式复制到本仓库，因此不作为依赖项分发，
+但其代码属于本产品的组成部分。
+
+
+字体
+====
+
+本产品的界面不打包任何字体文件，使用操作系统自带的系统字体
+（通过 CSS 字体栈引用）。因此不涉及字体许可证的分发问题。
+
+如管理员自行配置了外部字体 URL，该字体的许可证由配置者负责。
+
+
+完整许可证文本见仓库根目录的 LICENSE 文件。

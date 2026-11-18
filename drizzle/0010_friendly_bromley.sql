@@ -1,0 +1,1 @@
+ALTER TABLE "api_token" ADD CONSTRAINT "api_token_tier_allowed" CHECK ("api_token"."tier" IN ('READ_ONLY','READ_WRITE','ADMIN'));
