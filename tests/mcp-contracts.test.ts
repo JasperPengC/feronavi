@@ -74,7 +74,7 @@ const resourceCalls: [string, Record<string, unknown>][] = [
   ["workitem.link", { fromWorkItemId: outside, toWorkItemId: inside, type: "RELATES_TO" }],
   ["comment.update", { commentId: outside, body: "x" }],
   ["comment.delete", { commentId: outside }],
-  ["page.update", { pageId: outside, title: "x" }],
+  ["page.update", { pageId: outside, title: "x", expectedRevisionId: "33333333-3333-4333-8333-333333333333", userConfirmed: true }],
   ["idea.vote", { ideaId: outside }],
   ["idea.promote", { ideaId: outside }],
   ["approval.approve", { approvalId: outside }],

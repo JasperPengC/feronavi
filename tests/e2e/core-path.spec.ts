@@ -585,7 +585,7 @@ test("登录改密、项目工作项、缺陷、Wiki 与 CSV 导入持久化", a
     expect(initialize.status()).toBe(200);
     expect((await initialize.json()).result.serverInfo.name).toBe("feronavi");
     const listing = await rpc("tools/list", {});
-    expect((await listing.json()).result.tools).toHaveLength(50);
+    expect((await listing.json()).result.tools).toHaveLength(54);
     const ping = await rpc("tools/call", { name: "ping", arguments: {} });
     expect(JSON.parse((await ping.json()).result.content[0].text).ok).toBe(true);
     await page.getByRole("button", { name: "我已保存", exact: true }).click();

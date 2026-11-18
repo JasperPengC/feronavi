@@ -23,6 +23,24 @@ import * as knowledgeService from "../services/knowledge.service.ts";
 import * as slaService from "../services/sla.service.ts";
 import * as approvalService from "../services/approval.service.ts";
 import * as automationService from "../services/automation.service.ts";
+import * as collabRooms from "../services/collab-room.persistence.ts";
+import * as collabDocuments from "../services/collab-document.service.ts";
+
+const COLLAB_ACTIONS: Record<string, { read: string[]; write: string[] }> = {
+  PAGE: { read: ["page.get"], write: ["collab.update", "collab.publishPage"] },
+  WORK_ITEM: { read: ["workitem.get"], write: ["workitem.update", "workitem.transition", "workitem.assign", "workitem.comment"] },
+  COMMENT: { read: [], write: ["comment.update", "comment.delete"] },
+  PLAN: { read: ["plan.getMilestone"], write: ["plan.createMilestone", "plan.createIteration", "plan.createRelease", "plan.createModule"] },
+  APPROVAL: { read: ["approval.list"], write: ["approval.approve", "approval.reject"] },
+  AUTOMATION: { read: ["automation.listRules", "automation.listRuns"], write: ["automation.createRule"] },
+};
+const COLLAB_DOMAIN_TOOLS: Record<string, string[]> = {
+  WORK_ITEM: ["workitem.get", "workitem.update", "workitem.transition", "workitem.assign", "workitem.comment"],
+  COMMENT: ["comment.update", "comment.delete"],
+  PLAN: ["plan.getMilestone", "plan.createMilestone", "plan.createIteration", "plan.createRelease", "plan.createModule"],
+  APPROVAL: ["approval.list", "approval.approve", "approval.reject"],
+  AUTOMATION: ["automation.listRules", "automation.listRuns", "automation.createRule"],
+};
 
 export interface ToolCtx {
   actor: Actor;
@@ -62,6 +80,35 @@ export const TOOLS: ToolDef[] = guardTools([
     kind: "read",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     handler: async () => ({ ok: true, server: "feronavi" }),
+  },
+  {
+    name: "collab.inspect",
+    description: "读取协作房间的项目范围、当前发布基线、在线成员能力和可执行动作。草稿不会被当作 RAG 已发布知识。",
+    kind: "read",
+    inputSchema: {
+      type: "object",
+      properties: { resourceType: { type: "string", enum: ["PAGE", "WORK_ITEM", "COMMENT", "PLAN", "APPROVAL", "AUTOMATION"] }, resourceId: UUID },
+      required: ["resourceType", "resourceId"], additionalProperties: false,
+    },
+    handler: async (ctx, args) => {
+      const room = await collabRooms.getRoom(ctx.actor, String(args.resourceType), String(args.resourceId));
+      if (!projectAllowed(ctx.token, room.projectId)) throw new DomainError("NOT_FOUND", "资源不存在", null);
+      const state = await collabDocuments.loadDocument(room.id);
+      const canWrite = await collabRooms.canWriteRoom(ctx.actor, room);
+      return {
+        roomId: room.id, resourceType: room.resourceType, resourceId: room.resourceId, projectId: room.projectId,
+        mode: room.mode, baseRevisionId: room.baseRevisionId, sequence: state.sequence,
+        canWrite,
+        rag: { source: room.resourceType === "PAGE" ? "published_revision" : "not_applicable", publishedRevisionId: room.baseRevisionId },
+        actions: (() => {
+          const actions = COLLAB_ACTIONS[room.resourceType];
+          const writable = canWrite && ctx.token.tier !== "READ_ONLY";
+          return room.mode === "TEXT_CRDT" ? [...(actions?.read ?? []), ...(writable ? actions?.write ?? [] : [])] : [];
+        })(),
+        domainTools: COLLAB_DOMAIN_TOOLS[room.resourceType] ?? [],
+        domainAuthorization: "每个 MCP 领域工具会重新检查账号权限、项目白名单和业务前置条件",
+      };
+    },
   },
   {
     name: "whoami",

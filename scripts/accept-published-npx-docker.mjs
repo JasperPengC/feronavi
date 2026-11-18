@@ -101,7 +101,7 @@ try {
   const tools = (await client.listTools()).tools;
   const requiredTools = ["ping", "whoami", "project.list", "workitem.get", "workitem.create", "workitem.transition", "page.update"];
   check("发布后的 npx 包发现完整 MCP 工具契约",
-    tools.length === 50 && tools.every(tool => tool.inputSchema?.type === "object") && requiredTools.every(name => tools.some(tool => tool.name === name)),
+    tools.length === 54 && tools.every(tool => tool.inputSchema?.type === "object") && requiredTools.every(name => tools.some(tool => tool.name === name)),
     `${tools.length} 个工具；关键工具与 inputSchema 齐全`);
   const identity = await call(client, "whoami", {});
   check("发布后的 npx 包使用 Docker API Key 鉴权", identity.data.member?.username === "npx-admin");

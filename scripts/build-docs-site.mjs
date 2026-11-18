@@ -13,7 +13,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SRC_DIR = process.env.DOCS_DIR || fileURLToPath(new URL("../docs", import.meta.url));
+const SRC_DIR = process.env.DOCS_DIR || fileURLToPath(new URL("..", import.meta.url));
 const OUT_DIR = process.env.OUT_DIR ?? "docs-site";
 export const DOCS = ["README.md", "deploy.md", "testing.md", "architecture.md", "reference/permissions.md"];
 
@@ -118,7 +118,7 @@ const PAGE = (title, body, nav) => `<!doctype html>
 <body>
 <nav>${nav}</nav>
 <main>${body}</main>
-<footer>由 <code>scripts/build-docs-site.mjs</code> 从 <code>docs/</code> 生成 · 文档是真相源，站点是派生物</footer>
+<footer>由 <code>scripts/build-docs-site.mjs</code> 从 Markdown 文件生成 · 文档是真相源，站点是派生物</footer>
 </body>
 </html>`;
 
@@ -149,10 +149,11 @@ footer{grid-column:1/-1;border-top:1px solid var(--line);padding:14px 32px;color
 export function buildSite(srcDir = SRC_DIR, outDir = OUT_DIR) {
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, "style.css"), STYLE);
-  const pages = DOCS.map((name) => ({ name, file: `${slug(basename(name, ".md"))}.html`, title: name.replace(/\.md$/, "") }));
-  for (const name of DOCS) {
+  const availableDocs = DOCS.filter((name) => existsSync(join(srcDir, name)));
+  if (availableDocs.length === 0) throw new Error("缺少可构建的 Markdown 文档");
+  const pages = availableDocs.map((name) => ({ name, file: `${slug(basename(name, ".md"))}.html`, title: name.replace(/\.md$/, "") }));
+  for (const name of availableDocs) {
     const path = join(srcDir, name);
-    if (!existsSync(path)) throw new Error(`缺少文档：${name}`);
     const md = readFileSync(path, "utf8");
     const html = renderMarkdown(md).replace(/href="([^"#]+\.md)(#[^"]*)?"/gu, (original, href, hash = "") => {
       const page = pages.find((p) => p.name === href || basename(p.name) === basename(href));
@@ -165,9 +166,9 @@ export function buildSite(srcDir = SRC_DIR, outDir = OUT_DIR) {
     writeFileSync(join(outDir, file), PAGE(name.replace(/\.md$/, ""), html, nav));
   }
   // 索引页
-  const index = `<h1>Feronavi 文档站</h1><p>本仓库的现行开发、部署和测试文档：</p><ul>` +
+  const index = `<h1>Feronavi 文档站</h1><p>本仓库包含的公开文档：</p><ul>` +
     pages.map((p) => `<li><a href="${p.file}">${esc(p.title)}</a></li>`).join("") + "</ul>" +
-    `<p>文档源文件位于 <code>docs/</code>。使用 <code>pnpm check:docs-site</code> 检查生成结果。</p>`;
+    `<p>使用 <code>pnpm check:docs-site</code> 检查生成结果。</p>`;
   writeFileSync(join(outDir, "index.html"), PAGE("索引", index, `<h1>Feronavi 文档</h1>` + pages.map((p) => `<a href="${p.file}">${esc(p.title)}</a>`).join("")));
   return { pages: pages.map((p) => p.file), outDir };
 }

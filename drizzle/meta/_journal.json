@@ -428,6 +428,27 @@
       "when": 1793803000000,
       "tag": "0060_automation_schedule",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1793804000000,
+      "tag": "0061_collab_rooms",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1793805000000,
+      "tag": "0062_collab_update_actor_idempotency",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1793806000000,
+      "tag": "0063_collab_snapshot_sequence_key",
+      "breakpoints": true
     }
   ]
 }

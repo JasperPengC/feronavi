@@ -78,6 +78,8 @@
     "backup:schedule": "node scripts/backup-scheduler.mjs",
     "health:check": "node scripts/health-alert.mjs",
     "test:knowledge": "node scripts/run-isolated-test.ts scripts/e2e-knowledge.ts",
+    "test:crdt": "vitest run tests/collab-business-matrix.test.ts tests/collab-room.service.test.ts tests/collab-document.service.test.ts tests/collab-confirmation.test.ts tests/collab-text.test.ts tests/mcp-contracts.test.ts tests/wiki-ui.test.tsx",
+    "accept:crdt": "node scripts/accept-crdt.mjs",
     "test:ai-config": "node scripts/run-isolated-test.ts scripts/e2e-ai-config.ts",
     "test:mcp-write": "node scripts/run-isolated-test.ts scripts/e2e-mcp-write.ts",
     "test:plan-auth": "node scripts/run-isolated-test.ts scripts/e2e-plan-auth.ts",
@@ -257,8 +259,9 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-markdown": "^10.1.0",
-    "zod": "^4.6.6",
-    "undici": "^8.12.2"
+    "undici": "^8.12.2",
+    "yjs": "^13.6.33",
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

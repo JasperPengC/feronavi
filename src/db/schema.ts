@@ -714,6 +714,69 @@ export const memberPreference = pgTable("member_preference", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(now),
 });
 
+// ══ CRDT 协作房间（文本协作与业务协同上下文的共同边界）════════════
+
+/** 协作房间：PAGE 使用 TEXT_CRDT，其余资源先作为 COMMAND 上下文。 */
+export const collabRoom = pgTable("collab_room", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  resourceType: text("resource_type").notNull(),
+  resourceId: uuid("resource_id").notNull(),
+  projectId: uuid("project_id").notNull().references(() => project.id, { onDelete: "cascade" }),
+  mode: text("mode").notNull(),
+  baseRevisionId: uuid("base_revision_id").references(() => pageRevision.id, { onDelete: "set null" }),
+  snapshotSequence: bigint("snapshot_sequence", { mode: "number" }).notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(now),
+}, (t) => [
+  uniqueIndex("collab_room_resource_key").on(t.resourceType, t.resourceId),
+  index("collab_room_project_idx").on(t.projectId),
+  check("collab_room_type_allowed", sql`${t.resourceType} IN ('PAGE','WORK_ITEM','COMMENT','PLAN','APPROVAL','AUTOMATION')`),
+  check("collab_room_mode_allowed", sql`${t.mode} IN ('TEXT_CRDT','COMMAND')`),
+]);
+
+/** 房间成员与客户端心跳；历史操作不依赖此表。 */
+export const collabMember = pgTable("collab_member", {
+  roomId: uuid("room_id").notNull().references(() => collabRoom.id, { onDelete: "cascade" }),
+  memberId: uuid("member_id").notNull().references(() => member.id, { onDelete: "cascade" }),
+  clientId: text("client_id").notNull(),
+  connected: boolean("connected").notNull().default(true),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().default(now),
+}, (t) => [
+  primaryKey({ columns: [t.roomId, t.memberId, t.clientId] }),
+  index("collab_member_member_idx").on(t.memberId, t.lastSeenAt),
+]);
+
+/** Yjs update 的 base64 表示；operationId 保证客户端重试不会重复追加。 */
+export const collabUpdate = pgTable("collab_update", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  roomId: uuid("room_id").notNull().references(() => collabRoom.id, { onDelete: "cascade" }),
+  sequence: bigint("sequence", { mode: "number" }).notNull(),
+  actorId: uuid("actor_id").notNull().references(() => member.id, { onDelete: "restrict" }),
+  clientId: text("client_id").notNull(),
+  operationId: text("operation_id").notNull(),
+  updateBase64: text("update_base64").notNull(),
+  stateVectorHash: text("state_vector_hash"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
+}, (t) => [
+  uniqueIndex("collab_update_room_sequence_key").on(t.roomId, t.sequence),
+  uniqueIndex("collab_update_operation_key").on(t.roomId, t.actorId, t.clientId, t.operationId),
+  index("collab_update_room_created_idx").on(t.roomId, t.createdAt),
+]);
+
+/** 压缩后的 Yjs 状态；旧快照永不覆盖，便于恢复与审计。 */
+export const collabSnapshot = pgTable("collab_snapshot", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  roomId: uuid("room_id").notNull().references(() => collabRoom.id, { onDelete: "cascade" }),
+  sequence: bigint("sequence", { mode: "number" }).notNull(),
+  stateBase64: text("state_base64").notNull(),
+  baseRevisionId: uuid("base_revision_id").references(() => pageRevision.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
+}, (t) => [
+  uniqueIndex("collab_snapshot_room_sequence_key").on(t.roomId, t.sequence),
+  index("collab_snapshot_room_sequence_idx").on(t.roomId, t.sequence),
+  index("collab_snapshot_room_created_idx").on(t.roomId, t.createdAt),
+]);
+
 // ══ 3.4 自定义字段（第八期）════════════════════════════════════
 
 /** 字段定义：项目级，UNIQUE (project_id, key) */

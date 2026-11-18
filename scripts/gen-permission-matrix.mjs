@@ -7,14 +7,26 @@
  * 输出：tests/permission-matrix.generated.json
  *   { permissions: [key...], roles: { ADMIN: [允许的 key...], ... } }
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const args = process.argv.slice(2);
-const internalSource = fileURLToPath(new URL("../docs/reference/permissions.md", import.meta.url));
-const SRC = args[0] === "--out" ? internalSource : (args[0] ?? internalSource);
-const OUT = args[0] === "--out" ? args[1] : (args[1] ?? fileURLToPath(new URL("../tests/permission-matrix.generated.json", import.meta.url)));
-if (!OUT) throw new Error("--out 需要指定输出文件");
+const argValue = (name) => {
+  const index = args.indexOf(name);
+  return index < 0 ? undefined : args[index + 1];
+};
+const sourceArg = argValue("--source");
+const SRC = sourceArg ?? fileURLToPath(new URL("../docs/reference/permissions.md", import.meta.url));
+const OUT = argValue("--out") ?? fileURLToPath(new URL("../tests/permission-matrix.generated.json", import.meta.url));
+
+if (!sourceArg && !existsSync(SRC)) {
+  const fallback = fileURLToPath(new URL("../tests/permission-matrix.generated.json", import.meta.url));
+  if (existsSync(fallback)) {
+    writeFileSync(OUT, readFileSync(fallback));
+    console.log(`权限规范未随公开源码发布，沿用已生成矩阵 → ${OUT}`);
+    process.exit(0);
+  }
+}
 
 const lines = readFileSync(SRC, "utf8").split("\n");
 

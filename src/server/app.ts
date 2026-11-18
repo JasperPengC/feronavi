@@ -32,6 +32,7 @@ import { registerAuditRoutes } from "./routes/audit.ts";
 import { registerEventRoutes } from "./routes/events.ts";
 import { registerWorkflowConfigRoutes } from "./routes/workflow-config.ts";
 import { registerCollabRoutes } from "./routes/collab.ts";
+import { registerCollaborationRoutes } from "./routes/collaboration.ts";
 import { registerTokenRoutes } from "./routes/tokens.ts";
 import { registerMcpRoutes } from "./routes/mcp.ts";
 import { registerSettingsRoutes } from "./routes/settings.ts";
@@ -197,6 +198,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await registerEventRoutes(app);
   await registerWorkflowConfigRoutes(app);
   await registerCollabRoutes(app);
+  await registerCollaborationRoutes(app);
   await registerTokenRoutes(app);
   await registerMcpRoutes(app);
   await registerSettingsRoutes(app);

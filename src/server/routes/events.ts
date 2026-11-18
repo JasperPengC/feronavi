@@ -28,6 +28,10 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/v1/events", async (req, reply) => {
     const actor = actorOf(req);
+    const rawLastEventId = req.headers["last-event-id"];
+    const lastEventId = typeof rawLastEventId === "string" && /^\d+$/u.test(rawLastEventId)
+      ? Number(rawLastEventId)
+      : null;
     reply.raw.writeHead(200, {
       "content-type": "text/event-stream",
       "cache-control": "no-cache",
@@ -36,7 +40,9 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
     });
     let closed = false;
     let blocked = false;
+    let replaying = lastEventId !== null;
     const pending: SseEvent[] = [];
+    const duringReplay: SseEvent[] = [];
     let finish!: () => void;
     const disconnected = new Promise<void>((resolve) => { finish = resolve; });
 
@@ -47,6 +53,14 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
 
     const send = (e: SseEvent) => {
       if (closed || (e.memberId !== null && e.memberId !== actor.memberId)) return;
+      if (replaying) {
+        duringReplay.push(e);
+        if (duringReplay.length > BACKLOG_LIMIT) {
+          cleanup();
+          reply.raw.end(`event: dropped\ndata: {}\nid: ${e.id}\n\n`);
+        }
+        return;
+      }
       if (blocked) {
         pending.push(e);
         if (pending.length > BACKLOG_LIMIT) {
@@ -92,6 +106,25 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
     req.raw.once("aborted", cleanup);
     // 初始 comment 行：确认连接已建立（部分客户端要收到首字节才 resolve）
     blocked = !reply.raw.write(":ok\n\n");
+    if (lastEventId !== null) {
+      const replay = await replaySince(lastEventId, actor.memberId);
+      if (closed) return;
+      if (replay.gone) {
+        cleanup();
+        reply.raw.end(`event: dropped\ndata: {}\nid: ${lastEventId}\n\n`);
+        return;
+      }
+      let delivered = lastEventId;
+      for (const item of replay.items) {
+        if (closed) return;
+        delivered = Math.max(delivered, item.id);
+        writeEvent({ ...item, memberId: null });
+      }
+      replaying = false;
+      for (const event of duringReplay.splice(0)) {
+        if (event.id > delivered) send(event);
+      }
+    }
     // presence：先订阅再标记在线，这样自己也能收到自己的 online 事件（首屏状态一致）
     void presence.presenceConnected(actor);
     // ⚠️ 客户端断开时**必须让 handler 返回**：返回 promise 永不 resolve 的话，

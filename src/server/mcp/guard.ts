@@ -20,6 +20,7 @@ const parents: Record<string, McpResourceKind> = {
 
 async function assertTokenScope(ctx: ToolCtx, tool: ToolDef, args: Record<string, unknown>): Promise<void> {
   if (identityTools.has(tool.name)) return;
+  if (tool.name === "collab.inspect" || tool.name === "collab.command") return; // 处理器先按房间 ACL 解析项目，再检查令牌范围。
   if (accountTools.has(tool.name)) {
     if (!projectAllowed(ctx.token, null)) throw new DomainError("FORBIDDEN", "此工具需要未限制项目的令牌", null);
     return;

@@ -95,6 +95,11 @@ async function assertCanWrite(actor: Actor, pageId: string, projectId: string): 
   throw forbidden();
 }
 
+/** 协作房间复用 Wiki 的唯一写权限判定，不在协作服务复制一套规则。 */
+export async function assertPageWritable(actor: Actor, pageId: string, projectId: string): Promise<void> {
+  await assertCanWrite(actor, pageId, projectId);
+}
+
 function slugify(title: string): string {
   const base = title.trim().toLowerCase()
     .replace(/[\s_]+/g, "-")

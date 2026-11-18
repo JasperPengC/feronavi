@@ -117,7 +117,7 @@ try {
     ["comment.delete", { commentId: commentB!.id }],
     ["idea.submit", { projectId: projectB.id, title: "blocked" }],
     ["idea.vote", { ideaId: ideaB!.id }], ["idea.promote", { ideaId: ideaB!.id }],
-    ["page.create", { projectId: projectB.id, title: "blocked" }], ["page.update", { pageId: pageB!.id, title: "blocked" }],
+    ["page.create", { projectId: projectB.id, title: "blocked" }], ["page.update", { pageId: pageB!.id, title: "blocked", expectedRevisionId: pageB!.currentRevisionId, userConfirmed: true }],
     ["plan.createMilestone", { projectId: projectB.id, name: "blocked" }],
     ["plan.createIteration", { projectId: projectB.id, name: "blocked", startDate: "2026-11-01", endDate: "2026-11-30" }],
     ["plan.createRelease", { projectId: projectB.id, name: "blocked" }], ["plan.createModule", { projectId: projectB.id, name: "blocked" }],

@@ -68,7 +68,7 @@ try {
   const tools = (await client.listTools()).tools;
   const requiredTools = ["ping", "whoami", "project.list", "workitem.get", "workitem.create", "workitem.transition", "page.update"];
   check("工具发现含完整业务契约",
-    tools.length === 50 && tools.every(tool => tool.inputSchema?.type === "object") && requiredTools.every(name => tools.some(tool => tool.name === name)),
+    tools.length === 54 && tools.every(tool => tool.inputSchema?.type === "object") && requiredTools.every(name => tools.some(tool => tool.name === name)),
     `${tools.length} 个工具；关键工具与 inputSchema 齐全`);
   check("资源与提示词可发现", (await client.listResources()).resources.length > 0 && (await client.listPrompts()).prompts.length > 0);
   check("whoami 真实鉴权成功", Boolean((await call(client, "whoami", {})).data.member?.username));

@@ -30,6 +30,7 @@ import { toast } from "../components/ui/Toast.tsx";
 import type { TreeNode } from "../components/ui/Tree.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { useCan } from "../lib/actor.ts";
+import { useCollabDocument } from "../lib/collab-provider.ts";
 
 interface PageRow {
   id: string; title: string; slug: string; parentId: string | null;
@@ -71,7 +72,6 @@ export function WikiPage() {
   const [support, setSupport] = useState<"attachments" | "comments" | "history" | "access" | null>(null);
   const [ragOpen, setRagOpen] = useState(false);
   const dirty = editing && !!draft && (draft.title !== draft.originalTitle || draft.content !== draft.originalContent);
-
   // 命令面板定位到命中的文档；导航前仍由下方 blocker 保护未保存内容。
   useEffect(() => {
     resetImages(); setSelected(requestedPage ?? null); setEditing(false); setDraft(null); setErr(null); setSupport(null);
@@ -102,6 +102,12 @@ export function WikiPage() {
     queryFn: () => apiGet<{ permissions: Permission[] }>(`/api/v1/pages/${selected}/permissions`),
     enabled: !!selected && detail.data?.visibility === "RESTRICTED",
   });
+  const collab = useCollabDocument(selected, draft?.content ?? detail.data?.content ?? "", editing && !!draft);
+
+  useEffect(() => {
+    if (!editing || !draft || collab.status !== "ready" || draft.content === collab.content) return;
+    setDraft((current) => current ? { ...current, content: collab.content } : current);
+  }, [collab.content, collab.status, draft, editing]);
 
   // 编辑期间保留草稿及其起始版本，后台刷新不能覆盖输入或绕过乐观锁。
   useEffect(() => {
@@ -152,20 +158,41 @@ export function WikiPage() {
   const save = useMutation({
     mutationFn: async (submitted: PageDraft) => {
       const content = await images.persist(submitted.content, "PAGE", submitted.pageId);
+      if (collab.status === "ready") {
+        collab.setContent(content);
+        await collab.flush();
+        const published = await apiPost<{ page: PageRow & { revisionNo: number; content: string }; publishedRevisionId: string; indexing: { status: string; message?: string } }>(`/api/v1/collaboration/rooms/PAGE/${submitted.pageId}/publish`, {
+          title: submitted.title,
+          expectedRevisionId: collab.baseRevisionId ?? submitted.revisionId,
+          userConfirmed: true,
+          changeSummary: "Wiki 协作草稿发布",
+        });
+        if (published.indexing.status === "FAILED") setErr(`页面已发布，但知识索引启动失败：${published.indexing.message ?? "未知原因"}`);
+        return { metadata: published.page, content, indexing: published.indexing };
+      }
       const metadata = await apiPatch<PageRow & { revisionNo: number }>(`/api/v1/pages/${submitted.pageId}`, {
-        title: submitted.title, content,
-        // 乐观锁：带上当前版本，别人先改过就会冲突而不是被静默覆盖
-        expectedRevisionId: submitted.revisionId ?? undefined,
+        title: submitted.title,
+        content,
+        expectedRevisionId: submitted.revisionId,
+        changeSummary: "Wiki 页面更新",
       });
-      return { metadata, content };
+      let indexing: { status: string; message?: string } = { status: "QUEUED" };
+      try {
+        await apiPost(`/api/v1/pages/${submitted.pageId}/reindex`, { mode: "INCREMENTAL" });
+      } catch (error) {
+        indexing = { status: "FAILED", message: error instanceof Error ? error.message : "索引任务启动失败" };
+      }
+      return { metadata, content, indexing };
     },
-    onSuccess: async ({ metadata, content }, submitted) => {
+    onSuccess: async ({ metadata, content, indexing }, submitted) => {
       // PATCH 返回元信息，正文来自本次提交快照；不要把不完整响应写进详情缓存。
       const page: PageDetail = { ...metadata, content, changeSummary: null };
       qc.setQueryData(["wiki-page", submitted.pageId], page);
       if (selected === submitted.pageId) {
-        images.reset(); setDraft(draftFromPage(page)); setEditing(false); setErr(null);
+        images.reset(); setDraft(draftFromPage(page)); setEditing(false);
+        setErr(indexing?.status === "FAILED" ? `页面已发布，但知识索引启动失败：${indexing.message ?? "未知原因"}` : null);
       }
+      if (indexing?.status === "FAILED") toast.error("页面已发布，但知识索引启动失败");
       toast.success(tr("wk.saved")); await invalidate(submitted.pageId);
       await qc.invalidateQueries({ queryKey: ["attachments", "PAGE", submitted.pageId] });
     },
@@ -316,6 +343,10 @@ export function WikiPage() {
             <article className="wiki-edit-panel" aria-label={detail.data.title} aria-busy={save.isPending} data-editing={editing ? "true" : "false"}>
               <div className="wiki-document-toolbar">
                 <span className="wiki-document-state">{save.isPending ? tr("common.saving") : editing ? (dirty ? tr("wk.unsaved") : tr("wk.editingHint")) : tr("wk.reading")}</span>
+                {editing && <span className={`status-pill ${collab.status === "ready" ? "dot-green" : collab.status === "error" ? "dot-amber" : "dot-blue"}`} aria-live="polite">
+                  {tr(`wk.collab.${collab.status}`)}
+                </span>}
+                {editing && collab.members.length > 0 && <span className="muted">{tr("wk.collabMembers", { count: String(new Set(collab.members.map((member) => member.memberId)).size) })}</span>}
                 <div className="wiki-primary-actions">
                   {editing ? <>
                     <Button size="sm" onClick={() => { void cancelEditing(); }} disabled={save.isPending}>{tr("wk.cancelEdit")}</Button>
@@ -337,7 +368,7 @@ export function WikiPage() {
                 </div>
               </div>
               {editing && draft ? <MarkdownEditor key={draft.pageId} label={tr("wiki.bodyLabel")} rows={16} className="wiki-markdown-editor" disabled={save.isPending}
-                  value={draft.content} images={images} onChange={(content) => setDraft((current) => current ? { ...current, content } : current)}
+                  value={draft.content} images={images} onChange={(content) => { collab.setContent(content); setDraft((current) => current ? { ...current, content } : current); }}
                   onKeyDown={(event) => {
                     if ((event.metaKey || event.ctrlKey) && event.key === "Enter" && dirty && draft.title.trim() && !save.isPending) {
                       event.preventDefault(); submitDraft();

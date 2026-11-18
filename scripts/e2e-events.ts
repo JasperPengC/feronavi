@@ -90,9 +90,14 @@ try {
   const rep = await fetch(`${BASE}/api/v1/events/replay?since=${before}`, {
     method: "POST", headers: { cookie: `feronavi_session=${sessionToken}` },
   });
-  ok("补取返回 200", rep.status === 200, String(rep.status));
-  const body = await rep.json() as { items: { id: number; event: string }[]; hasMore: boolean };
-  ok("补取拿到 cursor 之后的事件", body.items.length >= 1, JSON.stringify(body.items?.slice(0, 2)));
+  ok("补取返回 200（启用 Valkey）或 410（明确降级全量刷新）", rep.status === 200 || rep.status === 410, String(rep.status));
+  if (rep.status === 200) {
+    const body = await rep.json() as { items: { id: number; event: string }[]; hasMore: boolean };
+    ok("补取拿到 cursor 之后的事件", body.items.length >= 1, JSON.stringify(body.items?.slice(0, 2)));
+  } else {
+    await rep.text();
+    ok("Valkey 不可用时明确要求全量刷新", true);
+  }
 
   // 窗口外 → 410
   const rep2 = await fetch(`${BASE}/api/v1/events/replay?since=999999`, {

@@ -88,9 +88,8 @@ try {
   ok("initialize 成功", init.status === 200 && init.json?.result?.serverInfo?.name === "feronavi", JSON.stringify(init.json?.result?.serverInfo));
   const list = await rpc(TOKEN, { jsonrpc: "2.0", id: 2, method: "tools/list" });
   const tools = (list.json?.result?.tools ?? []) as { name: string; inputSchema: unknown }[];
-  // 读 16（第六期）+ 写 17（第十三期：workitem/comment/idea/page 系 + plan.create* 四个）
-  // 读 24 + 写 26，含 SLA、审批和自动化工具。
-  ok("tools/list 返回读 24 + 写 26 = 50 个工具", tools.length === 50, `${tools.length}: ${tools.map((t) => t.name).join(",")}`);
+  // 当前协议清单：读 24 + 写 30，含协作、SLA、审批、自动化和通知工具。
+  ok("tools/list 返回 54 个工具", tools.length === 54, `${tools.length}: ${tools.map((t) => t.name).join(",")}`);
   ok("写工具出现在清单里", tools.some((t) => t.name === "workitem.create") && tools.some((t) => t.name === "page.update"));
   ok("每个工具都带 inputSchema", tools.every((t) => t.inputSchema && (t.inputSchema as { type?: string }).type === "object"));
   for (const n of ["ping", "whoami", "meta.workflow", "meta.fields", "project.members", "plan.getMilestone"]) {

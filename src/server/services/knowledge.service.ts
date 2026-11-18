@@ -19,6 +19,7 @@ import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 import { getSettingRaw } from "./setting.service.ts";
+import * as wiki from "./wiki.service.ts";
 import { visiblePageCondition } from "./wiki.service.ts";
 import { addUsage, canStartIndexing } from "./ai-config.service.ts";
 
@@ -191,15 +192,25 @@ function assertCanIndex(actor: Actor, projectId: string) {
  * 未配置 AI 时照常建切片（关键词检索可用），只是没有向量。
  */
 export async function reindexPage(actor: Actor, pageId: string, mode: "INCREMENTAL" | "FULL" = "INCREMENTAL") {
+  return reindexPageAuthorized(actor, pageId, mode, false);
+}
+
+export async function reindexPublishedPage(actor: Actor, pageId: string, revisionId: string) {
+  return reindexPageAuthorized(actor, pageId, "FULL", true, revisionId);
+}
+
+async function reindexPageAuthorized(actor: Actor, pageId: string, mode: "INCREMENTAL" | "FULL", pageWriter: boolean, expectedRevisionId?: string) {
   const p = (await db.select().from(page).where(and(eq(page.id, pageId), sql`${page.deletedAt} is null`)).limit(1))[0];
   if (!p) throw new DomainError("NOT_FOUND", "页面不存在", null);
   // 项目数据范围优先（与页面读取同一纪律）
   if (!(await projectRepo.isVisibleTo(actor.memberId, p.projectId, actor.grants.some((g) => g.scopeType === "ORG")))) {
     throw forbidden();
   }
-  assertCanIndex(actor, p.projectId);
-  const rev = p.currentRevisionId
-    ? (await db.select().from(pageRevision).where(eq(pageRevision.id, p.currentRevisionId)).limit(1))[0]
+  if (pageWriter) await wiki.assertPageWritable(actor, pageId, p.projectId);
+  else assertCanIndex(actor, p.projectId);
+  const targetRevisionId = expectedRevisionId ?? p.currentRevisionId;
+  const rev = targetRevisionId
+    ? (await db.select().from(pageRevision).where(and(eq(pageRevision.id, targetRevisionId), eq(pageRevision.pageId, pageId))).limit(1))[0]
     : null;
   if (!rev) throw new DomainError("VALIDATION", "页面没有正文版本，无法索引", null);
 

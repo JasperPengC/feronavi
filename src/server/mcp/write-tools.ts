@@ -37,8 +37,14 @@ import { projectAllowed } from "../services/token.service.ts";
 import * as slaService from "../services/sla.service.ts";
 import * as approvalService from "../services/approval.service.ts";
 import * as automationService from "../services/automation.service.ts";
+import * as collabRooms from "../services/collab-room.persistence.ts";
+import * as collabDocuments from "../services/collab-document.service.ts";
+import { createContentUpdate } from "../services/collab-document-core.ts";
+import { requireUserConfirmation } from "../services/collab-room.service.ts";
+import * as collabCommands from "../services/collab-command.service.ts";
 
 const UUID = { type: "string", format: "uuid" } as const;
+const UUID_OR_NULL = { anyOf: [UUID, { type: "null" }] } as const;
 const str = (description: string) => ({ type: "string", description }) as const;
 
 /** 账号权限判定（写工具必须逐条声明所需权限，不允许"档位对了就放行"） */
@@ -59,6 +65,79 @@ async function idem<T>(ctx: ToolCtx, toolName: string, args: Record<string, unkn
 const IDEM_PROP = { idempotencyKey: str("幂等键（可选）：同一 key 重试会原样返回首次结果，不会重复创建") };
 
 const WRITE_TOOLS_BASE: ToolDef[] = [
+  {
+    name: "collab.command",
+    description: "在工作项、评论、计划、审批或自动化协作房间执行领域命令。写命令必须 userConfirmed=true，业务权限、审计和房间事件由同一领域服务处理。支持幂等键。",
+    kind: "write",
+    inputSchema: {
+      type: "object",
+      properties: {
+        resourceType: { type: "string", enum: ["WORK_ITEM", "COMMENT", "PLAN", "APPROVAL", "AUTOMATION"] },
+        resourceId: UUID,
+        action: str("领域命令名"),
+        input: { type: "object", additionalProperties: true },
+        userConfirmed: { type: "boolean" },
+        ...IDEM_PROP,
+      },
+      required: ["resourceType", "resourceId", "action", "userConfirmed"], additionalProperties: false,
+    },
+    handler: async (ctx, args) => {
+      const resourceType = String(args.resourceType);
+      const resourceId = String(args.resourceId);
+      const room = await collabRooms.getRoom(ctx.actor, resourceType, resourceId);
+      if (!projectAllowed(ctx.token, room.projectId)) throw new DomainError("NOT_FOUND", "资源不存在", null);
+      return idem(ctx, "collab.command", args, () => collabCommands.executeCommand(
+        ctx.actor, resourceType, resourceId, String(args.action), (args.input ?? {}) as Record<string, unknown>, args.userConfirmed === true,
+      ));
+    },
+  },
+  {
+    name: "collab.update",
+    description: "向页面协作房间追加一个 Yjs update。update 只进入协作日志，不会绕过页面权限或直接发布；可安全重试。",
+    kind: "write",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pageId: UUID,
+        clientId: str("协作客户端标识"),
+        operationId: str("幂等操作标识"),
+        updateBase64: str("Yjs update 的 base64 编码"),
+      },
+      required: ["pageId", "clientId", "operationId", "updateBase64"], additionalProperties: false,
+    },
+    handler: async (ctx, args) => {
+      const pageId = String(args.pageId);
+      const room = await collabRooms.getRoom(ctx.actor, "PAGE", pageId);
+      if (!projectAllowed(ctx.token, room.projectId)) throw new DomainError("NOT_FOUND", "资源不存在", null);
+      if (!(await collabRooms.canWriteRoom(ctx.actor, room))) throw new DomainError("FORBIDDEN", "没有页面写权限", null);
+      const clientId = String(args.clientId);
+      await collabRooms.joinRoom(ctx.actor, "PAGE", pageId, clientId);
+      return collabDocuments.applyUpdate({
+        roomId: room.id, actorId: ctx.actor.memberId, clientId,
+        operationId: String(args.operationId), updateBase64: String(args.updateBase64),
+      });
+    },
+  },
+  {
+    name: "collab.publishPage",
+    description: "发布页面协作草稿。必须先取得用户明确确认并传 userConfirmed=true；同时提供当前已发布 revision 作为 CAS 基线。冲突时不会覆盖他人修改。支持幂等键。",
+    kind: "write",
+    inputSchema: {
+      type: "object",
+      properties: { pageId: UUID, title: str("可选的新标题"), expectedRevisionId: UUID, changeSummary: str("变更说明"), userConfirmed: { type: "boolean", description: "用户已明确确认本次发布" }, ...IDEM_PROP },
+      required: ["pageId", "expectedRevisionId", "userConfirmed"], additionalProperties: false,
+    },
+    handler: async (ctx, args) => {
+      const pageId = String(args.pageId);
+      const room = await collabRooms.getRoom(ctx.actor, "PAGE", pageId);
+      if (!projectAllowed(ctx.token, room.projectId)) throw new DomainError("NOT_FOUND", "资源不存在", null);
+      if (!(await collabRooms.canWriteRoom(ctx.actor, room))) throw new DomainError("FORBIDDEN", "没有页面写权限", null);
+      requireUserConfirmation(args.userConfirmed === true);
+      const { pageId: _page, idempotencyKey: _key, ...input } = args;
+      const { userConfirmed: _confirmed, ...publishInput } = input;
+      return idem(ctx, "collab.publishPage", args, () => collabDocuments.publishPage(ctx.actor, room.id, publishInput as { expectedRevisionId: string; title?: string; changeSummary?: string }));
+    },
+  },
   {
     name: "workitem.create",
     description: "新建工作项。**幂等键**；返回完整行（含 key 与 id）。",
@@ -272,17 +351,34 @@ const WRITE_TOOLS_BASE: ToolDef[] = [
   },
   {
     name: "page.update",
-    description: "改文档（**乐观锁**：传 expectedRevisionId；生成新版本，历史永不删除）。",
+    description: "改文档（先确认本次发布；正文通过 Yjs 协作日志写入，再按 expectedRevisionId CAS 发布；生成新版本，历史永不删除）。",
     kind: "write",
     inputSchema: {
       type: "object",
-      properties: { pageId: UUID, title: str("标题"), content: str("正文"), expectedRevisionId: UUID, changeSummary: str("变更说明") },
-      required: ["pageId"],
+      properties: { pageId: UUID, title: str("标题"), content: str("正文"), expectedRevisionId: UUID_OR_NULL, changeSummary: str("变更说明"), userConfirmed: { type: "boolean", description: "用户明确确认本次页面发布" }, ...IDEM_PROP },
+      required: ["pageId", "expectedRevisionId", "userConfirmed"],
       additionalProperties: false,
     },
     handler: async (ctx, args) => {
-      const { pageId: _i, ...patch } = args;
-      return wikiService.updatePage(ctx.actor, String(args.pageId), patch as never);
+      const pageId = String(args.pageId);
+      requireUserConfirmation(args.userConfirmed === true);
+      const room = await collabRooms.getOrCreateRoom(ctx.actor, "PAGE", pageId);
+      if (!projectAllowed(ctx.token, room.projectId)) throw new DomainError("NOT_FOUND", "资源不存在", null);
+      if (!(await collabRooms.canWriteRoom(ctx.actor, room))) throw new DomainError("FORBIDDEN", "没有页面写权限", null);
+      const expectedRevisionId = typeof args.expectedRevisionId === "string" ? args.expectedRevisionId : null;
+      if (!expectedRevisionId) throw new DomainError("VERSION_CONFLICT", "页面尚未建立可用的发布基线，请先读取页面后重试", null);
+      const clientId = `mcp:${ctx.token.tokenId}`;
+      const operationId = String(args.idempotencyKey ?? `${clientId}:${expectedRevisionId}`);
+      const title = typeof args.title === "string" ? args.title : undefined;
+      const result = await idem(ctx, "page.update", args, async () => {
+        const state = await collabDocuments.loadDocument(room.id);
+        const delta = typeof args.content === "string" ? createContentUpdate(state.state, String(args.content)) : null;
+        if (delta) {
+          await collabDocuments.applyUpdate({ roomId: room.id, actorId: ctx.actor.memberId, clientId, operationId, updateBase64: Buffer.from(delta).toString("base64") });
+        }
+        return collabDocuments.publishPage(ctx.actor, room.id, { expectedRevisionId, title, changeSummary: typeof args.changeSummary === "string" ? args.changeSummary : "MCP 文档更新" });
+      });
+      return result;
     },
   },
 ];
