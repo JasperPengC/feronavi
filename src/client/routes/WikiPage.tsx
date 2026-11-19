@@ -29,7 +29,7 @@ import { Button } from "../components/ui/Button.tsx";
 import { toast } from "../components/ui/Toast.tsx";
 import type { TreeNode } from "../components/ui/Tree.tsx";
 import { Icon } from "../components/Icon.tsx";
-import { useCan } from "../lib/actor.ts";
+import { useActor, useCan } from "../lib/actor.ts";
 import { useCollabDocument } from "../lib/collab-provider.ts";
 
 interface PageRow {
@@ -57,6 +57,7 @@ export function WikiPage() {
   const { projectId } = useParams({ from: "/_app/projects/$projectId/wiki" });
   const { page: requestedPage } = useSearch({ from: "/_app/projects/$projectId/wiki" });
   const qc = useQueryClient();
+  const actor = useActor();
   const canReindex = useCan("page:update_any");
   const [selected, setSelected] = useState<string | null>(requestedPage ?? null);
   const [query, setQuery] = useState("");
@@ -102,7 +103,7 @@ export function WikiPage() {
     queryFn: () => apiGet<{ permissions: Permission[] }>(`/api/v1/pages/${selected}/permissions`),
     enabled: !!selected && detail.data?.visibility === "RESTRICTED",
   });
-  const collab = useCollabDocument(selected, draft?.content ?? detail.data?.content ?? "", editing && !!draft);
+  const collab = useCollabDocument(selected, draft?.content ?? detail.data?.content ?? "", editing && !!draft, actor.memberId);
 
   useEffect(() => {
     if (!editing || !draft || collab.status !== "ready" || draft.content === collab.content) return;

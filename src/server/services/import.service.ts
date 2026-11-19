@@ -12,6 +12,8 @@ import { importBatch, importMapping, project, workItem } from "../../db/schema.t
 import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import { recordBusinessEvent } from "./event-log.ts";
+import { importCollabEvent } from "./collab-event-payload.ts";
+import { publishProjectEvent } from "./collab-events.service.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 import * as wiService from "../services/work-item.service.ts";
@@ -430,6 +432,10 @@ export async function confirm(actor: Actor, id: string, opts: { retryFailedOnly?
     actor, action: "import.confirmed", targetType: "IMPORT_BATCH", targetId: id, projectId: b.projectId,
     summary: `${actor.name} 确认导入了 ${created} 行工作项（跳过 ${skipped}、失败 ${failed}）`,
   });
+  const event = importCollabEvent("import.completed", {
+    batchId: id, projectId: b.projectId, status, created, skipped, failed,
+  });
+  await publishProjectEvent(b.projectId, event.event, event.data);
 
   return { created, skipped, failed, status, errorReport: failures.slice(0, 200) };
 }
@@ -472,6 +478,10 @@ async function rollbackLocked(actor: Actor, id: string) {
     summary: `${actor.name} 回滚了导入批次，软删 ${removed} 个工作项`,
     severity: "SECURITY",
   });
+  const event = importCollabEvent("import.rolled_back", {
+    batchId: id, projectId: b.projectId, status: "ROLLED_BACK", removed,
+  });
+  await publishProjectEvent(b.projectId, event.event, event.data);
   return { ok: true, alreadyRolledBack: false, removed };
 }
 

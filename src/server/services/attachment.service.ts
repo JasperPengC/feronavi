@@ -24,6 +24,8 @@ import type { Actor } from "../permission/actor.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 import { describeTarget } from "./activity-labels.ts";
 import { recordBusinessEvent } from "./event-log.ts";
+import { attachmentCollabEvent } from "./collab-event-payload.ts";
+import { publishResourceEvent } from "./collab-events.service.ts";
 import { isS3Configured, loadStorageConfig, s3Client, storageKey } from "./storage.service.ts";
 
 /** 默认 25MB；部署者可通过环境变量调高 */
@@ -202,6 +204,14 @@ export async function upload(actor: Actor, input: {
       actor, action: "attachment.uploaded", targetType: "ATTACHMENT", targetId: row!.id, projectId,
       summary: `${actor.name} 在${label}上传了附件「${row!.originalName}」`,
     });
+    const resourceType = ["PAGE", "WORK_ITEM", "COMMENT"].includes(input.targetType) ? input.targetType : null;
+    if (resourceType) {
+      const event = attachmentCollabEvent("attachment.uploaded", {
+        attachmentId: row!.id, targetType: input.targetType, targetId: input.targetId, projectId,
+        originalName: row!.originalName, mimeType: row!.mimeType, sizeBytes: row!.sizeBytes,
+      });
+      await publishResourceEvent(resourceType, input.targetId, event.event, event.data);
+    }
   }
   return row;
 }
@@ -265,6 +275,14 @@ export async function remove(actor: Actor, id: string): Promise<void> {
       actor, action: "attachment.deleted", targetType: "ATTACHMENT", targetId: id, projectId,
       summary: `${actor.name} 删除了${label}的附件「${row.originalName}」`,
     });
+    const resourceType = ["PAGE", "WORK_ITEM", "COMMENT"].includes(row.targetType) ? row.targetType : null;
+    if (resourceType) {
+      const event = attachmentCollabEvent("attachment.deleted", {
+        attachmentId: id, targetType: row.targetType, targetId: row.targetId, projectId,
+        originalName: row.originalName, mimeType: row.mimeType, sizeBytes: row.sizeBytes,
+      });
+      await publishResourceEvent(resourceType, row.targetId, event.event, event.data);
+    }
   }
 }
 

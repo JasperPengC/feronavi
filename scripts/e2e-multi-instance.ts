@@ -10,6 +10,7 @@ import "./_env.ts";   // 环境预设必须最先加载
  * 由隔离 runner 提供测试数据库；本脚本创建独立缓存与两个动态端口应用。
  */
 import { startIsolatedMultiInstance } from "../tests/support/isolated-special.ts";
+import * as Y from "yjs";
 import { db, sql } from "../src/db/index.ts";
 import { auditEntry, activityEntry, comment, member, roleAssignment } from "../src/db/schema.ts";
 import { deleteTestMember, ensureInitialized } from "./_test-helpers.ts";
@@ -29,6 +30,7 @@ const PW = "multi-instance-pass-123456";
 const NEW_PW = "multi-instance-changed-123456";
 const request: typeof fetch = (input, init) => fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(15_000) });
 let tempId = "";
+let collabPageId: string | undefined;
 function sseClient(base: string, cookie: string) {
   const ac = new AbortController();
   const events: { event: string; data: Record<string, unknown> }[] = [];
@@ -108,6 +110,13 @@ try {
   const table = await (await request(`${A}/api/v1/projects/${pid}/work-items?view=table&pageSize=5`, { headers: { cookie: demo!.cookie } })).json() as { rows: { id: string }[] };
   const wiId = table.rows[0]!.id;
 
+  const pageRes = await request(`${A}/api/v1/projects/${pid}/pages`, {
+    method: "POST", headers: H, body: JSON.stringify({ title: `多实例协作验收 ${TS}`, content: "base" }),
+  });
+  const collabPage = pageRes.ok ? await pageRes.json() as { id: string } : null;
+  collabPageId = collabPage?.id ?? "";
+  ok("为多实例 CRDT 验收创建临时页面", pageRes.status === 201 && !!collabPageId, String(pageRes.status));
+
   // 真实建临时成员（A 上）
   await deleteTestMember(TEMP);
   const created = await request(`${A}/api/v1/members`, {
@@ -123,6 +132,7 @@ try {
   });
   ok("临时成员完成首次改密", changed.ok);
   tempLogin = await login(B, TEMP, NEW_PW);
+  const demoOnB = await login(B, "demo", "demo-password-12345");
 
   // ①/② presence + SSE 跨实例
   sa = sseClient(A, demo!.cookie);
@@ -150,6 +160,86 @@ try {
   const commentBody = commentRes.ok ? await commentRes.json() as { id: string } : null;
   const notify = await sa.wait((e) => e.event === "notification.new" && sa!.events.indexOf(e) >= before, 6000);
   ok("跨实例通知：A 的 SSE 收到 B 触发的 notification.new", !!notify, JSON.stringify(sa.events.filter((e) => e.event === "notification.new").slice(-2)));
+
+  // ④ CRDT update 在 B 写入，经共享 PostgreSQL/Valkey 到达 A，并可在 A 读取最终状态。
+  const collabBase = `/api/v1/collaboration/rooms/PAGE/${collabPageId ?? ""}`;
+  const clientA = `multi-a-${TS}`;
+  const clientB = `multi-b-${TS}`;
+  const joinA = await request(`${A}${collabBase}/join`, { method: "POST", headers: H, body: JSON.stringify({ clientId: clientA }) });
+  const joinB = await request(`${B}/api/v1/collaboration/rooms/PAGE/${collabPageId ?? ""}/join`, {
+    method: "POST", headers: { cookie: demoOnB!.cookie, "x-csrf-token": demoOnB!.csrf, "content-type": "application/json" },
+    body: JSON.stringify({ clientId: clientB }),
+  });
+  const joinedRoom = joinA.ok ? await joinA.json() as { room: { id: string } } : null;
+  const roomId = joinedRoom?.room.id;
+  ok("A、B 两个实例加入同一页面协作房间", joinA.ok && joinB.ok && !!roomId, `A=${joinA.status}, B=${joinB.status}`);
+  const initialState = await (await request(`${B}${collabBase}/state`, { headers: { cookie: tempLogin!.cookie } })).json() as { stateBase64: string };
+  const doc = new Y.Doc();
+  Y.applyUpdate(doc, Uint8Array.from(Buffer.from(initialState.stateBase64, "base64")));
+  const text = doc.getText("content");
+  text.insert(text.length, `CRDT-${TS}`);
+  const updateBase64 = Buffer.from(Y.encodeStateAsUpdate(doc)).toString("base64");
+  const updateStart = sa.events.length;
+  const updateRes = await request(`${B}/api/v1/collaboration/rooms/PAGE/${collabPageId ?? ""}/updates`, {
+    method: "POST", headers: { cookie: demoOnB!.cookie, "x-csrf-token": demoOnB!.csrf, "content-type": "application/json" },
+    body: JSON.stringify({ clientId: clientB, operationId: `op-${TS}`, updateBase64 }),
+  });
+  ok("B 实例提交页面 CRDT update", updateRes.status === 200, String(updateRes.status));
+  const collabEvent = roomId ? await sa.wait((e) => e.event === "collab.update" && e.data.roomId === roomId && sa!.events.indexOf(e) >= updateStart) : null;
+  ok("跨实例 Pub/Sub：A 的 SSE 收到 collab.update", !!collabEvent, JSON.stringify(collabEvent?.data));
+  const stateRes = await request(`${A}${collabBase}/state`, { headers: { cookie: demo!.cookie } });
+  const state = stateRes.ok ? await stateRes.json() as { sequence: number; stateBase64: string } : null;
+  const restored = new Y.Doc();
+  if (state?.stateBase64) Y.applyUpdate(restored, Uint8Array.from(Buffer.from(state.stateBase64, "base64")));
+  ok("A 实例读取到 B 写入的 CRDT 正文与递增序号", stateRes.ok && state!.sequence === 1 && restored.getText("content").toString() === `baseCRDT-${TS}`,
+    `status=${stateRes.status}, seq=${state?.sequence}, content=${restored.getText("content").toString()}`);
+  doc.destroy(); restored.destroy();
+
+  // 附件上传/删除事件定向发给页面协作成员。
+  const uploadForm = new FormData();
+  uploadForm.append("targetType", "PAGE");
+  uploadForm.append("targetId", collabPageId ?? "");
+  uploadForm.append("file", new Blob([`attachment-${TS}`], { type: "text/plain" }), `collab-${TS}.txt`);
+  const uploadStart = sa.events.length;
+  const uploaded = await request(`${B}/api/v1/uploads`, { method: "POST", headers: { cookie: demo!.cookie, "x-csrf-token": demo!.csrf }, body: uploadForm });
+  const attachmentRow = uploaded.ok ? await uploaded.json() as { id: string } : null;
+  const uploadEvent = await sa.wait((e) => e.event === "attachment.uploaded" && e.data.attachmentId === attachmentRow?.id && sa!.events.indexOf(e) >= uploadStart);
+  ok("页面附件上传成功并向协作者发事件", uploaded.status === 201 && !!attachmentRow && !!uploadEvent, `status=${uploaded.status}`);
+  const deleteStart = sa.events.length;
+  const deletedAttachment = attachmentRow ? await request(`${B}/api/v1/attachments/${attachmentRow.id}`, {
+    method: "DELETE", headers: { cookie: demo!.cookie, "x-csrf-token": demo!.csrf },
+  }) : null;
+  const deleteEvent = await sa.wait((e) => e.event === "attachment.deleted" && e.data.attachmentId === attachmentRow?.id && sa!.events.indexOf(e) >= deleteStart);
+  ok("页面附件删除成功并向协作者发事件", deletedAttachment?.ok === true && !!deleteEvent, `status=${deletedAttachment?.status}`);
+
+  // 导入确认与整批回滚发项目级事件，不按工作项逐条广播。
+  const importForm = new FormData();
+  importForm.append("file", new Blob([`external_id,title\nimport-${TS},协作导入验收-${TS}\n`], { type: "text/csv" }), `import-${TS}.csv`);
+  const importCreated = await request(`${B}/api/v1/projects/${pid}/imports`, {
+    method: "POST", headers: { cookie: demo!.cookie, "x-csrf-token": demo!.csrf }, body: importForm,
+  });
+  const batch = importCreated.ok ? await importCreated.json() as { batchId: string } : null;
+  let importReady = !!batch;
+  if (batch) {
+    const mapping = await request(`${B}/api/v1/imports/${batch.batchId}/mapping`, {
+      method: "PUT", headers: { ...H, cookie: demo!.cookie },
+      body: JSON.stringify({ fieldMap: { title: "title" }, externalIdColumn: "external_id" }),
+    });
+    const mappingBody = mapping.ok ? null : await mapping.text();
+    const dryRun = mapping.ok ? await request(`${B}/api/v1/imports/${batch.batchId}/dry-run`, { method: "POST", headers: H, body: "{}" }) : null;
+    if (!mapping.ok) console.log(`  导入映射失败: ${mapping.status} ${mappingBody}`);
+    if (dryRun && !dryRun.ok) console.log(`  导入试运行失败: ${dryRun.status} ${await dryRun.text()}`);
+    importReady = mapping.ok && dryRun?.ok === true;
+  }
+  const importStart = sa.events.length;
+  const confirmed = batch && importReady ? await request(`${B}/api/v1/imports/${batch.batchId}/confirm`, { method: "POST", headers: H, body: "{}" }) : null;
+  const confirmEvent = await sa.wait((e) => e.event === "import.completed" && e.data.batchId === batch?.batchId && sa!.events.indexOf(e) >= importStart);
+  ok("CSV 导入确认成功并向项目协作者广播统计", importCreated.status === 201 && importReady && confirmed?.ok === true && !!confirmEvent,
+    `create=${importCreated.status}, confirmed=${confirmed?.status}`);
+  const rollbackStart = sa.events.length;
+  const rolledBack = batch && confirmed?.ok ? await request(`${B}/api/v1/imports/${batch.batchId}/rollback`, { method: "POST", headers: H, body: "{}" }) : null;
+  const rollbackEvent = await sa.wait((e) => e.event === "import.rolled_back" && e.data.batchId === batch?.batchId && sa!.events.indexOf(e) >= rollbackStart);
+  ok("导入整批回滚成功并向项目协作者广播", rolledBack?.ok === true && !!rollbackEvent, `status=${rolledBack?.status}`);
 
   if (process.env.MULTI_INSTANCE_RECOVERY === "1") {
     duplicate = sseClient(B, demo!.cookie);
@@ -193,7 +283,7 @@ try {
     ok("缓存恢复后关闭同成员另一副本连接仍保持在线", remaining.online.some(m => m.memberId === me.memberId));
   }
 
-  // ④ 下线跨实例
+  // ⑤ 下线跨实例
   const closeStart = Date.now();
   sb.close();
   let listAfter = listA;
@@ -207,6 +297,9 @@ try {
   // 清理评论
   if (commentBody?.id) {
     await request(`${A}/api/v1/comments/${commentBody.id}`, { method: "DELETE", headers: H }).catch(() => {});
+  }
+  if (collabPageId) {
+    await request(`${A}/api/v1/pages/${collabPageId}`, { method: "DELETE", headers: H }).catch(() => {});
   }
 } finally {
   sa?.close(); sb?.close(); duplicate?.close();

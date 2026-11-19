@@ -21,6 +21,7 @@ import {
 import type { Actor } from "../permission/actor.ts";
 import * as wiki from "./wiki.service.ts";
 import * as knowledge from "./knowledge.service.ts";
+import { publishProjectEvent, publishResourceEvent, publishRoomEvent } from "./collab-events.service.ts";
 
 export interface DocumentState {
   state: Uint8Array;
@@ -123,12 +124,7 @@ export async function createSnapshot(roomId: string): Promise<{ sequence: number
   return { sequence: state.sequence, stateBase64: encoded };
 }
 
-export async function publishRoomEvent(roomId: string, event: string, data: Record<string, unknown>): Promise<void> {
-  const joined = await db.select({ memberId: collabMember.memberId }).from(collabMember).where(and(
-    eq(collabMember.roomId, roomId), eq(collabMember.connected, true), gt(collabMember.lastSeenAt, new Date(Date.now() - 60_000)),
-  ));
-  await Promise.all([...new Set(joined.map((row) => row.memberId))].map((memberId) => publish(event, data, memberId).catch(() => 0)));
-}
+export { publishProjectEvent, publishResourceEvent, publishRoomEvent };
 
 export async function publishPage(actor: Actor, roomId: string, input: {
   expectedRevisionId: string;
