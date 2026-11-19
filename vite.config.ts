@@ -15,6 +15,26 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     sourcemap: true,
+    rollupOptions: {
+      // zod 发行包中的 @__PURE__ 注释位置不符合 Rollup 的注释解析规则，
+      // Rollup 会安全移除该注释；只过滤这个已知的上游噪声，保留其他告警。
+      onwarn(warning, warn) {
+        if (warning.code === "INVALID_ANNOTATION" && warning.id?.includes("/node_modules/zod/")) return;
+        warn(warning);
+      },
+      output: {
+        // 共享依赖从入口拆出，避免首屏入口被编辑器和协作依赖撑大。
+        manualChunks(id) {
+          if (!id.includes("/node_modules/")) return undefined;
+          if (id.includes("/react/") || id.includes("/react-dom/") || id.includes("/scheduler/")) return "framework";
+          if (id.includes("/@tanstack/")) return "tanstack";
+          if (id.includes("/@dnd-kit/")) return "dnd-kit";
+          if (id.includes("/zod/")) return "validation";
+          if (id.includes("/yjs/") || id.includes("/lib0/")) return "collaboration";
+          return "vendor";
+        },
+      },
+    },
   },
   server: {
     host: "127.0.0.1",
