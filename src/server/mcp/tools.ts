@@ -91,7 +91,7 @@ export const TOOLS: ToolDef[] = guardTools([
       required: ["resourceType", "resourceId"], additionalProperties: false,
     },
     handler: async (ctx, args) => {
-      const room = await collabRooms.getRoom(ctx.actor, String(args.resourceType), String(args.resourceId));
+      const room = await collabRooms.getOrCreateRoom(ctx.actor, String(args.resourceType), String(args.resourceId));
       if (!projectAllowed(ctx.token, room.projectId)) throw new DomainError("NOT_FOUND", "资源不存在", null);
       const state = await collabDocuments.loadDocument(room.id);
       const canWrite = await collabRooms.canWriteRoom(ctx.actor, room);
@@ -102,8 +102,8 @@ export const TOOLS: ToolDef[] = guardTools([
         rag: { source: room.resourceType === "PAGE" ? "published_revision" : "not_applicable", publishedRevisionId: room.baseRevisionId },
         actions: (() => {
           const actions = COLLAB_ACTIONS[room.resourceType];
-          const writable = canWrite && ctx.token.tier !== "READ_ONLY";
-          return room.mode === "TEXT_CRDT" ? [...(actions?.read ?? []), ...(writable ? actions?.write ?? [] : [])] : [];
+          const writable = tierAllows(ctx.token, "write") && (room.mode === "COMMAND" || canWrite);
+          return [...(actions?.read ?? []), ...(writable ? actions?.write ?? [] : [])];
         })(),
         domainTools: COLLAB_DOMAIN_TOOLS[room.resourceType] ?? [],
         domainAuthorization: "每个 MCP 领域工具会重新检查账号权限、项目白名单和业务前置条件",

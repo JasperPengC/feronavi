@@ -84,7 +84,7 @@ const WRITE_TOOLS_BASE: ToolDef[] = [
     handler: async (ctx, args) => {
       const resourceType = String(args.resourceType);
       const resourceId = String(args.resourceId);
-      const room = await collabRooms.getRoom(ctx.actor, resourceType, resourceId);
+      const room = await collabRooms.getOrCreateRoom(ctx.actor, resourceType, resourceId);
       if (!projectAllowed(ctx.token, room.projectId)) throw new DomainError("NOT_FOUND", "资源不存在", null);
       return idem(ctx, "collab.command", args, () => collabCommands.executeCommand(
         ctx.actor, resourceType, resourceId, String(args.action), (args.input ?? {}) as Record<string, unknown>, args.userConfirmed === true,

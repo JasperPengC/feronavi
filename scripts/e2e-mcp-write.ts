@@ -1,7 +1,7 @@
 import "./_env.ts";   // 环境预设必须最先加载（服务模块在导入时即读环境变量）
 /** MCP 写工具自检（第十三期）：档位 × 账号权限 × 白名单三重交集、幂等键、乐观锁、破坏性标注 */
 import { db, sql } from "../src/db/index.ts";
-import { member, role, roleAssignment, project, workItem, apiToken, idempotencyKey, auditEntry, activityEntry, comment, subscription, notification, timeLog, workItemCollaborator, workItemRelation, memberPreference, milestone, iteration, release, module as moduleT, page, pageRevision, pagePermission, idea, ideaVote } from "../src/db/schema.ts";
+import { member, role, roleAssignment, project, workItem, apiToken, idempotencyKey, auditEntry, activityEntry, comment, subscription, notification, timeLog, workItemCollaborator, workItemRelation, memberPreference, milestone, iteration, release, module as moduleT, page, pageRevision, pagePermission, idea, ideaVote, collabRoom, collabMember, collabSnapshot, collabUpdate } from "../src/db/schema.ts";
 import { hashPassword } from "../src/server/auth/password.ts";
 import { loadActor } from "../src/server/auth/actor-loader.ts";
 import * as projectService from "../src/server/services/project.service.ts";
@@ -83,6 +83,26 @@ try {
   ok("workitem.create 成功并返回完整行", !created.isError && !!wiId, JSON.stringify(created.data).slice(0, 90));
   ok("创建结果带 key（可用于后续引用）", !!(wi as { key?: string }).key, JSON.stringify(wi).slice(0, 60));
 
+  // ── 协作 MCP 冷启动：未预建房间时也能完成 inspect → confirm → command ──
+  const collabCreated = await call(rwTok.token, "workitem.create", { projectId: pid, type: "TASK", title: "MCP 协作冷启动样本" });
+  const collabWiId = (collabCreated.data as { result?: { id: string } })?.result?.id;
+  ok("协作冷启动样本创建成功", !collabCreated.isError && !!collabWiId, JSON.stringify(collabCreated.data).slice(0, 80));
+  const inspected = await call(rwTok.token, "collab.inspect", { resourceType: "WORK_ITEM", resourceId: collabWiId! });
+  ok("协作 inspect 冷启动自动创建 COMMAND 房间", !inspected.isError && (inspected.data as { mode?: string })?.mode === "COMMAND",
+    JSON.stringify(inspected.data).slice(0, 100));
+  const inspectActions = (inspected.data as { actions?: string[] })?.actions ?? [];
+  ok("COMMAND inspect 返回领域动作与工具发现信息",
+    inspectActions.includes("workitem.update") && ((inspected.data as { domainTools?: string[] })?.domainTools ?? []).includes("workitem.get"),
+    JSON.stringify({ inspectActions, domainTools: (inspected.data as { domainTools?: string[] })?.domainTools }));
+  const unconfirmed = await call(rwTok.token, "collab.command", { resourceType: "WORK_ITEM", resourceId: collabWiId!, action: "workitem.update", input: { expectedVersion: 1, title: "未确认不应执行" }, userConfirmed: false });
+  ok("协作 command 冷启动仍执行用户确认门禁",
+    unconfirmed.isError && (unconfirmed.data as { code?: string }).code === "COMMAND_CONFIRMATION_REQUIRED",
+    JSON.stringify(unconfirmed.data));
+  const confirmed = await call(rwTok.token, "collab.command", { resourceType: "WORK_ITEM", resourceId: collabWiId!, action: "workitem.update", input: { expectedVersion: 1, title: "冷启动闭环已确认" }, userConfirmed: true });
+  ok("确认后协作 command 写入成功", !confirmed.isError, JSON.stringify(confirmed.data).slice(0, 100));
+  const afterCollab = (await db.select({ title: workItem.title }).from(workItem).where(eq(workItem.id, collabWiId!)).limit(1))[0];
+  ok("协作 command 结果落到领域数据", afterCollab?.title === "冷启动闭环已确认", String(afterCollab?.title));
+
   // ── 幂等键 ──
   await call(rwTok.token, "workitem.comment", { workItemId: wiId, body: "来自 MCP 的评论", idempotencyKey: "cmt-1" });
   const k2 = await call(rwTok.token, "workitem.comment", { workItemId: wiId, body: "来自 MCP 的评论", idempotencyKey: "cmt-1" });
@@ -135,6 +155,10 @@ try {
   await app.close();
   await db.delete(idempotencyKey);
   await db.delete(apiToken);
+  await db.delete(collabMember);
+  await db.delete(collabSnapshot);
+  await db.delete(collabUpdate);
+  await db.delete(collabRoom);
   await db.delete(ideaVote); await db.delete(idea);
   await db.delete(pagePermission); await db.delete(pageRevision); await db.delete(page);
   await db.delete(workItemRelation); await db.delete(comment);

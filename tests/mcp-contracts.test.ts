@@ -7,6 +7,24 @@ import type { Actor } from "../src/server/permission/actor.ts";
 // 外部数据库及副作用不属于协议边界测试；保留真实注册表、引擎和服务输入解析。
 vi.mock("../src/db/index.ts", () => ({ db: {}, sql: {} }));
 vi.mock("../src/server/services/mcp-client.service.ts", () => ({ recordToolCall: async () => {}, assertToolPolicyAllowed: async () => {} }));
+const collabRoomMock = vi.hoisted(() => {
+  const room = {
+    id: "44444444-4444-4444-8444-444444444444",
+    resourceType: "WORK_ITEM",
+    resourceId: "11111111-1111-4111-8111-111111111111",
+    projectId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    mode: "COMMAND",
+    baseRevisionId: null,
+  };
+  return {
+    room,
+    getOrCreateRoom: vi.fn(async () => room),
+    getRoom: vi.fn(async () => room),
+    canWriteRoom: vi.fn(async () => false),
+  };
+});
+vi.mock("../src/server/services/collab-room.persistence.ts", () => collabRoomMock);
+vi.mock("../src/server/services/collab-document.service.ts", () => ({ loadDocument: async () => ({ sequence: 0 }) }));
 vi.mock("../src/server/services/mcp-resource.service.ts", () => ({
   projectForMcpResource: async (_kind: string, id: string) => id === "11111111-1111-4111-8111-111111111111" ? "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" : "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
 }));
@@ -62,6 +80,26 @@ describe("MCP 服务端执行声明的输入契约", () => {
   it("项目白名单之外的创建拒绝，即使账号是组织管理员", async () => {
     const result = await (await connect([projectA])).callTool({ name: "workitem.create", arguments: { projectId: projectB, type: "TASK", title: "outside" } });
     expect(envelope(result).code).toBe("NOT_FOUND");
+  });
+});
+
+describe("MCP 协作房间冷启动", () => {
+  it("inspect 首次访问自动创建 COMMAND 房间并返回可执行动作", async () => {
+    collabRoomMock.getOrCreateRoom.mockClear();
+    const result = await (await connect()).callTool({ name: "collab.inspect", arguments: { resourceType: "WORK_ITEM", resourceId: inside } });
+    const data = envelope(result);
+    expect(result.isError).not.toBe(true);
+    expect(collabRoomMock.getOrCreateRoom).toHaveBeenCalledWith(actor, "WORK_ITEM", inside);
+    expect(data).toMatchObject({ mode: "COMMAND", actions: ["workitem.get", "workitem.update", "workitem.transition", "workitem.assign", "workitem.comment"] });
+  });
+
+  it("command 首次访问先创建房间，但仍要求用户确认", async () => {
+    collabRoomMock.getOrCreateRoom.mockClear();
+    const result = await (await connect()).callTool({ name: "collab.command", arguments: {
+      resourceType: "WORK_ITEM", resourceId: inside, action: "workitem.update", input: { expectedVersion: 1, title: "冷启动验证" }, userConfirmed: false,
+    } });
+    expect(collabRoomMock.getOrCreateRoom).toHaveBeenCalledWith(actor, "WORK_ITEM", inside);
+    expect(envelope(result).code).toBe("COMMAND_CONFIRMATION_REQUIRED");
   });
 });
 
