@@ -70,7 +70,19 @@ try {
   check("工具发现含完整业务契约",
     tools.length === 54 && tools.every(tool => tool.inputSchema?.type === "object") && requiredTools.every(name => tools.some(tool => tool.name === name)),
     `${tools.length} 个工具；关键工具与 inputSchema 齐全`);
-  check("资源与提示词可发现", (await client.listResources()).resources.length > 0 && (await client.listPrompts()).prompts.length > 0);
+  const resources = (await client.listResources()).resources;
+  check("业务指南和工具目录可发现",
+    resources.some(resource => resource.uri === "feronavi://guide/business-workflows")
+      && resources.some(resource => resource.uri === "feronavi://catalog/tools"));
+  const guide = await client.readResource({ uri: "feronavi://guide/business-workflows" });
+  check("业务指南包含权限和写后核验边界",
+    guide.contents.some(content => content.text.includes("确认") && content.text.includes("回读")));
+  const prompts = (await client.listPrompts()).prompts;
+  check("项目分析、交付和知识检索提示词可发现",
+    ["analyze-project", "deliver-work-item", "knowledge-grounded-answer"].every(name => prompts.some(prompt => prompt.name === name)));
+  const deliveryPrompt = await client.getPrompt({ name: "deliver-work-item", arguments: { projectScope: "项目 A", request: "创建一个任务" } });
+  check("交付提示词注入范围与请求", deliveryPrompt.messages.some(message => message.content.type === "text"
+    && message.content.text.includes("项目 A") && message.content.text.includes("创建一个任务")));
   check("whoami 真实鉴权成功", Boolean((await call(client, "whoami", {})).data.member?.username));
   const created = (await call(client, "workitem.create", { projectId: project.id, type: "TASK", title: "npx 安装包创建的工作项" })).data;
   const workItem = created.result ?? created;

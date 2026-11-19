@@ -14,7 +14,11 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
+  ListResourcesRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { DomainError } from "../../shared/errors.ts";
 import { TOOLS, assertToolAllowed, type ToolCtx } from "./tools.ts";
@@ -26,6 +30,55 @@ const ALL_TOOLS = [...TOOLS, ...WRITE_TOOLS];
 
 export const SERVER_INFO = { name: "feronavi", version: "1.0.0" } as const;
 
+const RESOURCES = [
+  {
+    uri: "feronavi://guide/business-workflows",
+    name: "business-workflows",
+    title: "业务流程与 Agent 边界",
+    description: "Feronavi 查询、写入确认、权限校验与写后回读的闭环指南。",
+    mimeType: "text/markdown",
+  },
+  {
+    uri: "feronavi://catalog/tools",
+    name: "mcp-tool-catalog",
+    title: "MCP 工具目录",
+    description: "当前实例公开的 MCP 工具、读写属性与输入契约目录。",
+    mimeType: "application/json",
+  },
+] as const;
+
+const PROMPTS = [
+  {
+    name: "analyze-project",
+    title: "项目分析",
+    description: "在指定项目范围内汇总进度、风险、里程碑与待办，并标注数据来源。",
+    arguments: [
+      { name: "projectScope", description: "项目名称、项目 ID 或跨项目范围", required: true },
+      { name: "question", description: "希望分析的问题", required: true },
+    ],
+  },
+  {
+    name: "deliver-work-item",
+    title: "工作项交付",
+    description: "按确认后执行的规则规划、创建或流转工作项，并在写入后回读核验。",
+    arguments: [
+      { name: "projectScope", description: "项目名称或项目 ID", required: true },
+      { name: "request", description: "用户提出的交付请求", required: true },
+    ],
+  },
+  {
+    name: "knowledge-grounded-answer",
+    title: "知识库检索回答",
+    description: "限定知识范围检索后回答，区分已知事实、推断与缺失资料。",
+    arguments: [
+      { name: "scope", description: "跨项目或指定项目范围", required: true },
+      { name: "question", description: "需要回答的问题", required: true },
+    ],
+  },
+] as const;
+
+const BUSINESS_WORKFLOW_GUIDE = `# Feronavi Agent 业务闭环\n\n- 先用只读工具查询当前账号可见的数据、项目白名单与业务前置条件。\n- 任何业务写入都必须先向用户展示目标、字段、影响范围和调用的工具，获得明确确认后再执行。\n- 写入成功后必须用对应的读取工具或 REST 回读结果，核对 ID、版本、状态和关键字段；遇到超时先查询确认，不盲目重试。\n- 令牌档位、项目白名单、工具级 DENY 和业务权限会在每次调用时重新检查，不能用提示词或缓存绕过。\n- 涉及页面协作、附件、导入和 MCP 命令时，完成后要检查对应的业务事件、版本或审计记录。\n`;
+
 /** 把领域错误转成稳定的信封（与 REST 同一形状：code / message / details） */
 function toEnvelope(e: unknown): { code: string; message: string; details: unknown } {
   if (e instanceof DomainError) return { code: e.code, message: e.message, details: e.details };
@@ -33,7 +86,7 @@ function toEnvelope(e: unknown): { code: string; message: string; details: unkno
 }
 
 export function buildMcpServer(ctx: ToolCtx): Server {
-  const server = new Server(SERVER_INFO, { capabilities: { tools: {} } });
+  const server = new Server(SERVER_INFO, { capabilities: { tools: {}, resources: {}, prompts: {} } });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: ALL_TOOLS.map((t) => ({
@@ -42,6 +95,31 @@ export function buildMcpServer(ctx: ToolCtx): Server {
       inputSchema: t.inputSchema,
     })),
   }));
+
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: RESOURCES }));
+
+  server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
+    const resource = RESOURCES.find((item) => item.uri === req.params.uri);
+    if (!resource) throw new Error(`资源「${req.params.uri}」不存在`);
+    const text = resource.uri === "feronavi://guide/business-workflows"
+      ? BUSINESS_WORKFLOW_GUIDE
+      : JSON.stringify({ generatedAt: new Date().toISOString(), tools: ALL_TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) }, null, 2);
+    return { contents: [{ uri: resource.uri, mimeType: resource.mimeType, text }] };
+  });
+
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: PROMPTS }));
+
+  server.setRequestHandler(GetPromptRequestSchema, async (req) => {
+    const prompt = PROMPTS.find((item) => item.name === req.params.name);
+    if (!prompt) throw new Error(`提示词「${req.params.name}」不存在`);
+    const args = req.params.arguments ?? {};
+    const scope = args.projectScope ?? args.scope ?? "当前账号可见范围";
+    const request = args.request ?? args.question ?? "请给出当前范围的结构化分析";
+    const text = prompt.name === "deliver-work-item"
+      ? `工作范围：${scope}\n用户请求：${request}\n\n请先读取当前数据和可用迁移边，列出准备执行的工具、字段、影响范围和风险，等待用户明确确认后再写入。写入后必须回读结果并报告 ID、版本和最终状态。`
+      : `工作范围：${scope}\n用户问题：${request}\n\n请先使用只读工具获取事实，标注数据来源和时间。没有足够证据时明确说明缺口，不要臆测；如需写入，先给出操作预览并等待确认。`;
+    return { description: prompt.description, messages: [{ role: "user" as const, content: { type: "text" as const, text } }] };
+  });
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const name = req.params.name;
