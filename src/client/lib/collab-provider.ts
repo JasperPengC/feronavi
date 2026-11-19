@@ -50,6 +50,7 @@ export function useCollabDocument(pageId: string | null, initialContent: string,
   const pendingRef = useRef(Promise.resolve());
   const outboxRef = useRef<CollabOutbox | null>(null);
   const desiredContentRef = useRef(initialContent);
+  const flushRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
     desiredContentRef.current = initialContent;
@@ -95,7 +96,6 @@ export function useCollabDocument(pageId: string | null, initialContent: string,
       if (state.stateBase64) Y.applyUpdate(doc, decode(state.stateBase64), "remote");
       if (!text.toString() && initialContent) text.insert(0, initialContent, "bootstrap");
       setContentState(text.toString());
-      desiredContentRef.current = text.toString();
     };
 
     const applyRemoteState = async (event: MessageEvent) => {
@@ -132,14 +132,24 @@ export function useCollabDocument(pageId: string | null, initialContent: string,
       throw lastError;
     };
     const queuedOperations = new Set<string>();
-    const queueEntry = (entry: Awaited<ReturnType<CollabOutbox["list"]>>[number], persist: boolean) => {
-      if (queuedOperations.has(entry.operationId)) return;
+    const queueEntry = (entry: Awaited<ReturnType<CollabOutbox["list"]>>[number], persist: boolean): Promise<void> => {
+      if (queuedOperations.has(entry.operationId)) return pendingRef.current;
       queuedOperations.add(entry.operationId);
-      pendingRef.current = pendingRef.current.then(async () => {
+      const operation = pendingRef.current.catch(() => {}).then(async () => {
         if (persist) await outbox.put(entry);
         await sendEntry(entry);
         if (!cancelled) setStatus("ready");
-      }).catch(() => { if (!cancelled) setStatus("error"); }).finally(() => queuedOperations.delete(entry.operationId));
+      }).catch((error: unknown) => {
+        if (!cancelled) setStatus("error");
+        throw error;
+      }).finally(() => queuedOperations.delete(entry.operationId));
+      pendingRef.current = operation;
+      return operation;
+    };
+    flushRef.current = async () => {
+      await pendingRef.current;
+      const update = Y.encodeStateAsUpdate(doc);
+      await queueEntry({ roomKey, clientId, operationId: operationIdentifier(), updateBase64: encode(update), createdAt: Date.now() }, true);
     };
     let replaying = false;
     const flushPersisted = async () => {
@@ -149,7 +159,7 @@ export function useCollabDocument(pageId: string | null, initialContent: string,
         const entries = await outbox.list(roomKey, clientId);
         for (const entry of entries) {
           Y.applyUpdate(doc, decode(entry.updateBase64), "outbox");
-          queueEntry(entry, false);
+          await queueEntry(entry, false);
         }
         if (entries.length) {
           desiredContentRef.current = text.toString();
@@ -157,17 +167,17 @@ export function useCollabDocument(pageId: string | null, initialContent: string,
         }
       } finally { replaying = false; }
     };
-    const onOnline = () => { void flushPersisted(); };
+    const onOnline = () => { void flushPersisted().catch(() => {}); };
     const onUpdate = (update: Uint8Array, origin: unknown) => {
       setContentState(text.toString());
       if (hydrating || origin === "remote" || origin === "bootstrap" || origin === "outbox") return;
-      queueEntry({
+      void queueEntry({
         roomKey,
         clientId,
         operationId: operationIdentifier(),
         updateBase64: encode(update),
         createdAt: Date.now(),
-      }, true);
+      }, true).catch(() => {});
     };
     doc.on("update", onUpdate);
 
@@ -179,9 +189,7 @@ export function useCollabDocument(pageId: string | null, initialContent: string,
         await refreshMembers();
         await flushPersisted();
         hydrating = false;
-        if (desiredContentRef.current !== text.toString()) {
-          applyTextValue(text, desiredContentRef.current);
-        }
+        if (desiredContentRef.current !== text.toString()) applyTextValue(text, desiredContentRef.current);
         if (typeof EventSource !== "undefined") {
           eventSource = new EventSource("/api/v1/events", { withCredentials: true });
           eventSource.addEventListener("collab.update", (event) => { void applyRemoteState(event as MessageEvent); });
@@ -201,6 +209,7 @@ export function useCollabDocument(pageId: string | null, initialContent: string,
     }, 20_000);
     return () => {
       cancelled = true;
+      flushRef.current = async () => {};
       window.clearInterval(heartbeat);
       eventSource?.close();
       window.removeEventListener("online", onOnline);
@@ -220,6 +229,6 @@ export function useCollabDocument(pageId: string | null, initialContent: string,
     doc.transact(() => applyTextValue(text, next), "local");
   }, []);
 
-  const flush = useCallback(async () => { await pendingRef.current; }, []);
+  const flush = useCallback(async () => { await flushRef.current(); }, []);
   return { content, status, baseRevisionId, sequence, members, setContent, flush };
 }

@@ -45,8 +45,27 @@ try {
     return r.status;
   }, { b: B, u: U, pw: PW });
   check("B 实例上临时成员登录", loginB === 200, String(loginB));
+  const changedPassword = await pageB.evaluate(async ({ b, pw }) => {
+    const csrf = decodeURIComponent(document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] || "");
+    const response = await fetch(`${b}/api/v1/auth/password/change`, {
+      method: "POST", credentials: "same-origin",
+      headers: { "content-type": "application/json", "x-csrf-token": csrf },
+      body: JSON.stringify({ currentPassword: pw, newPassword: `${pw}-changed` }),
+    });
+    return response.status;
+  }, { b: B, pw: PW });
+  check("首次登录按策略修改临时成员密码", changedPassword === 200, String(changedPassword));
+  const reloginB = await pageB.evaluate(async ({ b, u, pw }) => {
+    const response = await fetch(`${b}/api/v1/auth/login`, {
+      method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: u, password: `${pw}-changed` }),
+    });
+    return response.status;
+  }, { b: B, u: U, pw: PW });
+  check("修改密码后重新登录 B 实例", reloginB === 200, String(reloginB));
   await pageB.goto(`${B}/projects`, { waitUntil: "domcontentloaded" }); await pageB.waitForTimeout(2200);
-  check("B 看到「2 人在线」（共享注册表）", /2 人在线/.test(await pageB.locator(".presence-avatars").innerText().catch(() => "")), await pageB.locator(".presence-avatars").innerText().catch(() => ""));
+  const bText = await pageB.locator(".presence-avatars").innerText().catch(() => "");
+  check("B 看到「2 人在线」（共享注册表）", /2 人在线/.test(bText), bText);
 
   let aText = "";
   for (let i = 0; i < 20; i++) {
