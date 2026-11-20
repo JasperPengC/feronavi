@@ -5,11 +5,12 @@
   <h1>Feronavi</h1>
   <h3>项目协作，进入 Agent 时代。</h3>
   <p><strong>为人和 Agent 而生的开源项目协作平台。</strong><br />从需求到交付，连接团队、知识与执行。</p>
-  <p>完整 MCP Server · 内置 RAG · 业务流程闭环 · 自托管</p>
+  <p>完整 MCP Server · 内置 RAG · 多人实时协作 · 自托管</p>
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-526178?style=flat" alt="许可证：AGPL-3.0-only" /></a>
     <a href="#mcp"><img src="https://img.shields.io/badge/MCP-Server-4f6bed?style=flat" alt="完整 MCP Server" /></a>
     <a href="#rag"><img src="https://img.shields.io/badge/RAG-Built--in-247a73?style=flat" alt="内置 RAG 助手" /></a>
+    <a href="#collaboration"><img src="https://img.shields.io/badge/CRDT-Collaboration-7861a8?style=flat" alt="CRDT 多人文档协作" /></a>
     <a href="#get-started"><img src="https://img.shields.io/badge/deploy-Self--hosted-526178?style=flat" alt="支持自托管部署" /></a>
   </p>
   <p>
@@ -17,6 +18,7 @@
     <a href="#overview">产品亮点</a> ·
     <a href="#mcp">MCP 接入</a> ·
     <a href="#rag">RAG 助手</a> ·
+    <a href="#collaboration">多人协作</a> ·
     <a href="#more-views">更多界面</a> ·
     <a href="#documentation">文档导航</a> ·
     <a href="#feedback">问题反馈</a>
@@ -27,7 +29,7 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/01-workbench-dark.png" />
   <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/10-workbench-light.png" />
-  <img src="docs/screenshots/10-workbench-light.png" alt="Feronavi 工作台，界面与 iMac 外框随明暗主题切换" width="100%" />
+  <img src="docs/screenshots/10-workbench-light.png" alt="Feronavi 工作台，界面与自绘窄边外框随明暗主题切换" width="100%" />
 </picture>
 
 <p align="center"><sub>当前版本的真实界面 · 独立演示数据 · 随明暗主题切换</sub></p>
@@ -44,6 +46,7 @@
 | --- | --- |
 | **完整 MCP Server** | 把业务能力交给 Agent，从发现上下文、执行操作到核验结果，走完业务流程 |
 | **内置 RAG 助手** | 让项目知识进入对话，跨项目检索、结合业务分析，答案附有来源 |
+| **多人实时协作** | 同时编辑项目文档、自动合并修改；短时断网后恢复同步，让讨论与落笔一起发生 |
 | **贯穿交付的协作** | 需求、工作项、文档、迭代与版本相互关联，进展和决策都有迹可循 |
 | **自主部署与接入** | 源码开放，数据、身份体系、模型供应商与集成由团队管理 |
 
@@ -85,6 +88,19 @@
 
 [**了解 RAG 助手与 API →**](#rag)
 
+<a id="collaboration"></a>
+
+## 同一份文档，一起写；同一个项目，一起推进
+
+几位同事一起完善方案，Agent 同时整理工作项、推进迭代。Feronavi 将文档编辑与业务执行连接起来，让人和智能体围绕同一份项目上下文协作。
+
+- **多人一起写**：项目文档正文通过 CRDT 合并并发编辑，支持版本历史与回滚，适合共同完善方案、会议记录和交付手册。
+- **断网后接着写**：已加载的文档可以在短时断网时继续编辑，修改暂存在当前浏览器，恢复连接后同步合并。
+- **人与 Agent 一起推进**：工作项、排期、审批等业务操作共用权限规则，以版本校验和幂等写入处理并发；遇到冲突时，读取最新状态、调整操作后再重试。
+- **进展自动到达**：业务变更和站内通知通过实时事件更新，跨标签、跨服务实例保持同步，并遵循各自的访问权限。
+
+文档首次打开需要联网；离线修改在关闭页面后能否恢复，取决于浏览器是否允许站点使用本地存储。文档正文采用 CRDT，其他业务数据按各自的版本和事务规则更新。
+
 ## 为完整的交付节奏而设计
 
 从个人今天要做的事，到团队下一次要交付的版本，Feronavi 提供相互连接的工作视角。
@@ -93,7 +109,7 @@
 | --- | --- |
 | **收集与拆解** | 想法、需求、任务、缺陷、子任务，保留讨论与附件 |
 | **计划与推进** | 里程碑、迭代、版本；看板、表格、日历与时间线 |
-| **沉淀与交接** | 项目文档、目录、版本历史、权限与回滚 |
+| **沉淀与交接** | 多人文档编辑、断网恢复、目录、版本历史、权限与回滚 |
 | **规则与协作** | 自定义工作流、审批、自动化、SLA 与站内通知 |
 | **洞察与统筹** | 个人工作台、燃尽图、累积流、项目集与审计记录 |
 
@@ -105,9 +121,13 @@
 
 ## 能力，经过实际验证
 
-仓库提供覆盖交付、计划、文档、工作流、协作、项目组合和组织管理的自动化验收，检查权限边界、操作确认、幂等执行与写后结果，并支持通过真实 Codex 客户端验证 Agent 工作流。
+从浏览器里的日常操作，到 Agent 的执行结果，再到部署后的数据恢复，仓库提供可重复运行的验收脚本，覆盖交付、计划、文档、工作流、项目组合和组织管理。
 
-这些验证覆盖业务执行、权限和写后结果；各客户端的任务规划与交互体验取决于其 MCP 支持和所用模型。
+- **协作验证**：多人并发编辑、离线恢复、多标签与跨实例同步，以及权限隔离。
+- **Agent 验证**：MCP 业务流程、操作确认、幂等执行与写后复读，并已通过真实 Codex 客户端执行验证。
+- **部署验证**：Docker 全新安装、服务重启、备份恢复，以及源码与镜像构建产物的一致性。
+
+这些验证针对业务行为和数据一致性；各客户端的任务规划与交互体验取决于其 MCP 支持和所用模型。
 
 ## 源码开放，部署由你掌握
 
@@ -119,7 +139,7 @@
 
 ## 开始使用
 
-准备好 Docker Compose，在源码根目录执行以下命令，构建并启动一个新实例：
+准备好 Docker Compose，在源码根目录执行以下命令，从当前源码构建并启动一个新实例：
 
 ```bash
 # 首次安装：生成本地数据库密码
@@ -130,6 +150,8 @@ docker compose -f compose.yaml -f compose.source.yaml ps
 ```
 
 启动后打开 [http://127.0.0.1:3000/setup](http://127.0.0.1:3000/setup)，按向导创建组织和管理员。首次构建会编译数据库扩展，需要一些时间。
+
+本页介绍当前源码的能力。使用预构建镜像时，请核对对应版本的功能范围；本分支的协作更新需在镜像发布后才能通过镜像部署使用。
 
 生产部署请将实例放在 HTTPS 反向代理之后；升级已有实例前，请先备份数据库和数据卷，并核对数据库镜像的迁移要求。
 
@@ -142,6 +164,7 @@ docker compose -f compose.yaml -f compose.source.yaml ps
 | **部署与运维** | [安装与首次配置](#get-started) |
 | **连接 Agent** | [MCP 客户端配置与接入](packages/feronavi-mcp/README.md) |
 | **接入知识与对话** | [RAG 助手与公共 API](#rag) |
+| **了解团队协作** | [多人编辑、离线恢复与 Agent 协作](#collaboration) |
 | **报告安全问题** | [安全报告说明](SECURITY.md) |
 
 <a id="more-views"></a>

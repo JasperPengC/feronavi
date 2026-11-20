@@ -5,11 +5,12 @@
   <h1>Feronavi</h1>
   <h3>Project collaboration. Built for the agent era.</h3>
   <p><strong>An open-source project workspace for people and agents.</strong><br />Connect your team, knowledge and execution—from requirements to release.</p>
-  <p>Complete MCP server · Built-in RAG · End-to-end workflows · Self-hosted</p>
+  <p>Complete MCP server · Built-in RAG · Live collaboration · Self-hosted</p>
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-526178?style=flat" alt="License: AGPL-3.0-only" /></a>
     <a href="#mcp"><img src="https://img.shields.io/badge/MCP-Server-4f6bed?style=flat" alt="Complete MCP server" /></a>
     <a href="#rag"><img src="https://img.shields.io/badge/RAG-Built--in-247a73?style=flat" alt="Built-in RAG assistant" /></a>
+    <a href="#collaboration"><img src="https://img.shields.io/badge/CRDT-Collaboration-7861a8?style=flat" alt="CRDT document collaboration" /></a>
     <a href="#get-started"><img src="https://img.shields.io/badge/deploy-Self--hosted-526178?style=flat" alt="Self-hosted deployment" /></a>
   </p>
   <p>
@@ -17,6 +18,7 @@
     <a href="#overview">Highlights</a> ·
     <a href="#mcp">MCP</a> ·
     <a href="#rag">RAG assistant</a> ·
+    <a href="#collaboration">Collaboration</a> ·
     <a href="#more-views">More views</a> ·
     <a href="#documentation">Documentation</a> ·
     <a href="#feedback">Feedback</a>
@@ -27,7 +29,7 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/01-workbench-dark.png" />
   <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/10-workbench-light.png" />
-  <img src="docs/screenshots/10-workbench-light.png" alt="Feronavi workbench with an iMac frame that matches the light or dark theme" width="100%" />
+  <img src="docs/screenshots/10-workbench-light.png" alt="Feronavi workbench with a custom narrow frame that matches the light or dark theme" width="100%" />
 </picture>
 
 <p align="center"><sub>Actual product interface · Dedicated demo data · Adapts to light and dark themes</sub></p>
@@ -44,6 +46,7 @@ Move work forward yourself, or bring an agent in with the project context it nee
 | --- | --- |
 | **Complete MCP server** | Give agents a path through the business workflow: discover context, perform actions and verify results |
 | **Built-in RAG assistant** | Bring project knowledge into conversations, search across projects and ground analysis in cited sources |
+| **Live collaboration** | Edit project documents together, merge changes automatically and sync after a brief disconnection |
 | **Connected delivery** | Keep requirements, work items, documents, iterations and releases connected, with progress and decisions traceable |
 | **Your deployment** | Open source, with your team managing data, identity, model providers and integrations |
 
@@ -85,6 +88,19 @@ Knowledge Q&A is also available through MCP tools and public APIs described with
 
 [**Explore the RAG assistant and API →**](#rag)
 
+<a id="collaboration"></a>
+
+## Write together. Move the project forward together.
+
+Teammates refine a proposal while an agent organizes work items and moves the iteration forward. Feronavi connects document editing with business execution, so people and agents can work with the same project context.
+
+- **Edit together.** CRDT merges concurrent edits to project document content, with revision history and rollback for proposals, meeting notes and delivery handbooks.
+- **Keep writing through a disconnection.** Continue editing a document that has already loaded. Changes are saved in the current browser, then synced and merged when the connection returns.
+- **Coordinate with agents.** Work items, schedules and approvals share permission rules, with version checks and idempotent writes to handle concurrent operations. When a conflict occurs, read the latest state, adjust the operation and retry.
+- **Stay up to date.** Live events deliver business changes and in-app notifications across browser tabs and service instances, within each user's access permissions.
+
+Opening a document for the first time requires a connection. Recovering offline edits after closing the page depends on the browser allowing local storage. Document content uses CRDT; other business data follows its own version and transaction rules.
+
 ## Built for the full delivery cycle
 
 From what you need to do today to what your team needs to ship next, Feronavi keeps the views of your work connected.
@@ -93,7 +109,7 @@ From what you need to do today to what your team needs to ship next, Feronavi ke
 | --- | --- |
 | **Capture and break down** | Ideas, requirements, tasks, defects and subtasks, with discussions and attachments |
 | **Plan and deliver** | Milestones, iterations and releases; boards, tables, calendars and timelines |
-| **Document and hand over** | Project documents, navigation, revision history, permissions and rollback |
+| **Document and hand over** | Collaborative document editing, offline recovery, navigation, revision history, permissions and rollback |
 | **Coordinate and automate** | Custom workflows, approvals, automation, SLAs and in-app notifications |
 | **Review and oversee** | Personal workbench, burndown, cumulative flow, portfolios and audit records |
 
@@ -105,9 +121,13 @@ From what you need to do today to what your team needs to ship next, Feronavi ke
 
 ## Capabilities backed by real execution
 
-The repository includes automated acceptance checks for delivery, planning, documents, workflows, collaboration, portfolios and organization management. They cover permission boundaries, action confirmation, idempotent execution and persisted results, with a real Codex client harness for validating agent workflows.
+From everyday browser actions to agent execution and recovery after deployment, the repository includes repeatable acceptance scripts for delivery, planning, documents, workflows, portfolios and organization management.
 
-Validation covers business execution, permissions and persisted results. Task planning and interaction in each client depend on its MCP support and the model it uses.
+- **Collaboration checks:** Concurrent editing, offline recovery, synchronization across tabs and service instances, and permission isolation.
+- **Agent checks:** MCP business workflows, action confirmation, idempotent execution and reading back persisted results, also exercised through a real Codex client.
+- **Deployment checks:** Fresh Docker installations, service restarts, backup and restore, and matching build artifacts between source and container images.
+
+These checks validate business behavior and data consistency. Task planning and interaction in each client depend on its MCP support and the model it uses.
 
 ## Open source. Your deployment.
 
@@ -119,7 +139,7 @@ Chinese and English interfaces, light and dark themes, and email, IM, webhooks a
 
 ## Get started
 
-With Docker Compose installed, run these commands from the source root to build and start a new instance:
+With Docker Compose installed, run these commands from the source root to build and start a new instance from the current checkout:
 
 ```bash
 # First installation: create a local database password
@@ -130,6 +150,8 @@ docker compose -f compose.yaml -f compose.source.yaml ps
 ```
 
 Once the services are ready, open [http://127.0.0.1:3000/setup](http://127.0.0.1:3000/setup) to create your organization and administrator. The first build compiles database extensions and can take some time.
+
+This page describes the current source. When using a prebuilt image, check the features included in that release; this branch's collaboration updates require a corresponding image release before they are available through prebuilt deployment.
 
 For production, put the instance behind an HTTPS reverse proxy. Before upgrading an existing instance, back up the database and data volume and review the database image's migration requirements.
 
@@ -142,6 +164,7 @@ For production, put the instance behind an HTTPS reverse proxy. Before upgrading
 | **Deploy and operate** | [Installation and first-run setup](#get-started) |
 | **Connect an agent** | [MCP client configuration and access](packages/feronavi-mcp/README.md) |
 | **Integrate knowledge and chat** | [RAG assistant and public API](#rag) |
+| **Explore team collaboration** | [Concurrent editing, offline recovery and agents](#collaboration) |
 | **Report a security issue** | [Security reporting instructions](SECURITY.md) |
 
 <a id="more-views"></a>
