@@ -22,7 +22,11 @@ const [mr] = await db.select({ id: role.id }).from(role).where(eq(role.key, "MEM
 const [row] = await db.insert(member).values({ username: U, email: `${U}@x.test`, name: "快捷筛选用户", status: "ACTIVE", timezone: "Asia/Shanghai", passwordHash: await hashPassword(PW) }).returning({ id: member.id });
 await db.insert(roleAssignment).values({ memberId: row!.id, roleId: mr!.id, scopeType: "ORG", scopeId: null });
 const user = (await loadActor(row!.id))!;
-const proj = await projectService.createProject((await loadActor((await db.select({ id: role.id }).from(role)).length ? (await db.select({ memberId: roleAssignment.memberId }).from(roleAssignment).where(eq(roleAssignment.roleId, (await db.select({ id: role.id }).from(role).where(eq(role.key, "ADMIN")))[0]!.id)).limit(1))[0]!.memberId : row!.id))!, { key: `QF${SUFFIX}`, name: "快捷筛选项目" } as never);
+const [adminRole] = await db.select({ id: role.id }).from(role).where(eq(role.key, "ADMIN"));
+const [adminMember] = await db.insert(member).values({ username: `${U}-admin`, email: `${U}-admin@x.test`, name: "筛选项目管理员", status: "ACTIVE", timezone: "Asia/Shanghai", passwordHash: await hashPassword(PW) }).returning({ id: member.id });
+await db.insert(roleAssignment).values({ memberId: adminMember!.id, roleId: adminRole!.id, scopeType: "ORG", scopeId: null });
+const admin = (await loadActor(adminMember!.id))!;
+const proj = await projectService.createProject(admin, { key: `QF${SUFFIX}`, name: "快捷筛选项目" });
 const mkDefect = async (title: string, extra: Record<string, unknown> = {}) => wiService.createWorkItem(user, proj.id, { type: "DEFECT", title, severity: "S3", ...extra } as never);
 const assigned = await mkDefect(`指派给我${SUFFIX}`, { assigneeId: row!.id });
 await mkDefect(`我登记${SUFFIX}`);
@@ -66,6 +70,7 @@ try {
   await db.delete(project).where(eq(project.id, proj.id));
   await db.delete(auditEntry); await db.delete(activityEntry);
   await deleteTestMember(U);
+  await deleteTestMember(`${U}-admin`);
   await sql.end();
 }
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 
 /**
- * 为壳层和动态面板启用覆盖式滚动条：原生滚动条始终隐藏，滚动时在 body 上绘制固定定位的 thumb。
+ * 为壳层和动态面板启用覆盖式滚动条：原生滚动条始终隐藏，在对应交互层绘制固定定位的 thumb。
  * thumb 不属于滚动容器的布局，所以滚动前后 clientWidth 与内容列位置保持不变。
  */
 const SCROLLABLE_SELECTOR = [
@@ -14,7 +14,7 @@ const SCROLLABLE_SELECTOR = [
   ".palette-list",
   ".command-results",
   ".notification-popover",
-  ".select-panel",
+  ".select-options",
   ".ui-modal-body",
   ".ui-drawer-body",
   ".wiki-tree-scroll",
@@ -64,11 +64,13 @@ function topModal(): HTMLElement | null {
   return top;
 }
 
-function createThumb(axis: "y" | "x") {
+function createThumb(axis: "y" | "x", element: HTMLElement) {
   const thumb = document.createElement("span");
   thumb.className = `custom-scrollbar-thumb custom-scrollbar-thumb-${axis}`;
   thumb.setAttribute("aria-hidden", "true");
-  document.body.appendChild(thumb);
+  // 抽屉会将 body 里的背景节点设为 inert，滚动条必须留在所属模态层内。
+  const scope = element.closest(".ui-drawer-scrim, .modal-scrim, .ui-modal-scrim") ?? document.body;
+  scope.appendChild(thumb);
   return thumb;
 }
 
@@ -126,7 +128,8 @@ export function useCustomScrollbars() {
 
     const canInteract = (element: HTMLElement) => {
       const modal = topModal();
-      return !element.closest("[inert], [hidden]") && (!modal || modal.contains(element));
+      const modalScope = modal?.closest(".ui-drawer-scrim, .modal-scrim, .ui-modal-scrim") ?? modal;
+      return !element.closest("[inert], [hidden]") && (!modalScope || modalScope.contains(element));
     };
     const hideRecord = (record: ScrollbarRecord) => {
       record.cancelDrag?.();
@@ -176,8 +179,8 @@ export function useCustomScrollbars() {
       document.querySelectorAll<HTMLElement>(SCROLLABLE_SELECTOR).forEach((element) => {
         element.dataset.customScroll = "true";
         if (!records.has(element)) {
-          const vertical = createThumb("y");
-          const horizontal = createThumb("x");
+          const vertical = createThumb("y", element);
+          const horizontal = createThumb("x", element);
           const record: ScrollbarRecord = { element, vertical, horizontal };
           vertical.addEventListener("pointerdown", (event) => startDrag(record, "y", event));
           horizontal.addEventListener("pointerdown", (event) => startDrag(record, "x", event));
@@ -252,11 +255,11 @@ export function useCustomScrollbars() {
     };
     const onPointerOver = (event: PointerEvent) => {
       const record = recordAt(event.target);
-      if (record) showRecord(record, false);
+      if (record && !record.element.hasAttribute("data-scrollbar-scroll-only")) showRecord(record, false);
     };
     const onPointerOut = (event: PointerEvent) => {
       const record = recordAt(event.target);
-      if (!record || record.dragging) return;
+      if (!record || record.dragging || record.element.hasAttribute("data-scrollbar-scroll-only")) return;
       if (event.relatedTarget instanceof Node && record.element.contains(event.relatedTarget)) return;
       showRecord(record, true);
     };

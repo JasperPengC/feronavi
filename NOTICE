@@ -41,17 +41,23 @@ Valkey 8
 运行时依赖（JavaScript）
 ========================
 
-应用代码尚未开始，JavaScript 依赖清单随 package.json 与锁文件一并提供。
-CI 会执行许可证扫描，遇到与本项目不兼容的许可证
+运行时 JavaScript 依赖由 package.json 与 pnpm-lock.yaml 固定。
+第三方组件、版本、许可证标识及完整正文见
+public/THIRD_PARTY_NOTICES.txt（应用镜像中为 dist/THIRD_PARTY_NOTICES.txt）。
+该清单描述扫描时安装的生产依赖；更新依赖后必须重新生成并核对。
+依赖许可证正文和版权声明随生产 node_modules 与上述分发声明保留。
+CI 会执行生产依赖许可证扫描，遇到所配置的禁止许可证
 （如 GPL-2.0-only、SSPL、BUSL、Elastic License）将阻断构建。
 
 
 界面组件
 ========
 
-src/components/ui/** 中的部分组件基于 shadcn/ui（MIT，https://ui.shadcn.com）。
+src/client/components/ui/** 中的部分组件基于 shadcn/ui（MIT，https://ui.shadcn.com）。
 该项目的组件以源码形式复制到本仓库，因此不作为依赖项分发，
 但其代码属于本产品的组成部分。
+其完整 MIT 正文和上游版权声明保留于 public/licenses/shadcn-ui-LICENSE.txt
+（应用镜像中为 dist/licenses/shadcn-ui-LICENSE.txt）。
 
 
 字体

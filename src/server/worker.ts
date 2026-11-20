@@ -1,8 +1,10 @@
+import { bootstrapBusinessEffects } from "./application/bootstrap-business-effects.ts";
 /** 独立任务消费者。与 HTTP 服务使用同镜像、同数据库和同 DATA_DIR。 */
 import { sql } from "../db/index.ts";
 import { runMigrations } from "../db/migrate.ts";
 import { registerBuiltinJobHandlers } from "./services/job-handlers.ts";
 import { startJobWorker } from "./services/job-worker.ts";
+import { startWorkerHealth } from "./services/worker-health.ts";
 
 const intervalMs = Number(process.env.JOB_WORKER_INTERVAL_MS ?? 5_000);
 if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
@@ -11,19 +13,25 @@ if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
 
 try {
   await runMigrations();
+  await bootstrapBusinessEffects();
   registerBuiltinJobHandlers();
+  const health = await startWorkerHealth(intervalMs);
   const worker = startJobWorker({
     intervalMs,
     keepAlive: true,
     onRun: (stats) => console.info("[job-worker] 任务队列处理完成", stats),
-    onError: (err) => console.error("[job-worker] 任务队列处理失败", err),
+    onPollStart: health.pollStarted,
+    onPollComplete: health.pollCompleted,
+    onError: (err) => { health.pollFailed(); console.error("[job-worker] 任务队列处理失败", err); },
   });
   let stopping = false;
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
       if (stopping) return;
       stopping = true;
+      health.stopping();
       void worker.stop()
+        .then(() => health.close())
         .then(() => sql.end({ timeout: 10 }))
         .then(() => { process.exitCode = 0; })
         .catch((error: unknown) => { console.error("[job-worker] 停机失败", error); process.exit(1); });

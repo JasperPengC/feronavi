@@ -33,6 +33,7 @@ it("SCIM复制被拒绝时显示失败而不宣称成功，明文仍可手动复
   const onSuccess = vi.fn(), onError = vi.fn();
   mount(<ScimSettings onSuccess={onSuccess} onError={onError} />);
   fireEvent.click(screen.getByRole("button", { name: t("se.scimCreate") }));
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: t("se.scimCreate") }));
   await screen.findByText("scim-once"); onSuccess.mockClear();
   fireEvent.click(screen.getByRole("button", { name: t("se.scimCopy") }));
   await waitFor(() => expect(onError).toHaveBeenCalled());
@@ -122,9 +123,10 @@ it("组织新建保存中不能关闭，失败在抽屉内并可重试", async (
 
 it("项目设置关闭可取消放弃，后台项目刷新保留当前输入", async () => {
   vi.stubGlobal("fetch", vi.fn(async url => json(String(url).includes("statuses") ? [] : { members: [] })));
-  const project = { id: "p1", name: "原名称", description: "原描述", lead: null, status: null };
+  const project = { id: "p1", key: "PORTAL2611", name: "原名称", description: "原描述", lead: null, status: null };
   const onClose = vi.fn();
   const mounted = mount(<ProjectSettingsDrawer open project={project} onClose={onClose} onSaved={vi.fn()} />);
+  expect((screen.getByRole("textbox", { name: t("po.key") }) as HTMLInputElement).value).toBe("PORTAL2611");
   const name = screen.getByRole("textbox", { name: t("common.name") });
   fireEvent.change(name, { target: { value: "未保存名称" } });
   fireEvent.click(screen.getByRole("button", { name: t("common.cancel") }));
@@ -139,7 +141,7 @@ it("项目设置关闭可取消放弃，后台项目刷新保留当前输入", a
 it("集成配置无效JSON与保存错误显示在当前弹窗，取消不丢草稿", async () => {
   vi.stubGlobal("fetch", vi.fn(async (_url, init) => init?.method === "POST" ? json({ code: "INTERNAL", message: "暂时无法保存集成" }, 503) : json({ integrations: [], items: [] })));
   mount(<IntegrationSettings onSuccess={vi.fn()} onError={vi.fn()} />);
-  fireEvent.click(screen.getByRole("button", { name: `+ ${t("se.intgAdd")}` }));
+  fireEvent.click(screen.getByRole("button", { name: t("se.intgAdd") }));
   const dialog = screen.getByRole("dialog");
   fireEvent.change(within(dialog).getByRole("textbox", { name: t("se.intgName") }), { target: { value: "仓库连接" } });
   fireEvent.change(within(dialog).getByLabelText(t("se.intgToken")), { target: { value: "test-token" } });
@@ -176,21 +178,33 @@ it("角色草稿切换时可取消，未生效权限不能勾选", async () => {
   expect((input as HTMLInputElement).value).toBe("角色草稿");
 });
 
-it("系统导出创建失败后可原位重试，卸载清理轮询", async () => {
+it("系统迁移创建失败后可原位重试，卸载停止查询", async () => {
   window.history.replaceState(null, "", "/system?tab=data");
   let writes = 0;
-  const clear = vi.spyOn(globalThis, "clearInterval");
   vi.stubGlobal("fetch", vi.fn(async (url, init) => {
-    if (String(url).endsWith("/system/exports") && init?.method === "POST") return ++writes === 1 ? json({ code: "INTERNAL", message: "导出暂时不可用" }, 503) : json({ id: "export1" });
+    if (String(url).endsWith("/system/backups") && init?.method === "POST") return ++writes === 1 ? json({ code: "INTERNAL", message: "备份暂时不可用" }, 503) : json({ id: "backup1", status: "PENDING" });
+    if (String(url).endsWith("/system/backups")) return json({ backups: [] });
+    if (String(url).endsWith("/system/backups/preflight")) return json({ mode: "safe", datasets: [], totalRows: 0, blobCount: 0, blobBytes: 0, excludedData: [], warnings: [] });
+    if (String(url).endsWith("/system/restores/current")) return json(null);
     if (String(url).endsWith("/system/migrations")) return json({ applied: 1, files: 1, consistent: true, notes: [], upgradeFlow: [] });
     return json({ ok: true, configured: false, jobs: {}, webhooks: { endpoints: 0, pending: 0, retrying: 0, dead: 0 }, integrations: { active: 0, total: 0 }, featureFlags: { enabled: 0, total: 0 }, mcp: { clients: 0, calls: 0 }, knowledge: { queries30d: 0 } });
   }));
   const mounted = mount(<SystemPage />);
-  fireEvent.click(await screen.findByRole("button", { name: t("sys.exportStart") }));
-  await screen.findByText(/导出暂时不可用/u);
-  fireEvent.click(screen.getByRole("button", { name: t("sys.exportStart") }));
+  const submit = await screen.findByRole("button", { name: t("sys.backupCreateSafe") });
+  const credentials = () => {
+    fireEvent.change(screen.getByLabelText(t("sys.backupMigrationPassword")), { target: { value: "migration-password" } });
+    fireEvent.change(screen.getByLabelText(t("sys.backupConfirmPassword")), { target: { value: "migration-password" } });
+    fireEvent.change(screen.getByLabelText(t("sys.backupCurrentPassword")), { target: { value: "current-password" } });
+  };
+  credentials();
+  await waitFor(() => expect(submit).toHaveProperty("disabled", false));
+  fireEvent.click(submit);
+  await screen.findByText(/备份暂时不可用/u);
+  credentials();
+  fireEvent.click(submit);
   await waitFor(() => expect(writes).toBe(2));
-  await screen.findByText(t("sys.exportGenerating")); mounted.unmount(); expect(clear).toHaveBeenCalled();
+  await screen.findByText(t("sys.backupSubmitted"));
+  mounted.unmount();
   window.history.replaceState(null, "", "/");
 });
 

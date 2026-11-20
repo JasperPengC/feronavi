@@ -1,8 +1,8 @@
 /** 当前源码镜像的全新 Compose 安装、业务、worker 与持久化验收。只清理本脚本创建的项目。 */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash, randomBytes } from "node:crypto";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { promisify } from "node:util";
 import { chromium } from "playwright";
@@ -23,7 +23,8 @@ const env = { ...process.env, DB_PASSWORD: randomBytes(24).toString("hex"), APP_
 const override = join(temp, "override.json");
 await writeFile(override, JSON.stringify({ services: {
   app: { image, environment: { IPGEO_UPDATE_INTERVAL_MS: "0", UPDATE_CHECK_INTERVAL_MS: "0" },
-    healthcheck: { interval: "2s", start_period: "10s" } },
+    // 使用生产配置的启动宽限期；空库迁移在慢磁盘上也必须有完整启动预算。
+    healthcheck: { interval: "2s" } },
   worker: { image, environment: { JOB_WORKER_INTERVAL_MS: "1000" } },
   db: { image: process.env.DEPLOY_DB_IMAGE ?? "feronavi-db:ci", healthcheck: { interval: "2s" } },
   cache: { healthcheck: { interval: "2s" } },
@@ -72,6 +73,18 @@ try {
   const createdProject = await json("/projects", post({ key: "DEPLOY", name: "部署验收项目" }));
   const workItem = await json(`/projects/${createdProject.id}/work-items`, post({ type: "TASK", title: "重启后应保留的工作项" }));
   check("管理员完成改密并创建工作项", Boolean(workItem.id));
+  const attachmentBytes = Buffer.from(`Docker卷附件验收\n${randomBytes(24).toString("hex")}\n`);
+  const attachmentHash = createHash("sha256").update(attachmentBytes).digest("hex");
+  const upload = new FormData();
+  upload.set("targetType", "WORK_ITEM"); upload.set("targetId", workItem.id);
+  upload.set("file", new Blob([attachmentBytes], { type: "text/plain" }), "交付验收.txt");
+  const attachment = await json("/uploads", { method: "POST", body: upload, headers: { cookie: headers.cookie, "x-csrf-token": headers["x-csrf-token"] } });
+  const verifyAttachment = async () => {
+    const response = await request(`/attachments/${attachment.id}`);
+    assert.equal(response.status, 200);
+    return createHash("sha256").update(Buffer.from(await response.arrayBuffer())).digest("hex") === attachmentHash;
+  };
+  check("生产挂载卷附件上传下载字节一致", await verifyAttachment());
   const job = await json("/system/exports", post({}));
   check("导出任务已持久化入队", Boolean(job.id));
   let exported;
@@ -92,6 +105,7 @@ try {
   await login(password);
   check("重启后登录及业务数据保留", (await json(`/work-items/${workItem.id}`)).title === workItem.title);
   check("共享数据卷中的导出文件保留", (await request(`/system/exports/${job.id}`)).ok);
+  check("容器重启后附件元数据和文件字节保留", await verifyAttachment());
   const credential = await json("/tokens", post({ name: "隔离镜像MCP验收", tier: "READ_ONLY", projectWhitelist: [createdProject.id] }));
   const rpc = async (method, params = {}) => {
     const response = await request("/mcp", { method: "POST", headers: {
@@ -140,6 +154,53 @@ try {
     await page.screenshot({ path: join(out, "production-board.png"), fullPage: true });
     check("生产镜像真实浏览器登录并显示重启前工作项", errors.length === 0);
   } finally { await browser.close(); }
+
+  // 暂停本脚本的写入进程后备份实际挂载数据，再恢复到另一个数据库和全新卷。
+  const appContainer = await compose("ps", "-q", "app");
+  const dbContainer = await compose("ps", "-q", "db");
+  await compose("stop", "app", "worker");
+  const dataCopy = join(temp, "source-data");
+  await mkdir(dataCopy);
+  await exec("docker", ["cp", `${appContainer}:/data/.`, dataCopy], { maxBuffer: 1024 * 1024 });
+  const backupRoot = join(temp, "backups");
+  const backupEnv = { ...env, PG_CONTAINER: dbContainer, DATABASE_URL: `postgres://feronavi:${env.DB_PASSWORD}@127.0.0.1:5432/feronavi`, DATA_DIR: dataCopy };
+  await exec(process.execPath, ["scripts/backup.ts", "--out", backupRoot], { cwd: root, env: backupEnv, timeout: 60_000 });
+  const backupName = (await readdir(backupRoot)).find(name => name.startsWith("feronavi-backup-"));
+  assert.ok(backupName);
+  await compose("exec", "-T", "db", "createdb", "-U", "feronavi", "feronavi_restored");
+  const restoredData = join(temp, "restored-data");
+  await exec(process.execPath, ["scripts/restore.ts", "--backup", join(backupRoot, backupName), "--data-dir", restoredData], {
+    cwd: root, env: { ...backupEnv, RESTORE_DATABASE_URL: `postgres://feronavi:${env.DB_PASSWORD}@127.0.0.1:5432/feronavi_restored` }, timeout: 60_000,
+  });
+  check("实际生产卷与数据库通过正式备份恢复脚本校验", true);
+  const restoreOverride = join(temp, "restore.json");
+  await writeFile(restoreOverride, JSON.stringify({ services: {
+    "restore-app": { image, environment: {
+      DATABASE_URL: "postgres://feronavi:${DB_PASSWORD}@db:5432/feronavi_restored", REDIS_URL: "redis://cache:6379/1",
+      DATA_DIR: "/data", NODE_ENV: "production", JOB_WORKER_INTERVAL_MS: "0", IPGEO_UPDATE_INTERVAL_MS: "0", UPDATE_CHECK_INTERVAL_MS: "0",
+    }, volumes: ["feronavi-restored:/data"], ports: ["127.0.0.1::3000"] },
+  }, volumes: { "feronavi-restored": {} } }));
+  args.push("-f", restoreOverride);
+  await compose("create", "restore-app");
+  const restoreContainer = await compose("ps", "-aq", "restore-app");
+  await exec("docker", ["cp", `${restoredData}/.`, `${restoreContainer}:/data`], { maxBuffer: 1024 * 1024 });
+  await compose("run", "--rm", "--no-deps", "--user", "0:0", "restore-app", "chown", "-R", "1000:1000", "/data");
+  await compose("start", "restore-app");
+  const restoredBinding = await compose("port", "restore-app", "3000");
+  assert.match(restoredBinding, /^127\.0\.0\.1:\d+$/u);
+  base = `http://${restoredBinding}`;
+  const restoredDeadline = Date.now() + 60_000;
+  let restoredReady = false;
+  while (Date.now() < restoredDeadline) {
+    try { restoredReady = (await fetch(`${base}/api/v1/system/status`, { signal: AbortSignal.timeout(2000) })).ok; } catch { /* 等待新实例启动。 */ }
+    if (restoredReady) break;
+    await new Promise(done => setTimeout(done, 500));
+  }
+  check("从备份恢复的新数据库和新卷可启动独立实例", restoredReady);
+  await login(password);
+  check("恢复后原账号和业务数据可读取", (await json(`/work-items/${workItem.id}`)).title === workItem.title);
+  check("恢复后附件通过HTTP下载且哈希一致", await verifyAttachment());
+  check("恢复后异步导出文件可下载", (await request(`/system/exports/${job.id}`)).ok);
   const status = await compose("ps", "--format", "json");
   await writeFile(join(out, "services.jsonl"), status);
 } catch (error) {

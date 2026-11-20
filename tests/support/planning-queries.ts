@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 // 必须是本轮随机隔离库，禁止脚本读取开发环境兜底配置。
 assert.match(new URL(process.env.DATABASE_URL ?? "postgres://invalid/").pathname.slice(1), /^feronavi_test_[a-f0-9]{32}$/u);
+await (await import("../../src/server/application/bootstrap-business-effects.ts")).bootstrapBusinessEffects();
 const { db, sql } = await import("../../src/db/index.ts");
 const { member, role, roleAssignment, workItem } = await import("../../src/db/schema.ts");
 const { eq } = await import("drizzle-orm");

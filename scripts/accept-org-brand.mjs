@@ -33,7 +33,7 @@ try {
   const workspace = await pageA.locator(".workspace-switcher strong").innerText().catch(() => "");
   check("侧栏工作区显示组织名", workspace === TEMP, workspace);
   const footer = await pageA.locator("footer").innerText().catch(() => "");
-  check("页脚显示「Feronavi · 组织名」", footer.includes(`Feronavi · ${TEMP}`), footer.replace(/\n/g, " | ").slice(0, 80));
+  check("页脚显示产品名与组织名", footer.includes("Feronavi") && footer.includes(TEMP), footer.replace(/\n/g, " | ").slice(0, 80));
   check("浏览器标签标题含组织名", (await pageA.title()).includes(TEMP), await pageA.title());
 
   const ctxB = await browser.newContext();

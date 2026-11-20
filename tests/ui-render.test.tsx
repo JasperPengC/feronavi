@@ -10,7 +10,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { setLocale } from "../src/client/i18n/index.ts";
-import { render, screen, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, waitFor, cleanup, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { makeRouter } from "../src/client/router.tsx";
@@ -77,7 +77,7 @@ describe("安装向导", () => {
       },
     });
     await waitFor(() => expect(document.body.textContent).toMatch(/1\. (环境自检|Environment check)/));
-    expect(screen.getByText("数据库连通")).toBeTruthy();
+    expect(await screen.findByText("数据库连通")).toBeTruthy();
     expect(screen.getByText(/数据目录可写/)).toBeTruthy();
     // 6 步进度条：应出现 6 个圆点
     expect(screen.getAllByTitle(/环境自检|数据库|管理员账号|组织信息|可选集成|完成|Environment check|Database|Admin account|Organisation|Optional integrations|Done/i).length).toBe(6);
@@ -94,6 +94,38 @@ describe("安装向导", () => {
       },
     });
     await waitFor(() => expect(document.body.textContent).toMatch(/(数据目录不可写|data directory is not writable)/i));
+    expect(screen.getByRole("button", { name: "下一步" })).toHaveProperty("disabled", true);
+  });
+
+  it("数据目录可展开且复制的是完整原始路径", async () => {
+    const path = "/srv/非常长的部署目录/organization/attachments-and-secrets/data";
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", Object.create(navigator, { clipboard: { value: { writeText } } }));
+    renderAt("/setup", {
+      "/api/v1/setup/state": { initialized: false },
+      "/api/v1/setup/precheck": { items: [{ key: "dataDir", ok: true, path, message: `数据目录可写（${path}）` }] },
+    });
+    const expand = await screen.findByRole("button", { name: "查看完整路径" });
+    expect(expand.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(expand);
+    expect(await screen.findByText(path)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "复制路径" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(path));
+    expect(await screen.findByText("已复制")).toBeTruthy();
+  });
+
+  it("复制目录失败时展示完整路径供手动选择并保留不可写状态", async () => {
+    const path = "/srv/private/data";
+    const writeText = vi.fn().mockRejectedValue(new Error("clipboard denied"));
+    vi.stubGlobal("navigator", Object.create(navigator, { clipboard: { value: { writeText } } }));
+    renderAt("/setup", {
+      "/api/v1/setup/state": { initialized: false },
+      "/api/v1/setup/precheck": { items: [{ key: "dataDir", ok: false, path, message: `数据目录不可写：${path}` }] },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "复制路径" }));
+    expect(await screen.findByText("复制失败，请手动选择文本")).toBeTruthy();
+    expect(screen.getByText(path)).toBeTruthy();
+    expect(screen.getByText("不可写")).toBeTruthy();
     expect(screen.getByRole("button", { name: "下一步" })).toHaveProperty("disabled", true);
   });
 

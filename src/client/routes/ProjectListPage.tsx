@@ -21,7 +21,8 @@ import { Icon } from "../components/Icon.tsx";
 import { PageHead } from "../components/Page.tsx";
 import { Button } from "../components/ui/Button.tsx";
 import { toast } from "../components/ui/Toast.tsx";
-import { Drawer } from "../components/ui/Drawer.tsx";
+import { Modal } from "../components/ui/Modal.tsx";
+import { useSettingsDraft } from "../components/settings/SettingsDraft.tsx";
 import { LoadingBlock, StateBlock } from "../components/ui/StateBlock.tsx";
 import { ProjectMembersDrawer } from "../components/ProjectMembersDrawer.tsx";
 import { TextArea } from "../components/ui/TextArea.tsx";
@@ -108,6 +109,11 @@ export function ProjectListPage() {
       await qc.invalidateQueries({ queryKey: queryKeys.projects() });
     },
     onError: (e) => setError(e instanceof ApiError ? e.message : t("projects.createFailed")),
+  });
+
+  const draft = useSettingsDraft(open, { form, templateId }, create.isPending);
+  const requestClose = () => void draft.leave(() => {
+    setOpen(false); setForm({ key: "", name: "", description: "", departmentId: "" }); setTemplateId(""); setError(null);
   });
 
   const keyOk = /^[A-Z][A-Z0-9]{1,9}$/.test(form.key.toUpperCase());
@@ -253,12 +259,14 @@ export function ProjectListPage() {
         </section>
       )}
 
-      <Drawer open={open} title={t("projects.new")} onClose={() => !create.isPending && setOpen(false)}
+      {draft.guard}
+      <Modal open={open} title={t("projects.new")} onClose={requestClose}
         footer={<div className="task-form-actions">
-          <Button variant="ghost" onClick={() => setOpen(false)} disabled={create.isPending}>{t("pl.cancel")}</Button>
-          <Button variant="primary" loading={create.isPending} disabled={!keyOk || !form.name.trim()} onClick={() => create.mutate()}>{t("projects.create")}</Button>
+          <Button variant="ghost" onClick={requestClose} disabled={create.isPending}>{t("pl.cancel")}</Button>
+          <Button variant="primary" loading={create.isPending} disabled={!keyOk || !form.name.trim() || create.isPending} onClick={() => { if (!create.isPending) { setError(null); create.mutate(); } }}>{t("projects.create")}</Button>
         </div>}>
-        {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+        {error && <div className="alert alert-error" role="alert">{error}</div>}
+        <fieldset disabled={create.isPending} className="settings-form-fields" style={{ display: "grid", gap: 16 }}>
         <Select label={t("projects.template")} ariaLabel={t("projects.template")} value={templateId}
           onChange={setTemplateId}
           options={[{ value: "", label: t("projects.noTemplate") },
@@ -276,7 +284,8 @@ export function ProjectListPage() {
             onChange={(v) => setForm({ ...form, departmentId: v })}
             options={[{ value: "", label: t("org.noDepartment") }, ...(departments.data ?? []).map((d) => ({ value: d.id, label: d.name }))]} />
         )}
-      </Drawer>
+        </fieldset>
+      </Modal>
 
       <ProjectMembersDrawer project={memberProject} onClose={() => setMemberProject(null)} />
     </div>

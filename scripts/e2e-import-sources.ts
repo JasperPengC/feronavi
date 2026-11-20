@@ -80,6 +80,8 @@ try {
   const again = await importService.createBatch(admin, pid, { filename: "zentao.csv", buffer: buf, source: "ZENTAO_API" });
   const sug2 = await importService.suggestForBatch(admin, again.batch.id);
   await importService.setMapping(admin, again.batch.id, { fieldMap: sug2.fieldMap, valueMaps: sug2.valueMaps, externalIdColumn: sug2.externalIdColumn });
+  const dryAgain = await importService.dryRun(admin, again.batch.id);
+  ok("重复导入先预演：全部将跳过", dryAgain.willCreate === 0 && dryAgain.willSkip === 2 && dryAgain.failed === 0);
   const conf2 = await importService.confirm(admin, again.batch.id);
   ok("同一文件再导一次：全部跳过（幂等）", conf2.created === 0 && conf2.skipped === 2, JSON.stringify(conf2).slice(0, 80));
 

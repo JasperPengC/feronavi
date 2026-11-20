@@ -25,7 +25,7 @@ await db.insert(roleAssignment).values({ memberId: a!.id, roleId: adminRole!.id,
 const admin = (await loadActor(a!.id))!;
 await db.delete(project).where(eq(project.key, KEY));
 const { id: pid } = await projectService.createProject(admin, { key: KEY, name: "W13F 问答" });
-const clearAi = async () => { await db.delete(setting).where(inArray(setting.key, ["ai.enabled", "ai.baseUrl", "ai.model", "ai.apiKey", "ai.dimensions", "ai.chatModel"])); };
+const clearAi = async () => { await db.delete(setting).where(inArray(setting.key, ["ai.enabled", "ai.baseUrl", "ai.model", "ai.apiKey", "ai.dimensions", "ai.chatBaseUrl", "ai.chatModel", "ai.chatApiKey"])); };
 
 await ensureInitialized();
 const app = await buildApp({ logger: false });
@@ -48,7 +48,7 @@ try {
   ok("无相关内容时明确说明、不编造答案", none.citations.length === 0 && /没有找到/.test(none.note ?? ""), String(none.note));
 
   // ── 配了对话模型：走模型并带引用（用注入的假 fetch，不真调外部服务）──
-  await settingService.putSettings({ "ai.baseUrl": "https://example.com/v1", "ai.model": "bge-m3-1024", "ai.chatModel": "gpt-test" });
+  await settingService.putSettings({ "ai.chatBaseUrl": "https://1.1.1.1/v1", "ai.chatModel": "gpt-test" });
   const realFetch = globalThis.fetch;
   let sawPrompt = "";
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -65,6 +65,7 @@ try {
   ok("**引用由服务端派生**（不让模型自由生成引用）", asked.citations.length > 0 && asked.citations[0]!.title === "部署指南");
   ok("提示词要求「只依据资料、不足就说不确定」（抑制编造）", /只依据给定资料|不要编造|不知道/.test(sawPrompt), sawPrompt.slice(0, 60));
   ok("答案附带检索模式（vector/keyword），便于排障", asked.mode === "vector" || asked.mode === "keyword", asked.mode);
+  await clearAi(); // 后续 HTTP 验证无模型降级，不访问外部服务。
 
   // ── HTTP ──
   const login = await fetch(`${BASE}/api/v1/auth/login`, {

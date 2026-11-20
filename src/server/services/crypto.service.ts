@@ -63,8 +63,13 @@ export function isEncrypted(value: unknown): boolean {
 /** 加密（幂等：已加密的返回原值，避免二次加密） */
 export function encryptSecret(plain: string): string {
   if (isEncrypted(plain)) return plain;
+  return encryptSecretWithKey(plain, masterKey());
+}
+
+export function encryptSecretWithKey(plain: string, key: Buffer): string {
+  if (isEncrypted(plain)) return plain;
   const iv = randomBytes(IV_BYTES);
-  const cipher = createCipheriv("aes-256-gcm", masterKey(), iv);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
   const ct = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return `${PREFIX}${iv.toString("base64url")}:${tag.toString("base64url")}:${ct.toString("base64url")}`;
@@ -76,10 +81,15 @@ export function encryptSecret(plain: string): string {
  */
 export function decryptSecret(stored: string): string {
   if (!isEncrypted(stored)) return stored;
+  return decryptSecretWithKey(stored, masterKey());
+}
+
+export function decryptSecretWithKey(stored: string, key: Buffer): string {
+  if (!isEncrypted(stored)) return stored;
   const parts = stored.slice(PREFIX.length).split(":");
   if (parts.length !== 3) throw new Error("密文格式非法（应为 enc:v1:iv:tag:ct）");
   const [ivB64, tagB64, ctB64] = parts as [string, string, string];
-  const decipher = createDecipheriv("aes-256-gcm", masterKey(), Buffer.from(ivB64, "base64url"));
+  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivB64, "base64url"));
   decipher.setAuthTag(Buffer.from(tagB64, "base64url"));
   return Buffer.concat([decipher.update(Buffer.from(ctB64, "base64url")), decipher.final()]).toString("utf8");
 }

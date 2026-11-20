@@ -45,6 +45,19 @@ try {
   const up = await userCtx.newPage();
   await up.goto(`${BASE}/login`); await up.waitForTimeout(400);
   await up.evaluate(async ({ u, pw }) => { await fetch("/api/v1/auth/login", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: u, password: pw }) }); }, { u: U, pw: PW });
+  // 管理员创建的成员必须先完成首次改密；通过真实接口完成，再用新密码登录。
+  const initialized = await up.evaluate(async ({ u, pw }) => {
+    const me = await fetch("/api/v1/auth/me").then((response) => response.json());
+    if (!me.mustChangePassword) throw new Error("新成员应要求修改初始密码");
+    const csrf = decodeURIComponent(document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] || "");
+    const newPassword = `${pw}-changed`;
+    const changed = await fetch("/api/v1/auth/password/change", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-csrf-token": csrf }, body: JSON.stringify({ currentPassword: pw, newPassword }) });
+    if (!changed.ok) throw new Error(`首次改密失败：${changed.status}`);
+    const login = await fetch("/api/v1/auth/login", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: u, password: newPassword }) });
+    const current = await fetch("/api/v1/auth/me").then((response) => response.json());
+    return login.status === 200 && current.mustChangePassword === false;
+  }, { u: U, pw: PW });
+  check("部门成员完成首次改密并重新登录", initialized);
   await up.goto(`${BASE}/projects`, { waitUntil: "domcontentloaded" }); await up.waitForTimeout(1800);
   const projectLinks = await up.locator("a.table-project").allTextContents();
   check("部门成员项目列表只显示部门项目", projectLinks.some((x) => x.includes("部门范围验收项目")) && !projectLinks.some((x) => x.includes("结项终验")), JSON.stringify(projectLinks));
@@ -55,7 +68,9 @@ try {
 
   // 管理端角色页 DEPARTMENT 选项存在
   await page.goto(`${BASE}/admin/roles`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2000);
+  await page.getByRole("tab", { name: "成员角色指派", exact: true }).click();
   const scopeTrigger = page.getByRole("button", { name: "数据范围类型", exact: true }).first();
+  await scopeTrigger.waitFor();
   const hasTrigger = (await scopeTrigger.count()) > 0;
   if (hasTrigger) {
     await scopeTrigger.click();

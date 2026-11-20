@@ -5,7 +5,7 @@ import "./_env.ts";
  */
 import { chromium } from "playwright";
 const BASE = process.env.BASE;
-const GLOBAL_PAGES = ["/workbench", "/projects", "/issues", "/members", "/settings", "/system", "/focus", "/portfolios", "/announcements", "/notifications", "/tokens", "/changelog", "/admin/organization", "/admin/roles", "/admin/audit"];
+const GLOBAL_PAGES = ["/workbench", "/projects", "/issues", "/members", "/settings/personal", "/settings/integrations", "/settings/instance", "/system", "/portfolios", "/announcements", "/notifications", "/tokens", "/changelog", "/admin/organization", "/admin/roles", "/admin/audit"];
 const PROJECT_PAGES = ["", "/board", "/table", "/calendar", "/milestones", "/timeline", "/wiki", "/ideas", "/insights", "/activity", "/fields", "/import", "/workflow", "/intake"];
 const results = [];
 const check = (name, ok, detail = "") => { results.push(ok); console.log(`  ${ok ? "✓" : "✗"} ${name}${detail ? "  " + detail : ""}`); };
@@ -24,10 +24,43 @@ try {
     for (const path of PAGES) {
     await page.goto(BASE + path, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(800);
     data[`${theme}:${path}`] = await page.evaluate(() => {
-      const vals = (sel, prop) => [...new Set([...document.querySelectorAll(sel)].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; }).map((e) => getComputedStyle(e)[prop]).filter(Boolean))].sort();
+      const visible = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+      const elements = (selector) => [...document.querySelectorAll(selector)].filter(visible);
+      const vals = (sel, prop) => [...new Set(elements(sel).map((e) => getComputedStyle(e)[prop]).filter(Boolean))].sort();
+      const token = (name, el = document.documentElement) => getComputedStyle(el).getPropertyValue(name).trim();
+      const violations = { cards: [], buttons: [], inputs: [], buttonH: [], inputH: [], gaps: [], pads: [] };
+      const audit = (key, nodes, property, allowed) => {
+        for (const el of nodes) {
+          const value = getComputedStyle(el)[property], expected = allowed(el);
+          if (!expected.includes(value)) violations[key].push({ element: el.className, value, expected });
+        }
+      };
       const isNestedCard = (e) => { let p = e.parentElement; while (p) { if (p.matches(".card,.panel,.ui-panel,.settings-section,.sys-section")) return true; p = p.parentElement; } return false; };
       const topCards = [...document.querySelectorAll(".card, .panel, .ui-panel, .settings-section, .sys-section")].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !isNestedCard(e) && !e.closest(".board-column-body"); });
+      audit("cards", topCards, "borderRadius", (el) => [el.matches("table, .project-overview-page .dashboard-grid > div > .panel") ? "0px" : token(el.matches(".data-scroll") ? "--radius-md" : "--radius", el)]);
+      audit("buttons", elements(".btn"), "borderRadius", (el) => [token("--radius-sm", el), token("--radius-pill", el)]);
+      audit("inputs", elements(".input, .textarea, .select-trigger"), "borderRadius", (el) => el.matches(".wiki-title-input, .wiki-body-editor, .md-editor-input") ? ["0px"] : [token("--radius-sm", el), token("--radius-pill", el)]);
+      audit("buttonH", elements(".btn"), "height", (el) => {
+        if (el.matches(".shell-header .icon-choice-menu > .btn, .shell-header .notification-trigger, .shell-header .shell-menu-button")) return [token("--shell-control-size", el)];
+        if (el.matches(".workbench-todo-add, .workbench-todo-delete")) return [matchMedia("(pointer: coarse)").matches ? "44px" : "32px"];
+        if (el.matches(".select-trigger, .datepicker-trigger")) return [token(el.matches(".btn-sm") ? "--control-height-sm" : "--control-height", el)];
+        return [token(el.matches(".btn-sm") ? "--button-height-sm" : "--button-height", el)];
+      });
+      audit("inputH", elements(".input, .select-trigger"), "minHeight", (el) => {
+        return [token(el.matches(".btn-sm") ? "--control-height-sm" : "--control-height", el)];
+      });
+      audit("gaps", elements(".metric-grid, .dashboard-grid, .page-grid, .settings-grid, .sys-kpi-grid"), "gap", (el) => {
+        if (el.matches(".workbench-top-grid, .workbench-lower-grid")) return [token("--card-padding", el)];
+        return [token("--space-3", el), token("--space-4", el)];
+      });
+      // 0 为贴边表格，16 为内嵌内容，22 为系统/设置卡片；默认与紧凑面板读取设计 token。
+      audit("pads", elements(".card, .panel, .ui-panel"), "padding", (el) => {
+        if (el.matches(".board-card, .board-column-body .card")) return ["10px"];
+        if (el.matches(".milestones-page aside.card")) return ["15px"];
+        return ["0px", token("--space-4", el), token("--card-padding", el), token("--card-padding-compact", el), "22px"];
+      });
       return {
+        violations,
         cardRadius: [...new Set(topCards.map((e) => getComputedStyle(e).borderRadius))].sort(),
         buttonRadius: vals(".btn", "borderRadius"),
         inputRadius: vals(".input, .textarea, .select-trigger", "borderRadius"),
@@ -48,15 +81,18 @@ try {
   const inputH = flat("inputH");
   const gaps = flat("gaps");
   const pads = flat("cardPadding");
-  check("卡片/面板圆角唯一 14px", cards.length === 1 && cards[0] === "14px", JSON.stringify(cards));
-  check("按钮圆角唯一 8px", buttons.length === 1 && buttons[0] === "8px", JSON.stringify(buttons));
-  check("输入/下拉圆角唯一 8px", inputs.every((x) => x === "8px" || x === "0px"), JSON.stringify(inputs));
-  check("按钮高度只允许 28/32/36", buttonH.every((h) => h === "28px" || h === "32px" || h === "36px"), JSON.stringify(buttonH));
-  check("输入/下拉最小高度只允许 28/32（文本域除外）", inputH.every((h) => h === "28px" || h === "32px" || h === "84px"), JSON.stringify(inputH));
-  check("主网格间距统一 12/16px", gaps.every((g) => g === "12px" || g === "16px"), JSON.stringify(gaps));
-  check("卡片内边距允许 0/16/14-16px", pads.every((p) => ["0px", "16px", "14px 16px"].includes(p)), JSON.stringify(pads));
+  const errors = (key) => Object.entries(data).flatMap(([page, state]) => state.violations[key].map((error) => ({ page, ...error })));
+  for (const [key, label, values] of [
+    ["cards", "卡片遵循当前 radius，项目概览内嵌面板保持直角", cards],
+    ["buttons", "按钮使用当前控件或胶囊圆角", buttons],
+    ["inputs", "输入与下拉使用当前圆角，正文编辑器保持直角", inputs],
+    ["buttonH", "按钮高度遵循当前尺寸 token 与工作台紧凑规则", buttonH],
+    ["inputH", "输入与下拉高度遵循尺寸 token 与设置区输入规则", inputH],
+    ["gaps", "网格间距遵循设计 token 与工作台分区规则", gaps],
+    ["pads", "卡片内边距符合默认、紧凑、贴边及管理页规则", pads],
+  ]) check(label, values.length > 0 && errors(key).length === 0, JSON.stringify({ values, errors: errors(key).slice(0, 5) }));
   const overflowPages = Object.entries(data).filter(([, v]) => v.overflow).map(([k]) => k);
-  check("29 路由明/暗桌面无横向溢出", overflowPages.length === 0, JSON.stringify(overflowPages));
+  check(`${PAGES.length} 路由明/暗桌面无横向溢出`, overflowPages.length === 0, JSON.stringify(overflowPages));
   console.log(`\n  已审计 ${Object.keys(data).length} 个页面状态（${Object.keys(data).length / 2} 路由 × 明/暗）`);
   console.log("  token 明细:", JSON.stringify({ cards, buttons, inputs, buttonH, inputH, gaps, pads }));
 } finally { await ctx.close(); await browser.close(); }

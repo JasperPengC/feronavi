@@ -14,6 +14,7 @@ import type { Actor } from "../permission/actor.ts";
 import { recordBusinessEvent } from "./event-log.ts";
 import { importCollabEvent } from "./collab-event-payload.ts";
 import { publishProjectEvent } from "./collab-events.service.ts";
+import { businessEffects } from "./business-effects.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 import * as wiService from "../services/work-item.service.ts";
@@ -163,6 +164,7 @@ export async function getBatch(actor: Actor, id: string) {
     header: (cfg.header ?? []) as string[],
     fieldMap: (cfg.fieldMap ?? {}) as Record<string, string>,
     encoding: cfg.encoding ?? null,
+    preview: cfg.preview ?? null,
   };
 }
 
@@ -196,6 +198,22 @@ export interface MappingInput {
   userMap?: Record<string, string>;                        // 源用户名 → memberId（人工确认）
   externalIdColumn?: string | null;                        // 哪一列是外部 ID（幂等键）
   defaultType?: string;
+}
+
+/** 预演只绑定会影响导入的输入，服务端执行元数据不参与指纹。 */
+function importInputFingerprint(rows: unknown, cfg: Record<string, unknown>): string {
+  function canonical(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === "object") return Object.fromEntries(
+      Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => [key, canonical(child)]),
+    );
+    return value;
+  }
+  return createHash("sha256").update(JSON.stringify(canonical({
+    rows, fieldMap: cfg.fieldMap ?? {}, valueMaps: cfg.valueMaps ?? {},
+    userMap: cfg.userMap ?? {}, externalIdColumn: cfg.externalIdColumn ?? null,
+    defaultType: cfg.defaultType ?? "TASK",
+  }))).digest("hex");
 }
 
 export async function setMapping(actor: Actor, id: string, input: MappingInput) {
@@ -239,17 +257,20 @@ export async function setMapping(actor: Actor, id: string, input: MappingInput) 
     }
   }
 
+  const { _dryRun: _oldPreview, ...savedConfig } = cfg;
   const next = {
-    ...cfg,
+    ...savedConfig,
     fieldMap: input.fieldMap ?? {},
     valueMaps: input.valueMaps ?? (cfg.valueMaps as object) ?? {},
     userMap,
     externalIdColumn: input.externalIdColumn ?? null,
     defaultType: input.defaultType ?? "TASK",
+    preview: null,
   };
   const changed = await db.update(importBatch).set({ mappingConfig: next as object, status: "PENDING_CONFIRM" })
-    .where(and(eq(importBatch.id, id), eq(importBatch.status, b.status))).returning({ id: importBatch.id });
+    .where(and(eq(importBatch.id, id), eq(importBatch.status, b.status), eq(importBatch.mappingConfig, b.mappingConfig))).returning({ id: importBatch.id });
   if (!changed.length) throw new DomainError("CONFLICT", "批次状态已变化，请刷新后重试", null);
+  await recordBusinessEvent({ actor, action: "import.mapping_updated", targetType: "IMPORT_BATCH", targetId: id, projectId: b.projectId });
   return { ok: true, mapping: next };
 }
 
@@ -344,14 +365,20 @@ export async function dryRun(actor: Actor, id: string) {
     willCreate++;
   }
 
-  await db.update(importBatch).set({
+  const preview = { totalRows: rows.length, willCreate, willSkip, failed, errorReport: report.slice(0, 200) };
+  // 预览错误与上次实际执行失败不是同一集合；修正映射后仍须记得重试哪些原始行。
+  const failedRowIndices = cfg._failedRowIndices ?? (b.finishedAt
+    ? ((b.errorReport ?? []) as RowResult[]).filter(row => !row.ok).map(row => row.index) : undefined);
+  const changed = await db.update(importBatch).set({
     status: "PENDING_CONFIRM",
     errorReport: report as object,
-    mappingConfig: cfg as object,
-  }).where(and(eq(importBatch.id, id), eq(importBatch.status, b.status)));
+    mappingConfig: { ...cfg, ...(failedRowIndices === undefined ? {} : { _failedRowIndices: failedRowIndices }), preview, _dryRun: { fingerprint: importInputFingerprint(rows, cfg), totalRows: rows.length, willCreate, willSkip, failed } },
+  }).where(and(eq(importBatch.id, id), eq(importBatch.status, b.status), eq(importBatch.mappingConfig, b.mappingConfig), eq(importBatch.rows, b.rows))).returning({ id: importBatch.id });
+  if (!changed.length) throw new DomainError("CONFLICT", "批次状态已变化，请刷新后重试", null);
+  await recordBusinessEvent({ actor, action: "import.previewed", targetType: "IMPORT_BATCH", targetId: id, projectId: b.projectId });
 
   // 明确的统计口径：将创建 / 将跳过（已导入过）/ 失败
-  return { totalRows: rows.length, willCreate, willSkip, failed, errorReport: report.slice(0, 200) };
+  return preview;
 }
 
 // ── ⑤ 确认写入（幂等 + 分批 + 部分成功）──────────────────────
@@ -363,6 +390,15 @@ export async function confirm(actor: Actor, id: string, opts: { retryFailedOnly?
 
   const running = await db.transaction(async () => {
     await lockProjectTree(b.projectId);
+    const [current] = await db.select().from(importBatch).where(eq(importBatch.id, id)).for("update");
+    if (!current || ["RUNNING", "ROLLED_BACK"].includes(current.status)) {
+      throw new DomainError("CONFLICT", "该批次正在运行或已回滚", null);
+    }
+    const config = (current.mappingConfig ?? {}) as Record<string, unknown>;
+    const preview = config._dryRun as { fingerprint?: unknown } | undefined;
+    if (!preview || preview.fingerprint !== importInputFingerprint(current.rows, config)) {
+      throw new DomainError("CONFLICT", "请先对当前映射和数据完成试运行，再确认导入", null);
+    }
     const [claimed] = await db.update(importBatch).set({ status: "RUNNING", startedAt: new Date() })
       .where(and(eq(importBatch.id, id), ne(importBatch.status, "RUNNING"), ne(importBatch.status, "ROLLED_BACK")))
       .returning();
@@ -373,7 +409,8 @@ export async function confirm(actor: Actor, id: string, opts: { retryFailedOnly?
   const rows = (running.rows ?? []) as Record<string, string>[];
   const extCol = (cfg.externalIdColumn as string | null) ?? null;
   const previous = (running.errorReport ?? []) as RowResult[];
-  const retrySet = opts.retryFailedOnly ? new Set(previous.filter((p) => !p.ok).map((p) => p.index)) : null;
+  const failedRowIndices = (cfg._failedRowIndices ?? previous.filter((p) => !p.ok).map((p) => p.index)) as number[];
+  const retrySet = opts.retryFailedOnly ? new Set(failedRowIndices) : null;
 
   let created = 0, skipped = 0;
   const failures: RowResult[] = [];
@@ -404,6 +441,9 @@ export async function confirm(actor: Actor, id: string, opts: { retryFailedOnly?
             batchId: b.id, projectId: b.projectId, entity: "WORK_ITEM", externalId, internalId: wi.id,
           });
         }
+        // 与工作项和幂等映射同事务记录基线；回滚不能猜测旧批次的初始版本。
+        cfg._importedVersions = { ...((cfg._importedVersions ?? {}) as Record<string, number>), [wi.id]: wi.version };
+        await db.update(importBatch).set({ mappingConfig: cfg as object }).where(eq(importBatch.id, b.id));
         return true;
       });
       if (inserted) created++; else skipped++;
@@ -425,7 +465,8 @@ export async function confirm(actor: Actor, id: string, opts: { retryFailedOnly?
     status,
     createdCount: running.createdCount + created,
     failedCount: failed,
-    errorReport: failures as object,      // PARTIAL 必须保留报告（否则 retry-failed 无从实现）
+    errorReport: failures as object,
+    mappingConfig: { ...cfg, _failedRowIndices: failures.map(row => row.index) },
     finishedAt: new Date(),
   }).where(eq(importBatch.id, id));
   await recordBusinessEvent({
@@ -453,36 +494,54 @@ export async function rollback(actor: Actor, id: string) {
 
 async function rollbackLocked(actor: Actor, id: string) {
   const b = await loadBatch(actor, id);
+  const ctx: PermissionContext = { memberId: actor.memberId, memberProjectIds: new Set(), memberTeamIds: new Set() };
+  // 批次回滚是删除操作；创建权限不包含删除，也不能管理他人的批次。
+  if (!can(actor, "work_item:delete", { projectId: b.projectId }, ctx)
+    || (b.createdBy !== actor.memberId && !can(actor, "project:update", { projectId: b.projectId }, ctx))) throw forbidden();
   if (b.status === "RUNNING") throw new DomainError("CONFLICT", "批次正在运行，请完成后回滚", null);
-  if (b.status === "ROLLED_BACK") return { ok: true, alreadyRolledBack: true, removed: 0 };
+  if (b.status === "ROLLED_BACK") return { ok: true, alreadyRolledBack: true, removed: 0, retainedModified: 0, retainedUnknown: 0, skippedDeleted: 0 };
 
   const maps = await db.select().from(importMapping)
     .where(and(eq(importMapping.batchId, b.id), eq(importMapping.isActive, true)));
 
-  let removed = 0;
+  const versions = ((b.mappingConfig as Record<string, unknown>)?._importedVersions ?? {}) as Record<string, number>;
+  let removed = 0, retainedModified = 0, retainedUnknown = 0, skippedDeleted = 0;
   for (const m of maps) {
     if (m.entity === "WORK_ITEM") {
-      // 工作项**软删**（规范：整批回滚按批次逐实体删除，工作项软删、里程碑等硬删）。
-      // 直接更新而不是走 deleteWorkItem：回滚是批次语义，且对"已被用户删过"的行也必须幂等。
+      const [current] = await db.select({ version: workItem.version, deletedAt: workItem.deletedAt }).from(workItem)
+        .where(and(eq(workItem.id, m.internalId), eq(workItem.projectId, b.projectId))).for("update");
+      if (!current || current.deletedAt) {
+        skippedDeleted++;
+        await db.update(importMapping).set({ isActive: false }).where(eq(importMapping.id, m.id));
+        continue;
+      }
+      if (!Number.isInteger(versions[m.internalId])) { retainedUnknown++; continue; }
+      if (current.version !== versions[m.internalId]) { retainedModified++; continue; }
+      // 只有与导入基线一致的项才软删；保留项的活动映射继续防止重复导入。
       const res = await db.update(workItem).set({ deletedAt: new Date() })
         .where(and(eq(workItem.id, m.internalId), eq(workItem.projectId, b.projectId)))
-        .returning({ id: workItem.id });
-      if (res.length) removed++;
+        .returning({ id: workItem.id, key: workItem.key, version: workItem.version });
+      if (res.length) {
+        removed++;
+        await businessEffects().deliverWebhook("work_item.deleted", {
+          id: res[0]!.id, key: res[0]!.key, projectId: b.projectId, version: res[0]!.version,
+          actorId: actor.memberId,
+        }, b.projectId);
+      }
+      await db.update(importMapping).set({ isActive: false }).where(eq(importMapping.id, m.id));
     }
   }
-  // 映射行**保留**并置 is_active=false —— 删了会让"再次导入同一文件"生成新数据，破坏幂等
-  await db.update(importMapping).set({ isActive: false }).where(eq(importMapping.batchId, b.id));
   await db.update(importBatch).set({ status: "ROLLED_BACK", finishedAt: new Date() }).where(eq(importBatch.id, b.id));
   await recordBusinessEvent({
     actor, action: "import.rolled_back", targetType: "IMPORT_BATCH", targetId: id, projectId: b.projectId,
-    summary: `${actor.name} 回滚了导入批次，软删 ${removed} 个工作项`,
+    summary: `${actor.name} 回滚了导入批次，软删 ${removed} 个工作项，保留 ${retainedModified} 个已修改项、${retainedUnknown} 个无基线项，跳过 ${skippedDeleted} 个已删除项`,
     severity: "SECURITY",
   });
   const event = importCollabEvent("import.rolled_back", {
     batchId: id, projectId: b.projectId, status: "ROLLED_BACK", removed,
   });
   await publishProjectEvent(b.projectId, event.event, event.data);
-  return { ok: true, alreadyRolledBack: false, removed };
+  return { ok: true, alreadyRolledBack: false, removed, retainedModified, retainedUnknown, skippedDeleted };
 }
 
 

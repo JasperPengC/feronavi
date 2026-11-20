@@ -61,7 +61,7 @@ function isCsrfError(status: number, body: unknown): boolean {
 const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 /** JSON 和 multipart 共用同一次数限制、CSRF 恢复与错误转换。 */
-async function request<T>(url: URL, init: RequestInit, failureLabel = "请求失败"): Promise<T> {
+async function request<T>(url: URL, init: RequestInit, failureLabel = "请求失败", raw = false): Promise<T> {
   const headers = new Headers(init.headers);
   const write = WRITE_METHODS.has(init.method ?? "GET");
   const token = write ? readCookie("csrf_token") : null;
@@ -69,6 +69,7 @@ async function request<T>(url: URL, init: RequestInit, failureLabel = "请求失
 
   for (let attempt = 0; ; attempt += 1) {
     const response = await fetch(url, { ...init, headers, credentials: "same-origin" });
+    if (raw && response.ok) return response as T;
     if (response.status === 204) return undefined as T;
     let payload: unknown;
     try { payload = await response.json(); } catch { /* 空响应或反向代理的非 JSON 响应 */ }
@@ -91,9 +92,17 @@ async function request<T>(url: URL, init: RequestInit, failureLabel = "请求失
   }
 }
 
+/** 流式响应与 JSON 请求共享认证、CSRF 更新和错误转换。 */
+export function apiStreamPost(path: string, body: unknown, signal?: AbortSignal): Promise<Response> {
+  return request<Response>(new URL(path, window.location.origin), {
+    method: "POST", headers: { accept: "text/event-stream", "content-type": "application/json" },
+    body: JSON.stringify(body), signal,
+  }, "请求失败", true);
+}
+
 export async function api<T>(
   path: string,
-  opts: { method?: string; body?: unknown; query?: Record<string, unknown> } = {},
+  opts: { method?: string; body?: unknown; query?: Record<string, unknown>; signal?: AbortSignal } = {},
 ): Promise<T> {
   const method = opts.method ?? "GET";
   const url = new URL(path, window.location.origin);
@@ -104,7 +113,7 @@ export async function api<T>(
   }
 
   const headers: Record<string, string> = { accept: "application/json" };
-  const init: RequestInit = { method, headers, credentials: "same-origin" };
+  const init: RequestInit = { method, headers, credentials: "same-origin", signal: opts.signal };
 
   if (opts.body !== undefined) {
     headers["content-type"] = "application/json";
@@ -114,7 +123,7 @@ export async function api<T>(
 }
 
 export const apiGet = <T>(path: string, query?: Record<string, unknown>) => api<T>(path, { query });
-export const apiPost = <T>(path: string, body?: unknown) => api<T>(path, { method: "POST", body });
+export const apiPost = <T>(path: string, body?: unknown, signal?: AbortSignal) => api<T>(path, { method: "POST", body, signal });
 export const apiPut = <T>(path: string, body?: unknown) => api<T>(path, { method: "PUT", body });
 export const apiPatch = <T>(path: string, body?: unknown) => api<T>(path, { method: "PATCH", body });
 /**

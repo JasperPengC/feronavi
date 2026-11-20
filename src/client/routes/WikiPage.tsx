@@ -14,7 +14,7 @@ import { CommentsPanel } from "./CommentsPanel.tsx";
 import { AttachmentsPanel } from "../components/work-item/AttachmentsPanel.tsx";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, apiPut, apiPatch, apiDelete, ApiError } from "../lib/api.ts";
-import { useMarkdownImages } from "../lib/useMarkdownImages.ts";
+import { draftImageTokens, useMarkdownImages } from "../lib/useMarkdownImages.ts";
 import { t as tr, useLocale } from "../i18n/index.ts";
 import { Checkbox } from "../components/Checkbox.tsx";
 import { Select } from "../components/Select.tsx";
@@ -66,6 +66,7 @@ export function WikiPage() {
   const [grantMember, setGrantMember] = useState("");
   const [grantWrite, setGrantWrite] = useState(false);
   const images = useMarkdownImages();
+  const uploadingImage = images.images.some(image => image.status === "uploading");
   const resetImages = images.reset;
   const saveLock = useRef(false);
   const [editing, setEditing] = useState(false);
@@ -158,35 +159,21 @@ export function WikiPage() {
 
   const save = useMutation({
     mutationFn: async (submitted: PageDraft) => {
-      const content = await images.persist(submitted.content, "PAGE", submitted.pageId);
-      if (collab.status === "ready") {
-        collab.setContent(content);
-        await collab.flush();
-        const published = await apiPost<{ page: PageRow & { revisionNo: number; content: string }; publishedRevisionId: string; indexing: { status: string; message?: string } }>(`/api/v1/collaboration/rooms/PAGE/${submitted.pageId}/publish`, {
-          title: submitted.title,
-          expectedRevisionId: collab.baseRevisionId ?? submitted.revisionId,
-          userConfirmed: true,
-          changeSummary: "Wiki 协作草稿发布",
-        });
-        if (published.indexing.status === "FAILED") setErr(`页面已发布，但知识索引启动失败：${published.indexing.message ?? "未知原因"}`);
-        return { metadata: published.page, content, indexing: published.indexing };
-      }
-      const metadata = await apiPatch<PageRow & { revisionNo: number }>(`/api/v1/pages/${submitted.pageId}`, {
+      // 已进入协作的编辑只经草稿发布，网络异常时不可退回整篇PATCH覆盖其他人的草稿。
+      if (!collab.readyToEdit) throw new Error("协作文档尚未连接，请等待连接后保存");
+      if (draftImageTokens(submitted.content).length) throw new Error("正文包含尚未上传的图片，请重新插入图片后保存");
+      await collab.flush();
+      const published = await apiPost<{ page: PageRow & { revisionNo: number; content: string }; publishedRevisionId: string; indexing: { status: string; message?: string } }>(`/api/v1/collaboration/rooms/PAGE/${submitted.pageId}/publish`, {
         title: submitted.title,
-        content,
-        expectedRevisionId: submitted.revisionId,
-        changeSummary: "Wiki 页面更新",
+        expectedRevisionId: collab.baseRevisionId ?? submitted.revisionId,
+        userConfirmed: true,
+        changeSummary: "Wiki 协作草稿发布",
       });
-      let indexing: { status: string; message?: string } = { status: "QUEUED" };
-      try {
-        await apiPost(`/api/v1/pages/${submitted.pageId}/reindex`, { mode: "INCREMENTAL" });
-      } catch (error) {
-        indexing = { status: "FAILED", message: error instanceof Error ? error.message : "索引任务启动失败" };
-      }
-      return { metadata, content, indexing };
+      if (published.indexing.status === "FAILED") setErr(`页面已发布，但知识索引启动失败：${published.indexing.message ?? "未知原因"}`);
+      return { metadata: published.page, content: published.page.content, indexing: published.indexing };
     },
     onSuccess: async ({ metadata, content, indexing }, submitted) => {
-      // PATCH 返回元信息，正文来自本次提交快照；不要把不完整响应写进详情缓存。
+      // 展示服务端发布的合并正文，不能用点击保存时的旧快照覆盖并发修改。
       const page: PageDetail = { ...metadata, content, changeSummary: null };
       qc.setQueryData(["wiki-page", submitted.pageId], page);
       if (selected === submitted.pageId) {
@@ -205,7 +192,7 @@ export function WikiPage() {
     onSettled: () => { saveLock.current = false; },
   });
   const submitDraft = () => {
-    if (!draft || !dirty || !draft.title.trim() || saveLock.current || save.isPending) return;
+    if (!draft || !dirty || !draft.title.trim() || saveLock.current || save.isPending || !collab.readyToEdit || uploadingImage) return;
     saveLock.current = true; save.mutate(draft);
   };
 
@@ -272,7 +259,7 @@ export function WikiPage() {
           <Button size="sm" className="wiki-directory-toggle" aria-expanded={directoryOpen} aria-controls="wiki-directory"
             onClick={() => setDirectoryOpen((value) => !value)}><Icon name="list" size={14} />{tr("wk.contents")}</Button>
           <Button size="sm" variant={ragOpen ? "primary" : "secondary"} aria-expanded={ragOpen} aria-controls="wiki-knowledge"
-            onClick={() => setRagOpen((value) => !value)}><Icon name="search" size={14} />{tr("kn.workspaceTitle")}</Button>
+            onClick={() => setRagOpen((value) => !value)}><Icon name="book" size={14} />{tr("kn.indexTitle")}</Button>
           <Button size="sm" variant="primary" loading={create.isPending} disabled={save.isPending} onClick={async () => {
             if (await discardChanges()) create.mutate();
           }}><Icon name="plus" size={14} />{tr("wk.new")}</Button>
@@ -351,7 +338,7 @@ export function WikiPage() {
                 <div className="wiki-primary-actions">
                   {editing ? <>
                     <Button size="sm" onClick={() => { void cancelEditing(); }} disabled={save.isPending}>{tr("wk.cancelEdit")}</Button>
-                    <Button size="sm" variant="primary" loading={save.isPending} disabled={!dirty || !draft?.title.trim()}
+                    <Button size="sm" variant="primary" loading={save.isPending} disabled={!dirty || !draft?.title.trim() || !collab.readyToEdit || uploadingImage}
                       onClick={submitDraft}><Icon name="check" size={14} />{tr("wk.saveChanges")}</Button>
                   </> : <Button size="sm" variant="primary" disabled={save.isPending} onClick={beginEditing}>{tr("wk.edit")}</Button>}
                 </div>
@@ -368,7 +355,8 @@ export function WikiPage() {
                   {detail.data.updatedAt && <span>{new Date(detail.data.updatedAt).toLocaleString()}</span>}
                 </div>
               </div>
-              {editing && draft ? <MarkdownEditor key={draft.pageId} label={tr("wiki.bodyLabel")} rows={16} className="wiki-markdown-editor" disabled={save.isPending}
+              {editing && draft ? <MarkdownEditor key={draft.pageId} label={tr("wiki.bodyLabel")} rows={16} className="wiki-markdown-editor" disabled={save.isPending || !collab.readyToEdit}
+                  imageTarget={{ type: "PAGE", id: draft.pageId }}
                   value={draft.content} images={images} onChange={(content) => { collab.setContent(content); setDraft((current) => current ? { ...current, content } : current); }}
                   onKeyDown={(event) => {
                     if ((event.metaKey || event.ctrlKey) && event.key === "Enter" && dirty && draft.title.trim() && !save.isPending) {
@@ -487,11 +475,11 @@ export function WikiPage() {
         )}
       </div>
 
-      {/* RAG 工作区：先看索引与检索结果，再回看最近编辑的来源文档。 */}
+      {/* 文档页只维护当前文档索引；对话在独立知识助手中进行。 */}
       {ragOpen && (
-        <aside className="wiki-rag-column" id="wiki-knowledge" aria-label={tr("kn.workspaceTitle")}>
+        <aside className="wiki-rag-column" id="wiki-knowledge" aria-label={tr("kn.indexTitle")}>
           <KnowledgePanel projectId={projectId} pageId={detail.data?.id} revisionId={detail.data?.currentRevisionId}
-            canReindex={canReindex} onOpenPage={(id) => { void selectPage(id); }} />
+            canReindex={canReindex} indexOnly />
         </aside>
       )}
     </div>

@@ -1,6 +1,7 @@
-/* 固定唯一入口：令牌 → 共享组件 → 应用壳层 → 业务页面 → 表格布局。 */
+/* 固定唯一入口：令牌 → 共享组件 → 公共控件规范 → 应用壳层 → 业务页面 → 表格布局。 */
 @import "./tokens.css";
 @import "./components.css";
+@import "./controls.css";
 @import "./shell.css";
 @import "./pages.css";
 @import "./tables.css";

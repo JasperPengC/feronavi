@@ -8,7 +8,7 @@
  */
 import { SESSION_TTL_DAYS, SESSION_TTL_DAYS_REMEMBER, createSession, revokeSession } from "../auth/session.ts";
 import { verifyPassword } from "../auth/password.ts";
-import { clearLoginFailures, isLockedOut, recordLoginFailure } from "../auth/login-guard.ts";
+import { clearLoginFailures, consumeLoginAttempt, isLockedOut, recordLoginFailure } from "../auth/login-guard.ts";
 import { DomainError } from "../../shared/errors.ts";
 import type { LoginInput } from "../../shared/schemas/auth.ts";
 import * as memberRepo from "../repos/member.repo.ts";
@@ -25,14 +25,15 @@ export async function login(
   const { username, password, remember } = input;
 
   // ① 锁定检查：IP + 账号双维度（第 5.9 节）
-  if (await isLockedOut(username, ctx.ip)) {
+  const attemptAllowed = await consumeLoginAttempt(username, ctx.ip);
+  if (!attemptAllowed || await isLockedOut(username, ctx.ip)) {
     const { writeSecurityAudit } = await import("./audit.service.ts");
     await writeSecurityAudit({
       actorId: null, actorSnapshot: username.slice(0, 64),
       action: "auth.login_blocked", targetType: "MEMBER",
       ip: ctx.ip, userAgent: ctx.userAgent,
     });
-    throw new DomainError("RATE_LIMITED", "尝试次数过多，请 10 分钟后再试", null);
+    throw new DomainError("RATE_LIMITED", attemptAllowed ? "尝试次数过多，请 10 分钟后再试" : "登录尝试过于频繁，请稍后再试", null);
   }
 
   const m = await memberRepo.findByUsernameForAuth(username);
@@ -41,7 +42,7 @@ export async function login(
    * ⚠️ 两条安全约束，改动这里必须同时满足：
    *   a) 账号不存在与密码错误返回**完全相同**的错误（否则可枚举用户名）
    *   b) 两条路径都要走一次哈希校验（否则响应耗时可区分，仍是侧信道）
-   * 用一个不可能匹配的哨兵哈希串让不存在的情况也付出同等代价。
+   * 无账号使用哨兵输入；verifyPassword 会执行固定真实 dummy hash 并强制拒绝。
    */
   const ok = m
     ? await verifyPassword(m.passwordHash, password)

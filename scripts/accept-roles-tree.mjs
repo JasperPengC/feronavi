@@ -77,12 +77,16 @@ try {
   check("内置角色名称只读", s1.nameDisabled === true);
   await page.screenshot({ path: "/tmp/accept-roles-2-guest.png" });
 
-  // ③ 键盘 ↓ 移动选中项
+  // ③ 方向键仅移动焦点，Enter 才选择新角色
   await page.locator('[role="treeitem"][aria-level="2"][aria-selected="true"]').first().focus();
   await page.keyboard.press("ArrowDown");
   await page.waitForTimeout(500);
   const s2 = await state(page);
-  check("键盘 ↓ 移动选中", s2.selectedText !== s1.selectedText, `${s1.selectedText} → ${s2.selectedText}`);
+  const focused = await page.evaluate(() => document.activeElement?.textContent);
+  check("键盘 ↓ 移动焦点但保留选择", focused !== s1.selectedText && s2.selectedText === s1.selectedText);
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(400);
+  check("Enter 选择焦点角色", (await state(page)).selectedText !== s1.selectedText);
 
   // ④ 点分组行 = 折叠（不是选中分组）→ 子项消失、且不出现「所选角色已不存在」
   const builtin = page.locator('[role="treeitem"][aria-level="1"]').filter({ hasText: "内置角色" }).first();

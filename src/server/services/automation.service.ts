@@ -6,13 +6,14 @@ import { deferAfterCommit } from "../../db/context.ts";
  * 递归防护：AsyncLocalStorage 深度，最多 3 层；每层动作失败只记日志，不阻断主流程。
  */
 import { AsyncLocalStorage } from "node:async_hooks";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "../../db/index.ts";
 import { automationRule, automationRun, roleAssignment, role } from "../../db/schema.ts";
 import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
 import { loadActor } from "../auth/actor-loader.ts";
+import { recordBusinessEvent } from "./event-log.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 import * as wiRepo from "../repos/work-item.repo.ts";
 import * as wfRepo from "../repos/workflow.repo.ts";
@@ -41,13 +42,12 @@ const executionSchema = createAutomationRuleSchema.pick({ conditions: true, acti
 function executableRule(rule: { conditions?: unknown; actions: unknown }) {
   const parsed = executionSchema.safeParse({ conditions: rule.conditions ?? {}, actions: rule.actions });
   if (!parsed.success) throw new DomainError("VALIDATION", "自动化规则内容不合法", parsed.error.issues);
-  return { conditions: [...(parsed.data.conditions?.all ?? []), ...(parsed.data.conditions?.any ?? [])], actions: parsed.data.actions };
+  return { conditions: parsed.data.conditions ?? {}, actions: parsed.data.actions };
 }
 function stringField(row: Record<string, unknown>, key: string): unknown { return row[key]; }
 
-function matches(conditions: RuleCondition[], item: Record<string, unknown>, statusKey: string): boolean {
-  if (conditions.length === 0) return true;
-  return conditions.every((c) => {
+function matches(conditions: { all?: RuleCondition[]; any?: RuleCondition[] }, item: Record<string, unknown>, statusKey: string): boolean {
+  const match = (c: RuleCondition) => {
     const actual = c.field === "statusKey" ? statusKey : stringField(item, c.field);
     const expected = c.value;
     switch (c.op) {
@@ -60,7 +60,9 @@ function matches(conditions: RuleCondition[], item: Record<string, unknown>, sta
       case "is_not_empty": return actual != null && actual !== "";
       default: return false;
     }
-  });
+  };
+  return (conditions.all ?? []).every(match)
+    && (!conditions.any?.length || conditions.any.some(match));
 }
 
 /** 管理 API 用 */
@@ -81,6 +83,7 @@ export async function createRule(actor: Actor, projectId: string, raw: unknown) 
     scheduleCron: input.scheduleCron?.trim() || null, scheduleTimezone: input.scheduleTimezone?.trim() || "Asia/Shanghai",
     enabled: input.enabled ?? true, createdBy: actor.memberId,
   }).returning();
+  await recordBusinessEvent({ actor, action: "automation.created", targetType: "AUTOMATION", targetId: row!.id, projectId });
   return row!;
 }
 export async function updateRule(actor: Actor, projectId: string, id: string, raw: unknown) {
@@ -99,11 +102,13 @@ export async function updateRule(actor: Actor, projectId: string, id: string, ra
     updatedAt: new Date(),
   }).where(and(eq(automationRule.id, id), eq(automationRule.projectId, projectId))).returning();
   if (!row) throw new DomainError("NOT_FOUND", "规则不存在", null);
+  await recordBusinessEvent({ actor, action: "automation.updated", targetType: "AUTOMATION", targetId: id, projectId });
   return row;
 }
 export async function deleteRule(actor: Actor, projectId: string, id: string) {
   assertManage(actor, projectId);
   await db.delete(automationRule).where(and(eq(automationRule.id, id), eq(automationRule.projectId, projectId)));
+  await recordBusinessEvent({ actor, action: "automation.deleted", targetType: "AUTOMATION", targetId: id, projectId });
   return { ok: true };
 }
 export async function listRuns(actor: Actor, projectId: string, opts: { workItemId?: string; limit?: number } = {}) {
@@ -126,8 +131,7 @@ export async function testRule(actor: Actor, projectId: string, rule: { conditio
   const statusKey = states.find((s) => s.id === item.statusId)?.key ?? "";
   const parsed = automationConditionsSchema.safeParse(rule.conditions ?? {});
   if (!parsed.success) throw new DomainError("VALIDATION", "自动化条件不合法", parsed.error.issues);
-  const conditions = [...(parsed.data.all ?? []), ...(parsed.data.any ?? [])];
-  return { matched: matches(conditions, item as unknown as Record<string, unknown>, statusKey) };
+  return { matched: matches(parsed.data, item as unknown as Record<string, unknown>, statusKey) };
 }
 
 async function resolveRoleMembers(roleKeys: string[]): Promise<string[]> {
@@ -138,7 +142,7 @@ async function resolveRoleMembers(roleKeys: string[]): Promise<string[]> {
   return [...new Set(all.filter((r) => roleKeys.includes(r.roleKey)).map((r) => r.memberId))];
 }
 
-async function executeAction(actor: Actor, rule: typeof automationRule.$inferSelect, itemId: string, action: RuleAction): Promise<unknown> {
+async function executeAction(actor: Actor, rule: Pick<typeof automationRule.$inferSelect, "id" | "name" | "projectId">, itemId: string, action: RuleAction, scheduled = false): Promise<unknown> {
   const { updateWorkItem, transitionWorkItem } = await import("./work-item.service.ts");
   const current = await wiRepo.findById(itemId);
   if (!current) throw new DomainError("NOT_FOUND", "工作项不存在", null);
@@ -178,8 +182,8 @@ async function executeAction(actor: Actor, rule: typeof automationRule.$inferSel
   }
   if (action.type === "CALL_WEBHOOK") {
     const { deliver } = await import("./webhook.service.ts");
-    await deliver("automation.rule", { ruleId: rule.id, workItemId: itemId }, current.projectId);
-    return { delivered: true };
+    await deliver("automation.rule", { ruleId: rule.id, workItemId: itemId }, current.projectId, { enqueueOnly: scheduled });
+    return scheduled ? { queued: true } : { delivered: true };
   }
   throw new DomainError("VALIDATION", "不支持的自动化动作", null);
 }
@@ -226,37 +230,92 @@ export async function triggerAutomation(trigger: Trigger, workItemId: string): P
   });
 }
 
-/** 扫描定时规则：同一分钟最多执行一次；对项目内匹配条件的工作项执行动作。 */
-export async function runScheduledAutomations(now = new Date()): Promise<{ rules: number; items: number }> {
-  const rules = await db.select().from(automationRule)
-    .where(and(eq(automationRule.enabled, true), eq(automationRule.trigger, "SCHEDULE")));
-  let ruleCount = 0, itemCount = 0;
+interface ScheduleState {
+  scheduledAt: string;
+  cursor: string | null;
+  rule: { id: string; projectId: string; name: string; createdBy: string | null; conditions: unknown; actions: unknown };
+}
+
+/** 每批动作、日志与游标共提交；崩溃仅重试未提交批次，已提交评论不会重放。 */
+async function resumeScheduledRule(ruleId: string): Promise<number> {
   const { workItem } = await import("../../db/schema.ts");
-  for (const rule of rules) {
-    try {
-      if (!rule.scheduleCron || !cronDue(rule.scheduleCron, rule.scheduleTimezone ?? "Asia/Shanghai", now)) continue;
-      if (rule.lastScheduledAt && now.getTime() - rule.lastScheduledAt.getTime() < 30_000) continue;
-      const claimed = await db.update(automationRule).set({ lastScheduledAt: now, updatedAt: now })
-        .where(and(eq(automationRule.id, rule.id), eq(automationRule.enabled, true))).returning({ id: automationRule.id });
-      if (claimed.length === 0) continue;
-      const executable = executableRule(rule);
-      ruleCount += 1;
+  let processed = 0;
+  for (;;) {
+    const result = await db.transaction(async () => {
+      const [currentRule] = await db.select().from(automationRule)
+        .where(eq(automationRule.id, ruleId)).for("update", { skipLocked: true });
+      if (!currentRule?.enabled || !currentRule.scheduleState) return { done: true, items: 0 };
+      const state = currentRule.scheduleState as unknown as ScheduleState;
+      const executable = executableRule(state.rule);
+      const actor = state.rule.createdBy ? await loadActor(state.rule.createdBy) : null;
+      if (!actor) throw new DomainError("FORBIDDEN", "定时规则创建者不可用，等待管理员恢复", null);
       const items = await db.select().from(workItem)
-        .where(and(eq(workItem.projectId, rule.projectId), sql`${workItem.deletedAt} IS NULL`)).limit(500);
-      const actor = rule.createdBy ? await loadActor(rule.createdBy) : null;
-      if (!actor) continue;
+        .where(and(eq(workItem.projectId, state.rule.projectId), isNull(workItem.deletedAt),
+          state.cursor ? gt(workItem.id, state.cursor) : undefined))
+        .orderBy(asc(workItem.id)).limit(500);
+      let matched = 0;
       for (const item of items) {
         const states = await wfRepo.listStates(item.workflowId);
         const statusKey = states.find((s) => s.id === item.statusId)?.key ?? "";
         if (!matches(executable.conditions, item as unknown as Record<string, unknown>, statusKey)) continue;
-        const results: unknown[] = []; let status: "SUCCESS" | "FAILED" = "SUCCESS"; let error: string | null = null;
+        const results: unknown[] = [];
+        let status: "SUCCESS" | "FAILED" = "SUCCESS";
+        let error: string | null = null;
         for (const action of executable.actions) {
-          try { results.push({ action: action.type, result: await executeAction(actor, rule, item.id, action) }); }
-          catch (e) { status = "FAILED"; error = (e as Error).message.slice(0, 500); results.push({ action: action.type, error }); }
+          try {
+            // SQL动作故障仅回滚该动作；日志或扫描故障则回滚整批并保留进度供重试。
+            const value = await db.transaction(() => executeAction(actor, state.rule, item.id, action, true));
+            results.push({ action: action.type, result: value });
+          } catch (failure) {
+            status = "FAILED";
+            error = (failure instanceof Error ? failure.message : String(failure)).slice(0, 500);
+            results.push({ action: action.type, error });
+          }
         }
-        await db.insert(automationRun).values({ ruleId: rule.id, workItemId: item.id, trigger: "SCHEDULE", status, actions: results as object, error });
-        itemCount += 1;
+        await db.insert(automationRun).values({ ruleId, workItemId: item.id, trigger: "SCHEDULE", status, actions: results as object, error });
+        matched++;
       }
+      const done = items.length < 500;
+      await db.update(automationRule).set({ scheduleState: done ? null : { ...state, cursor: items.at(-1)!.id } })
+        .where(eq(automationRule.id, ruleId));
+      return { done, items: matched };
+    });
+    processed += result.items;
+    if (result.done) return processed;
+  }
+}
+
+/** 计划领取与持久进度同一原子更新；未完成计划在非cron分钟也继续恢复。 */
+export async function runScheduledAutomations(now = new Date()): Promise<{ rules: number; items: number }> {
+  const minuteStart = new Date(Math.floor(now.getTime() / 60_000) * 60_000);
+  const rules = await db.select().from(automationRule)
+    .where(and(eq(automationRule.enabled, true), eq(automationRule.trigger, "SCHEDULE")));
+  let ruleCount = 0, itemCount = 0;
+  for (const rule of rules) {
+    try {
+      if (!rule.scheduleState) {
+        if (!rule.scheduleCron || !cronDue(rule.scheduleCron, rule.scheduleTimezone ?? "Asia/Shanghai", now)) continue;
+        if (rule.lastScheduledAt && rule.lastScheduledAt >= minuteStart) continue;
+        executableRule(rule);
+        const state: ScheduleState = {
+          scheduledAt: minuteStart.toISOString(), cursor: null,
+          rule: { id: rule.id, projectId: rule.projectId, name: rule.name, createdBy: rule.createdBy, conditions: rule.conditions, actions: rule.actions },
+        };
+        const claimed = await db.update(automationRule).set({ lastScheduledAt: now, updatedAt: now, scheduleState: state })
+          .where(and(eq(automationRule.id, rule.id), eq(automationRule.enabled, true), isNull(automationRule.scheduleState),
+            or(isNull(automationRule.lastScheduledAt), lt(automationRule.lastScheduledAt, minuteStart))))
+          .returning({ id: automationRule.id });
+        if (!claimed.length) {
+          // 竞争者的UPDATE可能短暂持有行锁，领取者的SKIP LOCKED会让出；
+          // 最后结束领取竞争的进程必须继续尝试恢复，不能双方都留待下个tick。
+          const resumed = await resumeScheduledRule(rule.id);
+          itemCount += resumed;
+          if (resumed) ruleCount++;
+          continue;
+        }
+      }
+      ruleCount++;
+      itemCount += await resumeScheduledRule(rule.id);
     } catch (error) { await recordRuleFailure(rule.id, "SCHEDULE", null, error); }
   }
   return { rules: ruleCount, items: itemCount };

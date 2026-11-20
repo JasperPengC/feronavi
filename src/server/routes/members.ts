@@ -9,7 +9,7 @@ import "../plugins-types.ts";
 import { z } from "zod";
 import { DomainError } from "../../shared/errors.ts";
 import { createMemberSchema } from "../../shared/schemas/member.ts";
-import { anonymizeMember, disableMember, enableMember, listMembers } from "../services/member.service.ts";
+import { manageMemberLifecycle, listMembers } from "../services/member.service.ts";
 import {
   findMemberByUserOrEmail, issueResetToken, changeOwnPassword,
   resetPasswordWithToken,
@@ -88,27 +88,13 @@ export async function registerMemberRoutes(app: FastifyInstance): Promise<void> 
   app.post("/api/v1/members/:id/disable", { onRequest: app.csrfProtection }, async (req) => {
     const actor = needPerm(req, "member:manage");
     const { id } = req.params as { id: string };
-    await disableMember(id);
-    {
-      const { writeSecurityAudit } = await import("../services/audit.service.ts");
-      await writeSecurityAudit({
-        actorId: actor.memberId, action: "member.disabled", targetType: "MEMBER", targetId: id, ip: req.ip,
-      });
-    }
-    return { ok: true };
+    return manageMemberLifecycle(actor, id, "disabled", req.ip);
   });
 
   app.post("/api/v1/members/:id/enable", { onRequest: app.csrfProtection }, async (req) => {
     const actor = needPerm(req, "member:manage");
     const { id } = req.params as { id: string };
-    await enableMember(id);
-    {
-      const { writeSecurityAudit } = await import("../services/audit.service.ts");
-      await writeSecurityAudit({
-        actorId: actor.memberId, action: "member.enabled", targetType: "MEMBER", targetId: id, ip: req.ip,
-      });
-    }
-    return { ok: true };
+    return manageMemberLifecycle(actor, id, "enabled", req.ip);
   });
 
   // ── 创建成员 / 邀请（REST 第 3 节；member:invite）────────
@@ -180,16 +166,7 @@ export async function registerMemberRoutes(app: FastifyInstance): Promise<void> 
   app.delete("/api/v1/members/:id", { onRequest: app.csrfProtection }, async (req) => {
     const actor = needPerm(req, "member:manage");
     const { id } = req.params as { id: string };
-    const { username } = await anonymizeMember(id);
-    {
-      // 匿名化是合规动作：审计只记"谁删了哪个 id"，**不记被匿名化者的用户名**
-      const { writeSecurityAudit } = await import("../services/audit.service.ts");
-      await writeSecurityAudit({
-        actorId: actor.memberId, action: "member.anonymized", targetType: "MEMBER",
-        targetId: id, ip: req.ip,
-      });
-    }
-    return { ok: true, username };
+    return manageMemberLifecycle(actor, id, "anonymized", req.ip);
   });
 
   void resetLinkBody;

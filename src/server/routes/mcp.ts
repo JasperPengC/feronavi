@@ -65,7 +65,7 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
     return { url: raw };
   });
 
-  app.post("/api/v1/mcp", async (req, reply) => {
+  app.post("/api/v1/mcp", { bodyLimit: 12 * 1024 * 1024 }, async (req, reply) => {
     const raw = (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "").trim();
     const auth = raw ? await authenticateToken(raw, req.ip ?? null) : null;
     if (!auth) {
@@ -86,7 +86,9 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
 
     // 交给 MCP transport 接管原始 req/res
     reply.hijack();
-    const server = buildMcpServer({ actor: auth.actor, token: auth.ctx });
+    const server = buildMcpServer({ actor: auth.actor, token: auth.ctx }, (metric) => {
+      req.log.info({ mcpCall: metric }, "MCP tool call");
+    });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,        // 无状态
       enableJsonResponse: true,             // 直接 JSON 响应（本客户端集不需要 SSE 流）

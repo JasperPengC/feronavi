@@ -4,7 +4,7 @@
  * 后端（迁移 0030 / `integration.service.ts`）已具备完整能力；本组件是它的管理界面：
  *   · 列表：类型/名称/地址/范围/启停 + 令牌**只显示"已配置"**（接口从不回显令牌）；
  *   · 新建/编辑：服务地址会经过后端统一 SSRF 校验，失败原因原样展示（不吞错误）；
- *   · 删除：两步确认（第一次点「删除」变「确认删除」），避免误删生产集成。
+ *   · 删除：使用平台共享危险操作确认，避免误删生产集成。
  */
 import { queryKeys } from "../../lib/query-keys.ts";
 import { useMemo, useState } from "react";
@@ -17,7 +17,9 @@ import { Select } from "../Select.tsx";
 import { TextArea } from "../ui/TextArea.tsx";
 import { SettingsListState, SettingsSection } from "./SettingsSection.tsx";
 import type { FeedbackHandlers } from "./types.ts";
+import { confirmDialog } from "../Dialog.tsx";
 import { Modal } from "../ui/Modal.tsx";
+import { Icon } from "../Icon.tsx";
 
 interface IntegrationRow {
   id: string; kind: string; projectId: string | null; name: string; baseUrl: string;
@@ -36,7 +38,7 @@ const KIND_HINT: Record<string, string> = {
 
 import { useSettingsDraft } from "./SettingsDraft.tsx";
 
-export function IntegrationSettings({ onSuccess, onError }: FeedbackHandlers) {
+export function IntegrationSettings({ onSuccess, onError, compact = false }: FeedbackHandlers & { compact?: boolean }) {
   useLocale();
   const qc = useQueryClient();
   const list = useQuery({
@@ -51,7 +53,6 @@ export function IntegrationSettings({ onSuccess, onError }: FeedbackHandlers) {
   });
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -112,13 +113,12 @@ export function IntegrationSettings({ onSuccess, onError }: FeedbackHandlers) {
   });
   const remove = useMutation({
     mutationFn: (id: string) => apiDelete(`/api/v1/integrations/${id}`),
-    onSuccess: async () => { setDeletingId(null); onSuccess(t("se.intgDeleted")); await invalidate(); },
-    onError: (e) => { setDeletingId(null); fail(e, t("se.intgSaveFailed")); },
+    onSuccess: async () => { onSuccess(t("se.intgDeleted")); await invalidate(); },
+    onError: (e) => { fail(e, t("se.intgSaveFailed")); },
   });
 
   const startEdit = (row: IntegrationRow) => {
     setFormError(null);
-    setDeletingId(null);
     setEditingId(row.id);
     setForm({
       kind: row.kind, name: row.name, baseUrl: row.baseUrl, token: "", projectId: row.projectId ?? "",
@@ -133,11 +133,13 @@ export function IntegrationSettings({ onSuccess, onError }: FeedbackHandlers) {
     && (editingId ? true : form.token.length > 0) && !submitting;
 
   return (
-    <SettingsSection title={t("set.integration")} description={t("se.intgDesc")}
-      actions={<Button size="sm" variant="primary" onClick={() => { setEditingId(null); setForm(EMPTY_FORM); setFormOpen(true); }}>+ {t("se.intgAdd")}</Button>}>
+    <SettingsSection variant={compact ? "row" : "card"} leading={compact && <Icon name="link" size={18} />}
+      title={t("set.integration")} description={compact ? t("se.messagingIntegrationDesc") : t("se.intgDesc")}
+      status={compact && list.data?.integrations.length === 0 ? t("se.messagingUnconfigured") : undefined}
+      actions={<Button size="sm" variant={compact ? "ghost" : "primary"} aria-label={t("se.intgAdd")} onClick={() => { setEditingId(null); setForm(EMPTY_FORM); setFormOpen(true); }}><Icon name="plus" size={14} />{compact ? t("common.add") : t("se.intgAdd")}</Button>}>
       {list.isLoading && <SettingsListState>{t("common.loading")}</SettingsListState>}
       {list.isError && <SettingsListState tone="error" action={<Button size="sm" onClick={() => void list.refetch()}>{t("common.reload")}</Button>}>{t("se.intgLoadFailed")}</SettingsListState>}
-      {list.data && list.data.integrations.length === 0 && <SettingsListState>{t("se.intgNoItems")}</SettingsListState>}
+      {!compact && list.data && list.data.integrations.length === 0 && <SettingsListState>{t("se.intgNoItems")}</SettingsListState>}
       {!!list.data?.integrations.length && (
         <ul className="settings-record-list">
           {list.data.integrations.map((row) => (
@@ -155,11 +157,7 @@ export function IntegrationSettings({ onSuccess, onError }: FeedbackHandlers) {
               <Button size="sm" variant="ghost" disabled={toggle.isPending} onClick={() => toggle.mutate(row)}>
                 {row.isActive ? t("se.intgToggleOff") : t("se.intgToggleOn")}
               </Button>
-              {deletingId === row.id ? (
-                <Button size="sm" variant="danger" disabled={remove.isPending} onClick={() => remove.mutate(row.id)}>{t("se.intgDeleteConfirm")}</Button>
-              ) : (
-                <Button size="sm" variant="danger" onClick={() => setDeletingId(row.id)}>{t("common.delete")}</Button>
-              )}
+              <Button size="sm" variant="danger" disabled={remove.isPending} onClick={async () => { if (await confirmDialog(`${t("common.confirmDelete")} ${row.name}`, { danger: true })) remove.mutate(row.id); }}>{t("common.delete")}</Button>
             </li>
           ))}
         </ul>
@@ -170,7 +168,7 @@ export function IntegrationSettings({ onSuccess, onError }: FeedbackHandlers) {
       <Modal open={formOpen} title={editingId ? t("se.intgEdit") : t("se.intgNew")} onClose={requestClose}
         footer={<>
           <Button onClick={requestClose} disabled={submitting}>{t("se.intgCancel")}</Button>
-          <Button variant="primary" disabled={!canSubmit}
+          <Button variant="primary" disabled={!canSubmit} loading={submitting}
             onClick={() => {
               const config = parseConfig();
               if (config === null) return;

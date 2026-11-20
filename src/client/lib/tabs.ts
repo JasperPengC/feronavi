@@ -24,7 +24,7 @@ const PLAIN: Record<string, string> = {
   workbench: "nav.overview", projects: "nav.projects", focus: "nav.focus", members: "nav.members",
   tokens: "nav.tokens", announcements: "nav.announcements", notifications: "nav.notifications",
   settings: "nav.settings", system: "nav.system", portfolios: "nav.portfolios", changelog: "nav.changelog",
-  issues: "nav.issues",
+  issues: "nav.issues", assistant: "nav.assistant",
 };
 
 /** 路径 → i18n 键（导入导出也稳定；未知路径退化为工作区） */

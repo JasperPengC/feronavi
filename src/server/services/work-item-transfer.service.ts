@@ -34,12 +34,18 @@ export async function listTransfers(actor: Actor, workItemId: string) {
   }));
 }
 
-export async function transferWorkItem(actor: Actor, workItemId: string, input: { assigneeId: string | null; reason?: string | null; version: number }) {
+/** 转派实际写入与幂等重放共用当前指派授权。 */
+export async function authorizeTransfer(actor: Actor, workItemId: string) {
   const wi = await wiService.getWorkItem(actor, workItemId);
   const ctx: PermissionContext = { memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId };
   if (!can(actor, "work_item:assign", { projectId: (wi as { projectId: string }).projectId, createdBy: (wi as { reporterId?: string }).reporterId ?? null }, ctx)) {
     throw forbidden();
   }
+  return wi;
+}
+
+export async function transferWorkItem(actor: Actor, workItemId: string, input: { assigneeId: string | null; reason?: string | null; version: number }) {
+  const wi = await authorizeTransfer(actor, workItemId);
   if (input.assigneeId === (wi as { assigneeId: string | null }).assigneeId) {
     throw new DomainError("VALIDATION", "该工作项已指派给此成员", null);
   }

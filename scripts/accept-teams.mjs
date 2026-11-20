@@ -21,7 +21,10 @@ try {
   await page.goto(`${BASE}/login`); await page.waitForTimeout(600);
   await page.evaluate(async () => { await fetch("/api/v1/auth/login", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: "demo", password: "demo-password-12345" }) }); });
   await page.goto(`${BASE}/members`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2600);
+  await page.getByRole("tab", { name: "团队", exact: true }).click();
   check("成员页出现「团队」面板", (await page.getByText("团队", { exact: true }).count()) > 0);
+
+  await page.getByRole("tab", { name: "团队", exact: true }).click();
 
   // 建根团队
   await page.getByRole("button", { name: "新建团队", exact: true }).click();
@@ -54,11 +57,11 @@ try {
 
   // 删除子团队 → 根团队
   await page.locator(`.team-row[data-team-name="${RENAMED}"]`).getByRole("button", { name: "删除", exact: true }).click();
-  await page.locator(`.team-row[data-team-name="${RENAMED}"]`).getByRole("button", { name: "确认删除" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "确认", exact: true }).click();
   await page.waitForTimeout(1100);
   check("子团队已删除", (await page.getByText(RENAMED, { exact: true }).count()) === 0);
   await page.locator(`.team-row[data-team-name="${ROOT}"]`).getByRole("button", { name: "删除", exact: true }).click();
-  await page.locator(`.team-row[data-team-name="${ROOT}"]`).getByRole("button", { name: "确认删除" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "确认", exact: true }).click();
   await page.waitForTimeout(1100);
   check("根团队已删除", (await page.getByText(ROOT, { exact: true }).count()) === 0);
   check("真实库无残留", (await sql`select count(*)::int as n from team where name like ${"验收团队 %" + stamp}`)[0].n === 0

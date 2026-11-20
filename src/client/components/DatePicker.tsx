@@ -198,7 +198,7 @@ export function DatePicker({
             })}
           </div>
         </div>
-      ), triggerRef.current?.closest(".ui-drawer-scrim")?.querySelector(".ui-drawer-popovers") ?? document.body)}
+      ), triggerRef.current?.closest(".ui-drawer-scrim")?.querySelector(".ui-drawer-popovers") ?? triggerRef.current?.closest(".ui-modal-scrim, .modal-scrim") ?? document.body)}
     </div>
   );
 

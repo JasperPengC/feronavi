@@ -7,6 +7,8 @@
  *   · activity 的 summary 是**预渲染文案**（前端不拼装，见 audit.service 注释）。
  */
 import type { Actor } from "../permission/actor.ts";
+import { businessInvalidation, type ResourceInvalidation } from "../../shared/resource-events.ts";
+import { publish } from "./events.service.ts";
 
 export interface BusinessEventInput {
   actor: Actor;
@@ -19,9 +21,13 @@ export interface BusinessEventInput {
   summary?: string;
   changes?: unknown;
   severity?: "SECURITY" | "BUSINESS";
+  /** 附件等子资源使用其受权限保护的父资源作为缓存定位。 */
+  invalidation?: Pick<ResourceInvalidation, "domain" | "resourceType" | "resourceId">;
 }
 
 export async function recordBusinessEvent(input: BusinessEventInput): Promise<void> {
+  const invalidation = businessInvalidation(input);
+  if (invalidation) await publish("resource.invalidated", { ...invalidation }, null, invalidation).catch(() => {});
   try {
     const { writeAudit, writeActivity } = await import("./audit.service.ts");
     await writeAudit({

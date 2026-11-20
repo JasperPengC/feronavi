@@ -12,6 +12,7 @@ import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
 import { writeAudit } from "./audit.service.ts";
+import { publishWorkspaceInvalidation } from "./workspace-events.service.ts";
 
 function ctxOf(actor: Actor): PermissionContext {
   return { memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId };
@@ -52,6 +53,7 @@ export async function createDepartment(actor: Actor, input: { name: string; pare
   const [max] = await db.select({ n: sql<number>`coalesce(max(sort_order), 0)::int` }).from(department);
   const [row] = await db.insert(department).values({ name, parentId, sortOrder: Number(max?.n ?? 0) + 10 }).returning();
   await writeAudit({ actorId: actor.memberId, action: "department.created", targetType: "DEPARTMENT", targetId: row!.id, changes: { name, parentId }, severity: "BUSINESS" });
+  await publishWorkspaceInvalidation({ domain: "directory", resourceType: "DEPARTMENT", resourceId: row!.id });
   return row;
 }
 
@@ -90,6 +92,7 @@ export async function updateDepartment(actor: Actor, id: string, input: { name?:
     name, parentId, sortOrder: input.sortOrder ?? cur.sortOrder,
   }).where(eq(department.id, id)).returning();
   await writeAudit({ actorId: actor.memberId, action: "department.updated", targetType: "DEPARTMENT", targetId: id, changes: { name, parentId }, severity: "BUSINESS" });
+  await publishWorkspaceInvalidation({ domain: "directory", resourceType: "DEPARTMENT", resourceId: id });
   return row;
 }
 
@@ -103,6 +106,7 @@ export async function archiveDepartment(actor: Actor, id: string) {
   await db.update(member).set({ departmentId: null, updatedAt: new Date() }).where(eq(member.departmentId, id));
   await db.update(department).set({ archivedAt: new Date() }).where(eq(department.id, id));
   await writeAudit({ actorId: actor.memberId, action: "department.archived", targetType: "DEPARTMENT", targetId: id, severity: "BUSINESS" });
+  await publishWorkspaceInvalidation({ domain: "directory", resourceType: "DEPARTMENT", resourceId: id });
 }
 
 export async function listPositions() {
@@ -134,6 +138,7 @@ export async function createPosition(actor: Actor, input: { name: string; code?:
     name, code: clean(input.code), departmentId, description: clean(input.description),
   }).returning();
   await writeAudit({ actorId: actor.memberId, action: "position.created", targetType: "POSITION", targetId: row!.id, changes: { name }, severity: "BUSINESS" });
+  await publishWorkspaceInvalidation({ domain: "directory", resourceType: "POSITION", resourceId: row!.id });
   return row;
 }
 
@@ -155,6 +160,7 @@ export async function updatePosition(actor: Actor, id: string, input: { name?: s
     sortOrder: input.sortOrder ?? cur.sortOrder,
   }).where(eq(position.id, id)).returning();
   await writeAudit({ actorId: actor.memberId, action: "position.updated", targetType: "POSITION", targetId: id, changes: { name, departmentId }, severity: "BUSINESS" });
+  await publishWorkspaceInvalidation({ domain: "directory", resourceType: "POSITION", resourceId: id });
   return row;
 }
 
@@ -165,10 +171,12 @@ export async function archivePosition(actor: Actor, id: string) {
   await db.update(member).set({ positionId: null, updatedAt: new Date() }).where(eq(member.positionId, id));
   await db.update(position).set({ archivedAt: new Date() }).where(eq(position.id, id));
   await writeAudit({ actorId: actor.memberId, action: "position.archived", targetType: "POSITION", targetId: id, severity: "BUSINESS" });
+  await publishWorkspaceInvalidation({ domain: "directory", resourceType: "POSITION", resourceId: id });
 }
 
 export async function assignMemberOrganization(actor: Actor, memberId: string, input: { departmentId?: string | null; positionId?: string | null }) {
   assertManage(actor);
+  if (input.departmentId === undefined && input.positionId === undefined) throw new DomainError("VALIDATION", "请至少修改一项", null);
   const [m] = await db.select({ id: member.id }).from(member)
     .where(and(eq(member.id, memberId), isNull(member.anonymizedAt))).limit(1);
   if (!m) throw new DomainError("FORBIDDEN", "无权访问该资源", null);
@@ -190,6 +198,7 @@ export async function assignMemberOrganization(actor: Actor, memberId: string, i
     updatedAt: new Date(),
   }).where(eq(member.id, memberId)).returning({ id: member.id, departmentId: member.departmentId, positionId: member.positionId });
   await writeAudit({ actorId: actor.memberId, action: "member.organization_updated", targetType: "MEMBER", targetId: memberId, changes: { departmentId, positionId }, severity: "BUSINESS" });
+  await publishWorkspaceInvalidation({ domain: "directory", resourceType: "MEMBER", resourceId: memberId });
   return row;
 }
 
@@ -260,6 +269,7 @@ export async function applyOrganizationTemplate(actor: Actor, kind: OrgKind) {
       deptCreated += 1;
       byNameParent.set(key, id);
       createdByPath.set(d.name, id);
+      await publishWorkspaceInvalidation({ domain: "directory", resourceType: "DEPARTMENT", resourceId: id });
     }
     // 父部门已存在时也必须继续补齐它的子部门，否则模板只会长一半
     for (const child of d.children ?? []) await insertDept(child, id);
@@ -275,10 +285,12 @@ export async function applyOrganizationTemplate(actor: Actor, kind: OrgKind) {
       // 旧模板曾创建过岗位但没挂部门：补齐关联，不覆盖管理员后来手工调整过的归属
       if (existing.departmentId === null && deptId) {
         await db.update(position).set({ departmentId: deptId }).where(eq(position.id, existing.id));
+        await publishWorkspaceInvalidation({ domain: "directory", resourceType: "POSITION", resourceId: existing.id });
       }
       continue;
     }
-    await db.insert(position).values({ name: p.name, departmentId: deptId });
+    const [created] = await db.insert(position).values({ name: p.name, departmentId: deptId }).returning({ id: position.id });
+    await publishWorkspaceInvalidation({ domain: "directory", resourceType: "POSITION", resourceId: created!.id });
   }
   await writeAudit({ actorId: actor.memberId, action: "organization.template_applied", targetType: "ORGANIZATION", targetId: null, changes: { kind }, severity: "BUSINESS" });
   return { ok: true, kind, departmentsCreated: deptCreated, departmentCount: existingDepts.length + deptCreated };

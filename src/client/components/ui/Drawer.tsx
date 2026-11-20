@@ -1,27 +1,11 @@
-import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 import { Icon } from "../Icon.tsx";
 import { t } from "../../i18n/index.ts";
+import { Button } from "./Button.tsx";
 
-const DrawerDepth = createContext(0);
-const activeDrawers = new Map<string, { depth: number; scrim: HTMLElement }>();
-const backgroundInert = new Map<HTMLElement, boolean>();
-let bodyOverflow = "";
-let backgroundObserver: MutationObserver | undefined;
-
-function topDrawer() {
-  return [...activeDrawers].sort((a, b) => a[1].depth - b[1].depth).at(-1);
-}
-
-function syncDrawerBackground() {
-  const top = topDrawer()?.[1].scrim;
-  for (const child of document.body.children) {
-    if (!(child instanceof HTMLElement) || child.matches("script, style, .modal-scrim")) continue;
-    if (!backgroundInert.has(child)) backgroundInert.set(child, child.hasAttribute("inert"));
-    child.toggleAttribute("inert", child === top ? backgroundInert.get(child)! : true);
-  }
-}
+import { OverlayDepth, isTopOverlay, registerOverlay } from "./overlay-stack.ts";
 
 /**
  * 抽屉基元。
@@ -49,7 +33,7 @@ export function Drawer({
   footer?: ReactNode;
   className?: string;
 }) {
-  const depth = useContext(DrawerDepth);
+  const depth = useContext(OverlayDepth);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const scrimRef = useRef<HTMLDivElement | null>(null);
@@ -93,15 +77,8 @@ export function Drawer({
 
   useLayoutEffect(() => {
     if (!visible || !scrimRef.current) return;
-    if (activeDrawers.size === 0) {
-      bodyOverflow = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
-      backgroundObserver = new MutationObserver(syncDrawerBackground);
-      backgroundObserver.observe(document.body, { childList: true });
-    }
-    activeDrawers.set(titleId, { depth, scrim: scrimRef.current });
-    syncDrawerBackground();
-    const isTop = () => topDrawer()?.[0] === titleId;
+    const unregister = registerOverlay(titleId, depth, scrimRef.current);
+    const isTop = () => isTopOverlay(titleId);
     if (isTop() && !panelRef.current?.contains(document.activeElement)) closeRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || !isTop() || document.querySelector(".modal-scrim")) return;
@@ -129,7 +106,7 @@ export function Drawer({
     const onFocusIn = (event: FocusEvent) => {
       const target = event.target as HTMLElement;
       // 新抽屉子项的 autoFocus 先于父级 layout effect，允许焦点进入刚挂载的上层。
-      if (target.closest(".ui-drawer-scrim, .modal-scrim")) return;
+      if (target.closest(".ui-drawer-scrim, .ui-modal-scrim, .modal-scrim")) return;
       if (isTop() && openRef.current && !document.querySelector(".modal-scrim")) closeRef.current?.focus();
     };
     document.addEventListener("keydown", onKeyDown);
@@ -137,14 +114,7 @@ export function Drawer({
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("focusin", onFocusIn);
-      activeDrawers.delete(titleId);
-      if (activeDrawers.size === 0) {
-        backgroundObserver?.disconnect();
-        backgroundObserver = undefined;
-        for (const [element, wasInert] of backgroundInert) element.toggleAttribute("inert", wasInert);
-        backgroundInert.clear();
-        document.body.style.overflow = bodyOverflow;
-      } else syncDrawerBackground();
+      unregister();
       if (previousFocus.current?.isConnected) previousFocus.current.focus();
       previousFocus.current = null;
     };
@@ -168,14 +138,14 @@ export function Drawer({
         }}>
         <header className="ui-drawer-header">
           <h2 id={titleId}>{content.title}</h2>
-          <button ref={closeRef} type="button" className="ui-button ui-button-ghost ui-button-md ui-button-icon" aria-label={t("common.close")} onClick={onClose}>
+          <Button ref={closeRef} variant="ghost" iconOnly aria-label={t("common.close")} onClick={onClose}>
             <Icon name="x" />
-          </button>
+          </Button>
         </header>
-        <DrawerDepth.Provider value={depth + 1}>
+        <OverlayDepth.Provider value={depth + 1}>
           <div className="ui-drawer-body">{content.children}</div>
           {content.footer && <footer className="ui-drawer-footer">{content.footer}</footer>}
-        </DrawerDepth.Provider>
+        </OverlayDepth.Provider>
       </aside>
       <div className="ui-drawer-popovers" hidden={!open} inert={!open} />
     </div>, document.body,

@@ -33,27 +33,37 @@ try {
   check("真实创建两条缺陷（一条指派 demo、一条关注）", ids.length === 3 && !!ids[0] && !!ids[1]);
 
   await page.goto(`${BASE}/issues`, { waitUntil: "domcontentloaded" });
-  await page.getByText("近 14 天缺陷趋势", { exact: true }).waitFor({ timeout: 15_000 });
-  check("个人快捷筛选按钮齐全", (await page.getByRole("button", { name: "指派给我", exact: true }).count()) === 1
-    && (await page.getByRole("button", { name: "我登记", exact: true }).count()) === 1
-    && (await page.getByRole("button", { name: "我关注的", exact: true }).count()) === 1
-    && (await page.getByRole("button", { name: "我协作的", exact: true }).count()) === 1);
-  check("表格含类型与登记人列", (await page.locator("table thead").innerText()).includes("类型") && (await page.locator("table thead").innerText()).includes("登记人"));
+  await page.locator(".issues-item-open").filter({ hasText: A }).waitFor({ timeout: 15_000 });
+  await page.getByRole("button", { name: "筛选", exact: true }).click();
+  const quick = page.getByRole("button", { name: "个人快捷筛选", exact: true });
+  await quick.click();
+  check("个人快捷筛选选项齐全", await page.getByRole("option", { name: "指派给我", exact: true }).count() === 1
+    && await page.getByRole("option", { name: "我登记", exact: true }).count() === 1
+    && await page.getByRole("option", { name: "我关注的", exact: true }).count() === 1
+    && await page.getByRole("option", { name: "我协作的", exact: true }).count() === 1);
+  check("问题标题附带类型且表格含登记人列", (await page.locator(".issues-item-open").filter({ hasText: A }).innerText()).includes("缺陷")
+    && (await page.locator("table thead").innerText()).includes("登记人"));
 
-  await page.getByRole("button", { name: "指派给我", exact: true }).click();
+  await page.getByRole("option", { name: "指派给我", exact: true }).click();
   await page.waitForTimeout(900);
   const assignedText = await page.locator("table tbody").innerText();
   check("指派给我筛选只显示我的缺陷", assignedText.includes("筛选甲") && !assignedText.includes("筛选乙"), assignedText.slice(0, 80));
-  await page.getByRole("button", { name: "我关注的", exact: true }).click();
+  await quick.click();
+  await page.getByRole("option", { name: "我关注的", exact: true }).click();
   await page.waitForTimeout(900);
-  check("我关注的筛选命中关注项", (await page.locator("table tbody").innerText()).includes("筛选乙"));
-  await page.getByRole("button", { name: "我登记", exact: true }).click();
+  const watchingText = await page.locator("table tbody").innerText();
+  check("我关注的筛选只命中关注项", watchingText.includes(B) && !watchingText.includes(A));
+  await quick.click();
+  await page.getByRole("option", { name: "我登记", exact: true }).click();
   await page.waitForTimeout(900);
   check("我登记筛选命中本人登记", (await page.locator("table tbody").innerText()).includes("筛选甲") && (await page.locator("table tbody").innerText()).includes("筛选乙"));
-  await page.getByRole("button", { name: "全部", exact: true }).first().click();
+  await quick.click();
+  await page.getByRole("option", { name: "不限", exact: true }).click();
   await page.waitForTimeout(600);
-  await page.locator('[aria-label="排序"]').click();
-  check("排序下拉含最新/最早/严重度/到期", (await page.getByRole("option", { name: "严重度", exact: true }).count()) === 1 && (await page.getByRole("option", { name: "到期日", exact: true }).count()) === 1);
+  await page.getByRole("button", { name: "排序", exact: true }).click();
+  check("排序下拉含最新/最早/严重度/到期", await page.getByRole("option", { name: "最新登记", exact: true }).count() === 1
+    && await page.getByRole("option", { name: "最早登记", exact: true }).count() === 1
+    && await page.getByRole("option", { name: "严重度", exact: true }).count() === 1 && await page.getByRole("option", { name: "到期日", exact: true }).count() === 1);
   await page.getByRole("option", { name: "严重度", exact: true }).click();
   await page.waitForTimeout(800);
   check("按严重度排序后 S1 行在前", (await page.locator("table tbody tr").first().innerText()).includes("S1"), (await page.locator("table tbody tr").first().innerText()).slice(0, 60));

@@ -4,13 +4,11 @@ import "../plugins-types.ts";
 import { z } from "zod";
 import { DomainError } from "../../shared/errors.ts";
 import {
-  createProjectSchema, updateProjectSchema, transitionProjectStatusSchema, listProjectsQuerySchema,
+  createProjectSchema, listProjectsQuerySchema,
 } from "../../shared/schemas/project.ts";
 import * as projectService from "../services/project.service.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 import type { Actor } from "../permission/actor.ts";
-import { can, type PermissionContext } from "../permission/engine.ts";
-import { recordBusinessEvent } from "../services/event-log.ts";
 
 declare module "fastify" {
   interface FastifyRequest { actor?: Actor }
@@ -21,12 +19,6 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
     if (!req.actor) throw new DomainError("FORBIDDEN", "未登录或会话已失效", null);
     return req.actor;
   };
-  // 项目级动作走 scope-aware 判定（Round 75：不再直接用权限并集）
-  const canProject = (actor: Actor, action: string, projectId: string): boolean => {
-    const ctx: PermissionContext = { memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId };
-    return can(actor, action, { projectId, teamId: null }, ctx);
-  };
-
   // ── 列表（按数据范围过滤）──────────────────────────────────
   app.get("/api/v1/projects", async (req) => {
     const actor = actorOf(req);
@@ -113,21 +105,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
   app.patch("/api/v1/projects/:id", { onRequest: app.csrfProtection }, async (req) => {
     const actor = actorOf(req);
     const { id } = req.params as { id: string };
-    // strict() 让传 key 的请求直接 400，而不是被静默忽略
-    const parsed = updateProjectSchema.safeParse(req.body);
-    if (!parsed.success) throw new DomainError("VALIDATION", "参数不合法（项目标识创建后不可修改）", parsed.error.issues);
-
-    const visible = await projectRepo.isVisibleTo(actor.memberId, id, actor.grants.some((g) => g.scopeType === "ORG"));
-    if (!visible) throw new DomainError("FORBIDDEN", "无权访问该资源", null);
-    if (!canProject(actor, "project:update", id)) throw new DomainError("FORBIDDEN", "无权访问该资源", null);
-    await projectService.assertDepartmentActive(parsed.data.departmentId);
-
-    const row = await projectRepo.update(id, parsed.data);
-    if (!row) throw new DomainError("FORBIDDEN", "无权访问该资源", null);
-    await recordBusinessEvent({
-      actor, action: "project.updated", targetType: "PROJECT", targetId: id, projectId: id,
-      summary: `${actor.name} 更新了项目「${row.name}」`,
-    });
+    await projectService.updateProject(actor, id, req.body);
     return { ok: true };
   });
 
@@ -136,16 +114,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
     app.post(`/api/v1/projects/:id/${path}`, { onRequest: app.csrfProtection }, async (req) => {
       const actor = actorOf(req);
       const { id } = req.params as { id: string };
-      const visible = await projectRepo.isVisibleTo(actor.memberId, id, actor.grants.some((g) => g.scopeType === "ORG"));
-      if (!visible) throw new DomainError("FORBIDDEN", "无权访问该资源", null);
-      if (!canProject(actor, "project:archive", id)) throw new DomainError("FORBIDDEN", "无权访问该资源", null);
-      const row = await projectRepo.setArchived(id, flag);
-      if (!row) throw new DomainError("FORBIDDEN", "无权访问该资源", null);
-      await recordBusinessEvent({
-        actor, action: flag ? "project.archived" : "project.unarchived",
-        targetType: "PROJECT", targetId: id, projectId: id,
-        summary: `${actor.name} ${flag ? "归档" : "取消归档"}了项目「${row.name}」`,
-      });
+      await projectService.setArchived(actor, id, flag);
       return { ok: true };
     });
   }
@@ -160,31 +129,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
   app.post("/api/v1/projects/:id/status", { onRequest: app.csrfProtection }, async (req) => {
     const actor = actorOf(req);
     const { id } = req.params as { id: string };
-    if (!canProject(actor, "project:manage_status", id)) throw new DomainError("FORBIDDEN", "无权访问该资源", null);
-    const parsed = transitionProjectStatusSchema.safeParse(req.body);
-    if (!parsed.success) throw new DomainError("VALIDATION", "参数不合法", parsed.error.issues);
-
-    const p = await projectRepo.findById(id);
-    if (!p) throw new DomainError("FORBIDDEN", "无权访问该资源", null);
-    const target = await projectRepo.findStatusByKey(parsed.data.statusKey);
-    if (!target) throw new DomainError("VALIDATION", `未知的项目状态「${parsed.data.statusKey}」`, null);
-
-    // 数据模型 2.2 的流转规则：按 category 机械推导
-    const cur = p.statusId ? (await projectRepo.listStatusDefs()).find((s) => s.id === p.statusId) : null;
-    const from = cur?.category ?? "NOT_STARTED";
-    const allowed =
-      from === "NOT_STARTED" ? (target.category === "IN_PROGRESS" || target.key === "CANCELLED")
-      : from === "IN_PROGRESS" ? target.category !== "NOT_STARTED"
-      : /* TERMINAL */ target.category === "IN_PROGRESS";
-    if (!allowed) {
-      throw new DomainError("VALIDATION", `不允许从「${cur?.name ?? "未开始"}」流转到「${target.name}」`, null);
-    }
-
-    await projectRepo.setStatus(id, target.id);
-    await recordBusinessEvent({
-      actor, action: "project.status_changed", targetType: "PROJECT", targetId: id, projectId: id,
-      summary: `${actor.name} 把项目「${p.name}」状态改为「${target.name}」`,
-    });
+    await projectService.transitionProjectStatus(actor, id, req.body);
     return { ok: true };
   });
 }

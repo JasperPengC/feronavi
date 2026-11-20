@@ -13,6 +13,7 @@ import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 import { writeSecurityAudit } from "./audit.service.ts";
+import { publishWorkspaceInvalidation } from "./workspace-events.service.ts";
 
 function hasOrg(actor: Actor): boolean {
   return actor.grants.some((g) => g.scopeType === "ORG");
@@ -61,6 +62,7 @@ export async function createPortfolio(actor: Actor, input: { name: string }) {
     actorId: actor.memberId, actorSnapshot: actor.username,
     action: "portfolio.created", targetType: "PORTFOLIO", targetId: row!.id,
   });
+  await publishWorkspaceInvalidation({ domain: "portfolio", resourceType: "PORTFOLIO", resourceId: row!.id });
   return { ...row!, projectCount: 0, workItemCount: 0 };
 }
 
@@ -94,6 +96,7 @@ export async function updatePortfolio(actor: Actor, id: string, patch: { name?: 
     actorId: actor.memberId, actorSnapshot: actor.username,
     action: "portfolio.updated", targetType: "PORTFOLIO", targetId: id,
   });
+  await publishWorkspaceInvalidation({ domain: "portfolio", resourceType: "PORTFOLIO", resourceId: id });
   return row;
 }
 
@@ -105,6 +108,7 @@ export async function deletePortfolio(actor: Actor, id: string): Promise<void> {
     actorId: actor.memberId, actorSnapshot: actor.username,
     action: "portfolio.deleted", targetType: "PORTFOLIO", targetId: id,
   });
+  await publishWorkspaceInvalidation({ domain: "portfolio", resourceType: "PORTFOLIO", resourceId: id });
 }
 
 export async function addProject(actor: Actor, portfolioId: string, projectId: string) {
@@ -117,6 +121,7 @@ export async function addProject(actor: Actor, portfolioId: string, projectId: s
     action: "portfolio.project_added", targetType: "PORTFOLIO", targetId: portfolioId,
     changes: { projectId },
   });
+  await publishWorkspaceInvalidation({ domain: "portfolio", resourceType: "PORTFOLIO", resourceId: portfolioId });
   return { ok: true };
 }
 
@@ -131,6 +136,7 @@ export async function removeProject(actor: Actor, portfolioId: string, projectId
     action: "portfolio.project_removed", targetType: "PORTFOLIO", targetId: portfolioId,
     changes: { projectId },
   });
+  await publishWorkspaceInvalidation({ domain: "portfolio", resourceType: "PORTFOLIO", resourceId: portfolioId });
   return { ok: true };
 }
 

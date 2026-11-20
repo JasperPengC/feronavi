@@ -30,9 +30,10 @@ export type IconName =
   | "grid" | "arrow" | "command" | "filter" | "more" | "clock" | "file" | "sliders" | "spark" | "system"
   | "flag" | "table" | "timeline" | "chart" | "workflow" | "inbox" | "info" | "package"
   | "refresh" | "trash" | "archive" | "upload" | "download" | "pencil" | "send" | "link"
-  | "activity" | "audit";
+  | "activity" | "audit" | "copy";
 
 const PATHS: Record<IconName, React.ReactNode> = {
+  copy: <><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></>,
   search: <><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.6-3.6" /></>,
   bell: <><path d="M6 9a6 6 0 1 1 12 0c0 4 1.5 5 1.5 5H4.5S6 13 6 9z" /><path d="M10 20a2 2 0 0 0 4 0" /></>,
   sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19" /></>,
@@ -110,6 +111,7 @@ export const ICON_NAMES = Object.keys(PATHS) as IconName[];
  * 数值由真实浏览器 getBBox 量测后生成（scripts 审计脚本），不是手估。
  */
 const NORM: Record<IconName, { s: number; tx: number; ty: number }> = {
+  "copy": { s: 1.0000, tx: 0.0000, ty: 0.0000 },
   "search": { s: 1.1250, tx: -1.5000, ty: -1.5000 },
   "bell": { s: 0.9474, tx: 0.6316, ty: 0.1579 },
   "sun": { s: 0.9000, tx: 1.2000, ty: 1.2000 },

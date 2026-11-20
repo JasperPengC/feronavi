@@ -24,6 +24,7 @@ try {
   await pageA.goto(`${BASE}/login`); await pageA.waitForTimeout(600);
   await pageA.evaluate(async () => { await fetch("/api/v1/auth/login", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: "demo", password: "demo-password-12345" }) }); });
   await pageA.goto(`${BASE}/members`, { waitUntil: "domcontentloaded" }); await pageA.waitForTimeout(2600);
+  await pageA.getByRole("tab", { name: "邀请", exact: true }).click();
   await pageA.getByRole("button", { name: "邀请成员", exact: true }).click();
   await pageA.getByLabel("受邀人邮箱").fill(EMAIL);
   await pageA.getByRole("button", { name: "生成邀请链接" }).click();
@@ -54,12 +55,25 @@ try {
   await pageB.getByLabel("密码").fill(PW);
   await pageB.getByRole("button", { name: "登录", exact: true }).click();
   await pageB.waitForTimeout(2600);
-  check("受邀成员用新账号登录成功", pageB.url().includes("/projects") && (await pageB.getByText("项目全景").count()) > 0, pageB.url());
+  await pageB.locator(".shell-header").waitFor();
+  const signedIn = await pageB.evaluate(async () => {
+    const response = await fetch("/api/v1/auth/me");
+    return { status: response.status, actor: await response.json() };
+  });
+  check("受邀成员用新账号登录成功", signedIn.status === 200 && signedIn.actor.memberId === memberId && signedIn.actor.username === U && new URL(pageB.url()).pathname === "/projects", pageB.url());
+  await pageB.goto(link, { waitUntil: "domcontentloaded" });
+  await pageB.getByRole("alert").waitFor();
+  check("已使用邀请链接不可重复接受", (await pageB.getByRole("alert").innerText()).includes("邀请链接无效或已过期")
+    && await pageB.getByRole("button", { name: "接受邀请", exact: true }).count() === 0);
   await ctxB.close();
 
   await pageA.reload({ waitUntil: "domcontentloaded" }); await pageA.waitForTimeout(2400);
-  check("成员目录出现受邀成员", (await pageA.getByText(NAME).count()) > 0);
-  check("邀请台账标记为已使用", (await pageA.getByText("已使用").count()) > 0);
+  const memberRow = pageA.locator(".members-table tbody tr").filter({ hasText: EMAIL });
+  check("成员目录出现受邀成员", await memberRow.count() === 1 && (await memberRow.innerText()).includes(NAME));
+  await pageA.getByRole("tab", { name: "邀请", exact: true }).click();
+  const invitation = pageA.locator(".invite-list li").filter({ hasText: EMAIL });
+  await invitation.waitFor();
+  check("对应邀请台账标记为已使用", (await invitation.innerText()).includes("已使用"));
   await pageA.screenshot({ path: "/tmp/invites.png" });
 } finally {
   try {

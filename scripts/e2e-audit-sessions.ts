@@ -15,6 +15,10 @@ import { loadActor } from "../src/server/auth/actor-loader.ts";
 import * as totpLib from "../src/server/lib/totp.ts";
 import * as tfa from "../src/server/services/two-factor.service.ts";
 import { eq } from "drizzle-orm";
+import { startIsolatedRedis } from "../tests/support/isolated-special.ts";
+
+const cache = await startIsolatedRedis(process.env.FERONAVI_TEST_DIRECTORY!);
+process.env.REDIS_URL = cache.url;
 
 const BASE = process.env.BASE ?? "http://127.0.0.1:3999";
 const ADMIN = "ses-admin";
@@ -134,6 +138,7 @@ try {
   await db.delete(auditEntry);
   for (const u of [ADMIN, RESET_USER, ANON_USER, TFA_USER, LOCK_USER]) await deleteTestMember(u);
   await sql.end();
+  await cache.stop();
 }
 
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);

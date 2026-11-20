@@ -17,8 +17,10 @@ const page = await ctx.newPage();
 try {
   await page.goto(`${BASE}/login`); await page.waitForTimeout(600);
   await page.evaluate(async () => { await fetch("/api/v1/auth/login", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: "demo", password: "demo-password-12345" }) }); });
-  await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2600);
+  await page.goto(`${BASE}/settings/instance`, { waitUntil: "domcontentloaded" });
+  await page.getByRole("tab", { name: "数据留存", exact: true }).click();
   const field = page.getByLabel("导出包保留期（小时）");
+  await field.waitFor();
   check("设置页出现「导出包保留期（小时）」", (await field.count()) === 1);
   await field.fill("48");
   await page.getByRole("button", { name: "保存留存期" }).click();
@@ -28,6 +30,7 @@ try {
   check("真实库写入 48", Number(saved?.value) === 48, JSON.stringify(saved));
 
   await page.goto(`${BASE}/system`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2400);
+  await page.getByRole("tab", { name: "运维", exact: true }).click();
   const body = await page.locator("body").innerText();
   check("系统页运维状态显示导出包 48h", /导出包\s*48h/.test(body), (body.match(/日志保留期[^\n]*/) ?? [""])[0]);
   await page.screenshot({ path: "/tmp/export-retention.png" });

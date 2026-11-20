@@ -12,7 +12,7 @@ import { idpConfig, member, role, roleAssignment } from "../../db/schema.ts";
 import { DomainError, forbidden } from "../../shared/errors.ts";
 import { decryptSecret } from "./crypto.service.ts";
 import { writeSecurityAudit } from "./audit.service.ts";
-import { clearLoginFailures, isLockedOut, recordLoginFailure } from "../auth/login-guard.ts";
+import { clearLoginFailures, consumeLoginAttempt, isLockedOut, recordLoginFailure } from "../auth/login-guard.ts";
 import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
 
@@ -174,7 +174,8 @@ export async function loginLdap(
 ): Promise<LdapLoginResult> {
   const username = input.username.trim().slice(0, 200);
   if (!username || !input.password) throw new DomainError("FORBIDDEN", "用户名或密码错误", null);
-  if (await isLockedOut(username, ctx.ip)) throw new DomainError("RATE_LIMITED", "尝试次数过多，请 10 分钟后再试", null);
+  const attemptAllowed = await consumeLoginAttempt(username, ctx.ip);
+  if (!attemptAllowed || await isLockedOut(username, ctx.ip)) throw new DomainError("RATE_LIMITED", "登录尝试过于频繁，请稍后重试", null);
 
   const row = (await db.select().from(idpConfig).where(and(eq(idpConfig.id, input.idpId), eq(idpConfig.kind, "LDAP"))).limit(1))[0];
   if (!row || !row.enabled) throw new DomainError("FORBIDDEN", "LDAP 登录未启用", null);

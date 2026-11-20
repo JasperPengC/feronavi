@@ -1,4 +1,4 @@
-/** Export the public source tree, excluding internal process material and credentials. */
+/** Export the current reviewed source tree, excluding local data, evidence media and credentials. */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -19,7 +19,7 @@ const publicFiles = new Set([
     'workbench-dark', 'project-overview', 'board', 'wiki-dark', 'insights', 'login', 'settings', 'timeline', 'projects', 'workbench-light', 'wiki-light', 'assistant',
   ][index]}.png`),
 ]);
-const sourceDirectory = /^(src|tests|scripts|drizzle|docker|public|packages)\//;
+const sourceDirectory = /^(src|tests|scripts|drizzle|docker|public|packages|patches)\//;
 const excluded = /(?:^|\/)(?:\.cache|\.git|node_modules|dist(?:-server)?|data|logs|\.claude|\.codex|\.agents)(?:\/|$)|(?:^|\/)\.env(?:\.|$)|(?:^|\/)(?:AGENTS|AGENT_RULES|CLAUDE|CONTRIBUTING|CLA)\.md$/;
 const credentialPath = /(?:^|\/)secrets(?:\/|$)|\.(?:pem|key)$/i;
 const names = [...new Set(execFileSync('git', ['ls-files', '-c', '-o', '--exclude-standard', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean))]
@@ -27,6 +27,23 @@ const names = [...new Set(execFileSync('git', ['ls-files', '-c', '-o', '--exclud
   .filter(name => !excluded.test(name) || name === '.env.example')
   .filter(name => !credentialPath.test(name))
   .sort();
+// 公开快照也必须包含完整产品入口，避免只导出了旧提交而遗失工作树中的既有功能。
+if (names.includes('src/server/app.ts')) {
+  const requiredProductFiles = [
+    'src/client/routes/AssistantPage.tsx', 'src/client/components/assistant/ConversationList.tsx',
+    'src/client/components/ui/MermaidDiagram.tsx', 'src/server/routes/rag.ts',
+    'src/server/routes/rag-conversations.ts', 'src/server/services/rag-conversation.service.ts',
+    'src/server/application/capabilities/tools.ts', 'src/server/services/assistant-tools.ts',
+    'src/server/services/collab-document.service.ts', 'src/server/services/system-backup/registry.ts',
+    'src/server/routes/system-backups.ts', 'drizzle/meta/_journal.json',
+    'docker/db/Dockerfile', 'docker/db/NOTICE.alpine', 'docker/db/libxml2/APKBUILD',
+    'docker/db/libxml2/security-backports.json', 'patches/postgres@3.4.9.patch',
+    'public/THIRD_PARTY_NOTICES.txt', 'public/licenses/shadcn-ui-LICENSE.txt',
+    'src/db/migrate-cli.ts', 'scripts/build-tools/mermaid-parser-grammars.ts',
+  ];
+  const missing = requiredProductFiles.filter(name => !names.includes(name));
+  if (missing.length) throw new Error(`Incomplete product source: ${missing.join(', ')}`);
+}
 const manifest = [];
 for (const name of names) {
   const stat = lstatSync(name);

@@ -7,11 +7,12 @@
  * 纪律：clientSecret **永不回显**（接口只给 hasSecret），编辑时留空=不修改；
  * issuer 由后端统一 SSRF 校验，失败原因透传。
  */
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, ApiError } from "../../lib/api.ts";
 import { t, useLocale } from "../../i18n/index.ts";
 import { Button } from "../ui/Button.tsx";
+import { Modal } from "../ui/Modal.tsx";
 import { TextInput } from "../ui/TextInput.tsx";
 import { Select } from "../Select.tsx";
 import { SettingsListState, SettingsSection } from "./SettingsSection.tsx";
@@ -44,7 +45,7 @@ const EMPTY: FormState = {
 
 import { useSettingsDraft } from "./SettingsDraft.tsx";
 
-export function SsoSettings({ onSuccess, onError }: FeedbackHandlers) {
+export function SsoSettings({ onSuccess }: FeedbackHandlers) {
   useLocale();
   const qc = useQueryClient();
   const list = useQuery({
@@ -53,6 +54,9 @@ export function SsoSettings({ onSuccess, onError }: FeedbackHandlers) {
     retry: false,
   });
   const [form, setForm] = useState<FormState>(EMPTY);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const formId = useId();
   const [testMsg, setTestMsg] = useState<string | null>(null);
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((c) => ({ ...c, [k]: v }));
   // 防御：任何非预期响应（例如旧缓存/代理返回 {}）都不能让整页崩掉
@@ -74,11 +78,11 @@ export function SsoSettings({ onSuccess, onError }: FeedbackHandlers) {
       } } : {}),
     }),
     onSuccess: async () => {
-      setForm(EMPTY); draft.markSaved(EMPTY);
+      setForm(EMPTY); draft.markSaved(EMPTY); setFormOpen(false); setFormError(null);
       onSuccess(t("se.idpSaved"));
       await qc.invalidateQueries({ queryKey: ["idps"] });
     },
-    onError: (e) => onError(e instanceof ApiError ? e.message : t("se.idpFailed")),
+    onError: (e) => setFormError(e instanceof ApiError ? e.message : t("se.idpFailed")),
   });
   const testLdap = useMutation({
     mutationFn: (id: string) => apiPost<{ ok: boolean; dnCount: number }>(`/api/v1/settings/idp/${id}/test`, {}),
@@ -86,7 +90,7 @@ export function SsoSettings({ onSuccess, onError }: FeedbackHandlers) {
     onError: (e) => setTestMsg(e instanceof ApiError ? e.message : "LDAP 连接失败"),
   });
 
-  const draft = useSettingsDraft(true, form, save.isPending);
+  const draft = useSettingsDraft(formOpen, form, save.isPending);
   const startEdit = (row: IdpRow) => {
     void draft.leave(() => {
     const c = (row.config ?? {}) as Record<string, unknown>;
@@ -104,15 +108,16 @@ export function SsoSettings({ onSuccess, onError }: FeedbackHandlers) {
         defaultRoleKey: str("defaultRoleKey", "MEMBER"),
       },
     };
-    setForm(next); draft.markSaved(next);
+    setForm(next); draft.markSaved(next); setFormError(null); setFormOpen(true);
     });
   };
 
+  const requestClose = () => void draft.leave(() => { setFormOpen(false); setForm(EMPTY); setFormError(null); });
+  const canSave = !!form.issuer.trim() && !!form.clientId.trim() && (form.kind !== "LDAP" || !!form.ldap.baseDn.trim()) && !save.isPending;
+
   return (
     <SettingsSection title={t("set.sso")} description={t("se.ssoDesc")}
-      footer={<Button variant="primary" loading={save.isPending}
-        disabled={!form.issuer.trim() || !form.clientId.trim() || (form.kind === "LDAP" && !form.ldap.baseDn.trim()) || save.isPending}
-        onClick={() => save.mutate()}>{form.id ? t("se.intgSave") : t("se.idpCreate")}</Button>}>
+      actions={<Button size="sm" variant="primary" aria-haspopup="dialog" onClick={() => { setForm(EMPTY); setFormError(null); setFormOpen(true); }}>{t("se.idpCreate")}</Button>}>
       {draft.guard}
       {list.isLoading && <SettingsListState>{t("common.loading")}</SettingsListState>}
       {list.isError && <SettingsListState tone="error" action={<Button size="sm" onClick={() => void list.refetch()}>{t("common.reload")}</Button>}>{t("se.idpLoadFailed")}</SettingsListState>}
@@ -138,6 +143,14 @@ export function SsoSettings({ onSuccess, onError }: FeedbackHandlers) {
       )}
 
       {testMsg && <p className="muted" role="status" style={{ fontSize: "var(--text-xs)", margin: "0 0 10px" }}>{testMsg}</p>}
+      <Modal open={formOpen} width="lg" title={form.id ? t("se.intgEdit") : t("se.idpCreate")} onClose={requestClose}
+        footer={<>
+          <Button disabled={save.isPending} onClick={requestClose}>{t("common.cancel")}</Button>
+          <Button form={formId} type="submit" variant="primary" loading={save.isPending} disabled={!canSave}>{form.id ? t("se.intgSave") : t("se.idpCreate")}</Button>
+        </>}>
+      {formError && <p className="field-error" role="alert">{formError}</p>}
+      <form id={formId} onSubmit={event => { event.preventDefault(); if (canSave) { setFormError(null); save.mutate(); } }}>
+      <fieldset disabled={save.isPending} className="settings-form-fields">
       <div className="settings-fields settings-fields--two">
         <Select className="settings-field" label={t("se.idpKind")} ariaLabel={t("se.idpKind")} value={form.kind}
           onChange={(v) => set("kind", v as "OIDC" | "LDAP")}
@@ -180,6 +193,9 @@ export function SsoSettings({ onSuccess, onError }: FeedbackHandlers) {
         <TextInput className="settings-field settings-field--span-two" label={t("se.idpDomains")} placeholder="example.com,corp.example.com"
           value={form.allowedEmailDomains} aria-label={t("se.idpDomains")} onChange={(e) => set("allowedEmailDomains", e.target.value)} />
       </div>
+      </fieldset>
+      </form>
+      </Modal>
     </SettingsSection>
   );
 }

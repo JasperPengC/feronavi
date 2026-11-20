@@ -13,11 +13,22 @@ import { workflow, workflowState, workflowTransition, workItem } from "../../db/
 import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
+import * as projects from "../repos/project.repo.ts";
 import { recordBusinessEvent } from "./event-log.ts";
 
-function canManage(actor: Actor): void {
+function canManage(actor: Actor, projectId: string | null = null): void {
   const ctx: PermissionContext = { memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId };
-  if (!can(actor, "work_item:manage_workflow", { projectId: null, teamId: null }, ctx)) throw forbidden();
+  if (!can(actor, "work_item:manage_workflow", { projectId, teamId: null }, ctx)) throw forbidden();
+}
+
+/** 配置读写均按工作流实际项目授权；平台内置模板只允许读取。 */
+export async function getWorkflow(actor: Actor, id: string, write = false) {
+  const [row] = await db.select().from(workflow).where(eq(workflow.id, id)).limit(1);
+  if (!row) throw forbidden();
+  canManage(actor, row.projectId);
+  if (row.projectId && !await projects.isVisibleTo(actor.memberId, row.projectId, actor.grants.some(grant => grant.scopeType === "ORG"))) throw forbidden();
+  if (write && row.isBuiltin) throw new DomainError("FORBIDDEN", "内置模板只读", null);
+  return row;
 }
 
 /** 取工作流所属项目（活动归属 / 摘要用）；内置模板 projectId 为 null */
@@ -28,7 +39,8 @@ async function wfInfo(workflowId: string): Promise<{ projectId: string | null; n
 }
 
 export async function listWorkflows(actor: Actor, projectId?: string) {
-  canManage(actor);
+  canManage(actor, projectId ?? null);
+  if (projectId && !await projects.isVisibleTo(actor.memberId, projectId, actor.grants.some(grant => grant.scopeType === "ORG"))) throw forbidden();
   const where = projectId
     ? and(eq(workflow.projectId, projectId), eq(workflow.isBuiltin, false))
     : eq(workflow.isBuiltin, true);
@@ -38,7 +50,8 @@ export async function listWorkflows(actor: Actor, projectId?: string) {
 export async function createWorkflow(actor: Actor, input: {
   projectId: string; name: string; appliesToType: string;
 }) {
-  canManage(actor);
+  canManage(actor, input.projectId);
+  if (!await projects.findById(input.projectId) || !await projects.isVisibleTo(actor.memberId, input.projectId, actor.grants.some(grant => grant.scopeType === "ORG"))) throw forbidden();
   const [row] = await db.insert(workflow).values({
     projectId: input.projectId,
     name: input.name,
@@ -54,11 +67,7 @@ export async function createWorkflow(actor: Actor, input: {
 }
 
 export async function updateWorkflow(actor: Actor, id: string, patch: { name?: string; isDefault?: boolean }) {
-  canManage(actor);
-  const rows = await db.select().from(workflow).where(eq(workflow.id, id)).limit(1);
-  const row = rows[0];
-  if (!row) throw forbidden();
-  if (row.isBuiltin) throw new DomainError("FORBIDDEN", "内置模板只读", null);
+  const row = await getWorkflow(actor, id, true);
   const [updated] = await db.update(workflow).set(patch).where(eq(workflow.id, id)).returning();
   await recordBusinessEvent({
     actor, action: "workflow.updated", targetType: "WORKFLOW", targetId: id, projectId: row.projectId,
@@ -68,7 +77,7 @@ export async function updateWorkflow(actor: Actor, id: string, patch: { name?: s
 }
 
 export async function listStates(actor: Actor, workflowId: string) {
-  canManage(actor);
+  await getWorkflow(actor, workflowId);
   return db.select().from(workflowState)
     .where(and(eq(workflowState.workflowId, workflowId), sql`${workflowState.archivedAt} is null`))
     .orderBy(asc(workflowState.sortOrder));
@@ -77,7 +86,7 @@ export async function listStates(actor: Actor, workflowId: string) {
 export async function addState(actor: Actor, workflowId: string, input: {
   key: string; name: string; category: string; sortOrder?: number; wipLimit?: number | null;
 }) {
-  canManage(actor);
+  await getWorkflow(actor, workflowId, true);
   // key 唯一（同工作流内）
   const dup = await wfRepoFindStateByKey(workflowId, input.key);
   if (dup) throw new DomainError("VALIDATION", `状态 key「${input.key}」已存在`, null);
@@ -107,7 +116,7 @@ export async function addState(actor: Actor, workflowId: string, input: {
 export async function updateState(actor: Actor, workflowId: string, stateId: string, patch: {
   name?: string; sortOrder?: number; wipLimit?: number | null;
 }) {
-  canManage(actor);
+  await getWorkflow(actor, workflowId, true);
   // ⚠️ category 与 key 不可改：被引用的状态改 key 会破坏存量流转规则
   const [row] = await db.update(workflowState).set(patch)
     .where(and(eq(workflowState.id, stateId), eq(workflowState.workflowId, workflowId)))
@@ -125,7 +134,7 @@ export async function updateState(actor: Actor, workflowId: string, stateId: str
 
 /** 归档状态：被工作项引用时**拒绝**（引用中的状态消失 = 存量工作项无家可归） */
 export async function archiveState(actor: Actor, workflowId: string, stateId: string): Promise<void> {
-  canManage(actor);
+  await getWorkflow(actor, workflowId, true);
   const rows = await db.select().from(workflowState).where(eq(workflowState.id, stateId)).limit(1);
   const st = rows[0];
   if (!st || st.workflowId !== workflowId) throw forbidden();
@@ -146,7 +155,7 @@ export async function archiveState(actor: Actor, workflowId: string, stateId: st
 }
 
 export async function listTransitions(actor: Actor, workflowId: string) {
-  canManage(actor);
+  await getWorkflow(actor, workflowId);
   // 出边列表（非 N×N）
   return db.select().from(workflowTransition)
     .where(eq(workflowTransition.workflowId, workflowId));
@@ -155,7 +164,7 @@ export async function listTransitions(actor: Actor, workflowId: string) {
 export async function addTransition(actor: Actor, workflowId: string, input: {
   fromStateId: string; toStateId: string;
 }) {
-  canManage(actor);
+  await getWorkflow(actor, workflowId, true);
   if (input.fromStateId === input.toStateId) {
     throw new DomainError("VALIDATION", "迁移边的起点与终点不能相同", null);
   }
@@ -190,17 +199,20 @@ export async function addTransition(actor: Actor, workflowId: string, input: {
 export async function updateTransition(actor: Actor, workflowId: string, transitionId: string, patch: {
   requiresApproval?: boolean; approverRoleKeys?: string[];
 }) {
-  canManage(actor);
+  await getWorkflow(actor, workflowId, true);
   const [row] = await db.update(workflowTransition).set({
     ...(patch.requiresApproval !== undefined ? { requiresApproval: patch.requiresApproval } : {}),
     ...(patch.approverRoleKeys !== undefined ? { approverRoleKeys: patch.approverRoleKeys as object } : {}),
   }).where(and(eq(workflowTransition.id, transitionId), eq(workflowTransition.workflowId, workflowId))).returning();
   if (!row) throw forbidden();
+  const info = await wfInfo(workflowId);
+  await recordBusinessEvent({ actor, action: "workflow.transition_updated", targetType: "WORKFLOW_TRANSITION", targetId: transitionId, projectId: info.projectId,
+    summary: `${actor.name} 更新了工作流迁移规则` });
   return row;
 }
 
 export async function removeTransition(actor: Actor, workflowId: string, transitionId: string): Promise<void> {
-  canManage(actor);
+  await getWorkflow(actor, workflowId, true);
   const tr = (await db.select().from(workflowTransition)
     .where(and(eq(workflowTransition.id, transitionId), eq(workflowTransition.workflowId, workflowId))).limit(1))[0];
   if (!tr) throw forbidden();

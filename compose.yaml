@@ -3,13 +3,12 @@
 #
 # 四个服务：app · worker · db · cache
 #
-# 镜像来源：默认**拉取预编译镜像**（GHCR，amd64 + arm64 均已构建并通过功能验证）。
-#   数据库镜像尤其必须预编译 —— 它要编译 PostgreSQL 扩展与 SCWS，自建一次十几分钟，
-#   且 arm64 需要交叉编译环境，不能把这份负担转给每个部署者。
-#   需要自行构建时，取消对应服务下的 build: 注释（见 CONTRIBUTING）。
+# 默认从 GHCR 拉取发布镜像，不需要在用户机器上编译。
+# 开发者源码构建：docker compose -f compose.yaml -f compose.source.yaml up -d --build
+# 数据库首次构建需要编译扩展；后续使用本地构建缓存。
 #
 # ⚠️ 只有 app 暴露端口，且只绑 127.0.0.1 —— 对公网一律经反向代理
-#    （见 docs/deploy.md，含 nginx 与 Caddy 两份可直接复制的配置）
+#    反向代理与安装配置见 README。
 # ─────────────────────────────────────────────────────────────
 
 services:
@@ -25,8 +24,10 @@ services:
       NODE_ENV: production
       # 消费交给独立 worker；HTTP 进程仍负责 SLA / cron 等调度。
       JOB_WORKER_INTERVAL_MS: "0"
-      # 反向代理可信网段：默认只信本机；反代在别的机器上时必须显式改写
-      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-127.0.0.1/32,::1/128}
+      MIGRATION_LOCK_TIMEOUT_MS: ${MIGRATION_LOCK_TIMEOUT_MS:-300000}
+      # 默认不信任转发头；按实际反向代理网段显式配置
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
+      OUTBOUND_DNS_MODE: ${OUTBOUND_DNS_MODE:-system}
     ports:
       - "127.0.0.1:${APP_PORT:-3000}:3000"
     volumes:
@@ -35,14 +36,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      cache:
-        condition: service_healthy
     healthcheck:
       test:
         - CMD
         - node
         - -e
-        - "fetch('http://127.0.0.1:3000/api/v1/system/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        - "fetch('http://127.0.0.1:3000/health',{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
       interval: 30s
       timeout: 5s
       retries: 3
@@ -59,15 +58,23 @@ services:
       DATA_DIR: /data
       NODE_ENV: production
       JOB_WORKER_INTERVAL_MS: ${JOB_WORKER_INTERVAL_MS:-5000}
+      MIGRATION_LOCK_TIMEOUT_MS: ${MIGRATION_LOCK_TIMEOUT_MS:-300000}
+      WORKER_BACKLOG_WARNING_SECONDS: ${WORKER_BACKLOG_WARNING_SECONDS:-300}
+      WORKER_SLOW_POLL_WARNING_SECONDS: ${WORKER_SLOW_POLL_WARNING_SECONDS:-300}
+      OUTBOUND_DNS_MODE: ${OUTBOUND_DNS_MODE:-system}
     volumes:
       - feronavi-data:/data
     depends_on:
       db:
         condition: service_healthy
-      cache:
-        condition: service_healthy
       app:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health',{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
 
   db:

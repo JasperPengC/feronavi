@@ -7,25 +7,38 @@
  * 混用会出事：令牌用 Argon2id 会拖垮每个请求；密码用 SHA-256 则是安全事故。
  */
 import { hash, verify } from "@node-rs/argon2";
+import { DomainError } from "../../shared/errors.ts";
 
-/** 匿名化后的哨兵值：**不是合法的 Argon2id 串**，任何密码校验都会失败（数据模型 1.3） */
+/** 匿名化后的哨兵值：**不是合法的 Argon2id 串**，任何密码校验都会失败（数据模型 1.3），但仍执行 dummy 校验 */
 export const ANONYMIZED_PASSWORD_SENTINEL = "!";
 
 /** OWASP 推荐档位：19 MiB 内存、2 次迭代、并行度 1 */
 const OPTS = { memoryCost: 19456, timeCost: 2, parallelism: 1 } as const;
 
+// 随机不可恢复明文预生成的真实 Argon2id；未知、注销与损坏凭据共用同成本负路径。
+const DUMMY_HASH = "$argon2id$v=19$m=19456,t=2,p=1$b7S/vyjhilw9Ny/1oy7W2A$knIoDSjUatRjT98orkbmlVsmW3+iUjAy615w5/UhQwk";
+let activeHashes = 0;
+async function withHashSlot<T>(operation: () => Promise<T>): Promise<T> {
+  // 每进程最多约 76 MiB Argon2工作内存；不建立可被洪水填满的等待队列。
+  if (activeHashes >= 4) throw new DomainError("RATE_LIMITED", "登录服务繁忙，请稍后重试", null);
+  activeHashes++;
+  try { return await operation(); } finally { activeHashes--; }
+}
+
 export async function hashPassword(plain: string): Promise<string> {
-  return hash(plain, OPTS);
+  return withHashSlot(() => hash(plain, OPTS));
 }
 
 export async function verifyPassword(stored: string, plain: string): Promise<boolean> {
-  // 哨兵值必然失败，且不做昂贵计算
-  if (stored === ANONYMIZED_PASSWORD_SENTINEL || !stored.startsWith("$argon2")) return false;
-  try {
-    return await verify(stored, plain);
-  } catch {
-    return false;
-  }
+  const valid = /^\$argon2(?:id|i|d)\$v=19\$m=\d+,t=\d+,p=\d+\$[A-Za-z0-9+/]+\$[A-Za-z0-9+/]+$/.test(stored);
+  return withHashSlot(async () => {
+    try { return (await verify(valid ? stored : DUMMY_HASH, plain)) && valid; }
+    catch {
+      // 语法看似有效但底层拒绝解析的损坏凭据，也支付一次真实校验成本。
+      if (valid) await verify(DUMMY_HASH, plain).catch(() => false);
+      return false;
+    }
+  });
 }
 
 /**

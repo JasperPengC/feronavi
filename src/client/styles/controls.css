@@ -1,0 +1,60 @@
+/* 公共控件唯一尺寸／外观入口，规范见 docs/design/product-ui/controls.md。 */
+.btn {
+  height: var(--button-height) !important;
+  min-height: var(--button-height) !important;
+  padding: 0 10px !important;
+  border-radius: var(--radius-pill) !important;
+  font-size: var(--text-sm) !important;
+  font-weight: var(--weight-medium);
+  gap: 5px;
+}
+.btn-sm { height: var(--button-height-sm) !important; min-height: var(--button-height-sm) !important; padding: 0 8px !important; }
+.btn > svg, .notification-icon { width: 14px; height: 14px; flex-shrink: 0; }
+.btn-lg { height: var(--button-height) !important; min-height: var(--button-height) !important; }
+.btn-icon { width: var(--button-height) !important; padding: 0 !important; flex-shrink: 0; }
+.btn-icon.btn-sm { width: var(--button-height-sm) !important; }
+.btn-icon.btn-lg { width: var(--button-height) !important; }
+.btn:not(.btn-primary):not(.btn-danger):not(.btn-ghost) {
+  --btn-bg: var(--glass-surface);
+  --btn-bd: var(--glass-edge);
+  --btn-bg-hover: var(--surface-hover);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+.btn-primary { background-image: none; box-shadow: none; }
+
+.input, .select-trigger, .datepicker-trigger, .datetimepicker .datepicker-trigger, .select-search {
+  height: var(--control-height) !important;
+  min-height: var(--control-height) !important;
+  font-size: var(--text-sm) !important;
+}
+.btn-sm.input, .select-trigger.btn-sm, .datepicker-trigger.btn-sm { height: var(--control-height-sm) !important; min-height: var(--control-height-sm) !important; }
+.field :is(.input, .select-trigger, .datepicker-trigger) { height: var(--control-height) !important; min-height: var(--control-height) !important; }
+.btn:is(.select-trigger, .datepicker-trigger) { padding-inline: 12px !important; gap: 8px; }
+.btn:is(.select-trigger, .datepicker-trigger) > svg { width: 16px; height: 16px; }
+:is(.page, .ui-drawer, .ui-modal) .input, .btn.select-trigger, .datepicker-trigger, .select-search, .palette-input {
+  --control-bg: var(--glass-surface);
+  --control-border: var(--glass-edge);
+  background: var(--control-bg);
+  backdrop-filter: var(--glass-filter);
+  border-radius: var(--radius-pill) !important;
+  font-weight: var(--weight-regular);
+}
+:is(.page, .ui-drawer, .ui-modal) .input:not(:focus),
+:is(.btn.select-trigger, .datepicker-trigger, .select-search, .palette-input):not(:focus):not(:focus-visible) {
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
+/* 操作栏、表单提交区内，small 与默认控件共同采用场景标准高度。 */
+:is(.page, .ui-drawer, .ui-modal) :is(.toolbar, .filter-bar, .page-actions, .board-filter-row, .issues-filterbar, .perm-toolbar, .org-chart-toolbar, .drawer-actions, .task-form-actions, .ui-modal-foot, .table-batch-bar, .table-view-toolbar, .workbench-todo-form, .import-flow-actions),
+.ui-drawer-footer { --control-height-sm: var(--control-height); --button-height-sm: var(--button-height); }
+/* 批量操作的选择框和执行按钮是一组，使用同一高度避免上下跳动。 */
+.table-batch-bar { --button-height: var(--control-height); --button-height-sm: var(--control-height); }
+.page :is(.toolbar, .filter-bar, .page-actions, .board-filter-row, .issues-filterbar, .perm-toolbar, .org-chart-toolbar) .chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: var(--control-height); padding: 0 10px; font-size: var(--text-sm);
+}
+@media (max-width: 640px), (pointer: coarse) {
+  .btn > svg, .notification-icon { width: 16px; height: 16px; }
+  :is(.page, .ui-drawer, .ui-modal) :is(.input, .textarea, .select-trigger, .datepicker-trigger),
+  .select-search, .palette-input { font-size: 16px !important; }
+}

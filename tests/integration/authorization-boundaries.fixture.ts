@@ -3,6 +3,8 @@ import Fastify from "fastify";
 import type { Actor } from "../../src/server/permission/actor.ts";
 // 不读取 .env；只有本次隔离 runner 随机创建的库能运行此夹具。
 assert.match(new URL(process.env.DATABASE_URL ?? "postgres://invalid/").pathname.slice(1), /^feronavi_test_[a-f0-9]{32}$/u);
+const { bootstrapBusinessEffects } = await import("../../src/server/application/bootstrap-business-effects.ts");
+await bootstrapBusinessEffects();
 const { db, sql } = await import("../../src/db/index.ts");
 const { member, role, roleAssignment, department, team, workItem, comment, page, idea, milestone, iteration, release, module: moduleTable, approvalRequest } = await import("../../src/db/schema.ts");
 const { eq } = await import("drizzle-orm");
@@ -126,14 +128,14 @@ try {
     ["automation.createRule", { projectId: projectB.id, name: "blocked", trigger: "WORK_ITEM_CREATED", actions: [{ type: "NOTIFY" }] }],
     ["workitem.create", { projectId: projectA.id, type: "TASK", title: "blocked", milestoneId: milestoneB!.id }],
   ];
-  for (const [name, args] of deniedCalls) await assert.rejects(tool(name).handler(ctx, args), errorCode("NOT_FOUND"), name);
-  for (const name of ["notification.list", "notification.markRead"]) await assert.rejects(tool(name).handler(ctx, {}), errorCode("FORBIDDEN"));
-  await assert.rejects(tool("announcement.send").handler(ctx, { title: "blocked", body: "blocked" }), errorCode("FORBIDDEN"));
+  for (const [name, args] of deniedCalls) await assert.rejects(tool(name).handler(ctx, tool(name).kind === "write" ? { userConfirmed: true, ...args } : args), errorCode("NOT_FOUND"), name);
+  for (const name of ["notification.list", "notification.markRead"]) await assert.rejects(tool(name).handler(ctx, tool(name).kind === "write" ? { userConfirmed: true } : {}), errorCode("FORBIDDEN"));
+  await assert.rejects(tool("announcement.send").handler(ctx, { userConfirmed: true, title: "blocked", body: "blocked" }), errorCode("FORBIDDEN"));
   for (const extra of [{ statusId: itemA.statusId }, { projectId: projectB.id }, { reporterId: reader.id }]) {
-    await assert.rejects(tool("workitem.update").handler(ctx, { workItemId: itemA.id, expectedVersion: itemA.version, ...extra }), errorCode("VALIDATION"));
+    await assert.rejects(tool("workitem.update").handler(ctx, { userConfirmed: true, workItemId: itemA.id, expectedVersion: itemA.version, ...extra }), errorCode("VALIDATION"));
     await assert.rejects(workItems.updateWorkItem(actor, itemA.id, { version: itemA.version, ...extra }), errorCode("VALIDATION"));
   }
-  await tool("workitem.update").handler(ctx, { workItemId: itemA.id, expectedVersion: itemA.version, title: "allowed update" });
+  await tool("workitem.update").handler(ctx, { userConfirmed: true, workItemId: itemA.id, expectedVersion: itemA.version, title: "allowed update" });
   assert.equal((await workItems.getWorkItem(actor, itemA.id)).title, "allowed update");
   const [unchanged] = await db.select().from(workItem).where(eq(workItem.id, itemB.id));
   assert.equal(unchanged!.title, "B original");

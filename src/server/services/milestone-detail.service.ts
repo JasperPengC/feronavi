@@ -8,7 +8,7 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "../../db/index.ts";
 import { member, milestoneProgressUpdate, project, workItem, workflowState } from "../../db/schema.ts";
-import { DomainError, forbidden } from "../../shared/errors.ts";
+import { forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
 import * as planningService from "./planning.service.ts";
@@ -39,11 +39,24 @@ export async function milestoneDetail(actor: Actor, milestoneId: string) {
   return { milestone: ms, project: projectRow ?? null, relatedWorkItems: related, progressUpdates: updates };
 }
 
+/** 实际写入与缓存重放共用当前里程碑进展授权。 */
+export async function authorizeProgressCreate(actor: Actor, milestoneId: string) {
+  const ms = await planningService.get(actor, milestoneId, "milestone");
+  assertManage(actor, ms.projectId);
+  return ms;
+}
+
+export async function authorizeProgressDelete(actor: Actor, updateId: string) {
+  const row = (await db.select().from(milestoneProgressUpdate).where(eq(milestoneProgressUpdate.id, updateId)).limit(1))[0];
+  if (!row) throw forbidden();
+  if (row.authorId !== actor.memberId) assertManage(actor, row.projectId);
+  return row;
+}
+
 export async function addProgressUpdate(actor: Actor, milestoneId: string, input: {
   summary: string; nextSteps?: string | null; blockers?: string | null;
 }) {
-  const ms = await planningService.get(actor, milestoneId, "milestone");
-  assertManage(actor, ms.projectId);
+  const ms = await authorizeProgressCreate(actor, milestoneId);
   const [row] = await db.insert(milestoneProgressUpdate).values({
     projectId: ms.projectId, milestoneId, authorId: actor.memberId,
     summary: input.summary.trim(),
@@ -59,9 +72,6 @@ export async function addProgressUpdate(actor: Actor, milestoneId: string, input
 }
 
 export async function deleteProgressUpdate(actor: Actor, updateId: string): Promise<void> {
-  const row = (await db.select().from(milestoneProgressUpdate).where(eq(milestoneProgressUpdate.id, updateId)).limit(1))[0];
-  if (!row) throw new DomainError("FORBIDDEN", "无权访问该资源", null);
-  const isAuthor = row.authorId === actor.memberId;
-  if (!isAuthor) assertManage(actor, row.projectId);
+  await authorizeProgressDelete(actor, updateId);
   await db.delete(milestoneProgressUpdate).where(eq(milestoneProgressUpdate.id, updateId));
 }

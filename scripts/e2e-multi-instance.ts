@@ -244,6 +244,7 @@ try {
   if (process.env.MULTI_INSTANCE_RECOVERY === "1") {
     duplicate = sseClient(B, demo!.cookie);
     await duplicate.ready();
+    const beforeRecovery = sa.events.filter(e => e.event === "dropped").length;
     await instances.cache.suspend();
     const outageStart = Date.now();
     const local = await request(`${B}/api/v1/work-items/${wiId}/comments`, {
@@ -267,6 +268,8 @@ try {
       await sleep(500);
     }
     ok("缓存重启后心跳恢复成员及名称（无需重连）", recovered, `elapsedMs=${Date.now() - recoveryStart}`);
+    const recoverySignal = await sa.wait(e => e.event === "dropped");
+    ok("缓存断线重订阅后SSE通知客户端全量刷新缺口", !!recoverySignal && sa.events.filter(e => e.event === "dropped").length > beforeRecovery);
     const persisted = await db.select({ id: comment.id }).from(comment).where(eq(comment.id, localBody.id!));
     ok("缓存重启后已确认评论仍在 PostgreSQL", persisted.length === 1);
     const cursor = sa.events.length;

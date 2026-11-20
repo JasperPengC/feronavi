@@ -209,7 +209,7 @@ export function ProjectAutomationPage() {
                       ]} />
                     {(action.type === "ASSIGN" || action.type === "NOTIFY") ? (
                       <Select label={`动作 ${index + 1} 成员`} ariaLabel={`动作 ${index + 1} 成员`} value={action.memberId} onChange={(value) => setAction(index, { memberId: value })} searchable
-                        options={[{ value: "", label: "选择成员" }, ...(members.data ?? []).map((m) => ({ value: m.id, label: `${m.name} (${m.username})` }))]} />
+                        options={[{ value: "", label: t("wie.unassigned") }, ...(members.data ?? []).map((m) => ({ value: m.id, label: m.name || m.username, secondaryLabel: `@${m.username}` }))]} />
                     ) : action.type === "TRANSITION" ? (
                       <Select label={t("admin.targetState")} ariaLabel={t("admin.targetState")} value={action.toStateKey} disabled={!options.isSuccess} onChange={(toStateKey) => setAction(index, { toStateKey })} searchable options={(options.data?.states ?? []).map(state => ({ value: state.key, label: state.name }))} />
                     ) : action.type === "SET_FIELD" ? (

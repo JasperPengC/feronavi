@@ -32,16 +32,19 @@ const page = await ctx.newPage();
 try {
   await page.goto(`${BASE}/login`); await page.waitForTimeout(500);
   await page.evaluate(async () => { await fetch("/api/v1/auth/login", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: "demo", password: "demo-password-12345" }) }); });
-  await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2200);
+  await page.goto(`${BASE}/settings/integrations`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2200);
+  await page.getByRole("tab", { name: "消息与 Webhook", exact: true }).click();
   await page.getByText("IM 集成（钉钉 / 企微 / 飞书）", { exact: true }).waitFor({ timeout: 15_000 });
   check("设置页显示 IM 集成区块", true);
 
   const section = page.locator(".settings-section", { hasText: "IM 集成（钉钉 / 企微 / 飞书）" }).first();
-  await section.locator('[aria-label="提供方"]').click();
-  await page.getByRole("option", { name: "飞书", exact: true }).click();
-  await section.getByLabel("渠道名称", { exact: true }).fill(NAME);
-  await section.getByLabel("Webhook 地址", { exact: true }).fill(hookUrl);
   await section.getByRole("button", { name: "添加 IM 渠道", exact: true }).click();
+  let dialog = page.getByRole("dialog", { name: "添加 IM 渠道", exact: true });
+  await dialog.getByRole("button", { name: "提供方", exact: true }).click();
+  await page.getByRole("option", { name: "飞书", exact: true }).click();
+  await dialog.getByLabel("渠道名称", { exact: true }).fill(NAME);
+  await dialog.getByLabel("Webhook 地址", { exact: true }).fill(hookUrl);
+  await dialog.getByRole("button", { name: "添加 IM 渠道", exact: true }).click();
   await page.waitForTimeout(1500);
   check("UI 创建渠道后列表出现", (await section.innerText()).includes(NAME));
   const [row] = await sql`select id, webhook_url_encrypted from im_channel where name = ${NAME}`;
@@ -49,17 +52,20 @@ try {
 
   await section.locator("li", { hasText: NAME }).getByRole("button", { name: "测试", exact: true }).click();
   await page.waitForTimeout(1500);
-  check("点击测试后 mock webhook 收到请求", received.length === 1 && JSON.stringify(received[0]).includes("Feronavi IM 集成测试"));
-  check("UI 显示最近测试成功", (await section.innerText()).includes("最近测试") && (await section.innerText()).includes("✓"));
+  const [tested] = await sql`select last_test_ok, last_test_error from im_channel where id = ${row.id}`;
+  check("回环 Webhook 被 SSRF 防护拒绝且未发出请求", received.length === 0 && tested?.last_test_ok === false && !!tested?.last_test_error, JSON.stringify(tested));
+  check("UI 显示最近测试失败", (await section.innerText()).includes("最近测试") && (await section.innerText()).includes("✗"));
   // 应用模式（钉钉自建应用）：UI 保存 AppKey/AppSecret/AgentId/接收人，列表显示应用消息，不发起真实厂商请求
-  await section.locator('[aria-label="提供方"]').click();
-  await page.getByRole("option", { name: "钉钉", exact: true }).click();
-  await section.getByLabel("渠道名称", { exact: true }).fill(APP_NAME);
-  await section.getByLabel("AppKey（可选）", { exact: true }).fill(`ak-${STAMP}`);
-  await section.getByLabel("AppSecret（可选）", { exact: true }).fill(`as-${STAMP}`);
-  await section.getByLabel("AgentId（可选）", { exact: true }).fill("1001");
-  await section.getByLabel("应用消息接收人", { exact: true }).fill("u1,u2");
   await section.getByRole("button", { name: "添加 IM 渠道", exact: true }).click();
+  dialog = page.getByRole("dialog", { name: "添加 IM 渠道", exact: true });
+  await dialog.getByRole("button", { name: "提供方", exact: true }).click();
+  await page.getByRole("option", { name: "钉钉", exact: true }).click();
+  await dialog.getByLabel("渠道名称", { exact: true }).fill(APP_NAME);
+  await dialog.getByLabel("AppKey（可选）", { exact: true }).fill(`ak-${STAMP}`);
+  await dialog.getByLabel("AppSecret（可选）", { exact: true }).fill(`as-${STAMP}`);
+  await dialog.getByLabel("AgentId（可选）", { exact: true }).fill("1001");
+  await dialog.getByLabel("应用消息接收人", { exact: true }).fill("u1,u2");
+  await dialog.getByRole("button", { name: "添加 IM 渠道", exact: true }).click();
   await page.waitForTimeout(1400);
   const appText = await section.innerText();
   check("UI 创建应用模式渠道并显示接收人数", appText.includes(APP_NAME) && appText.includes("应用消息") && appText.includes("2"), appText.slice(0, 120));

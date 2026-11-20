@@ -1,12 +1,7 @@
 /**
- * 全量数据导出（第十四期，REST 10 节 `GET /system/exports/:id` 的落地）
- *
- * 与本项目的其它导出同一套纪律，另加两条只属于"全量"的：
- *   1 **绝不导出密钥材料**：密码哈希、令牌哈希、双因素密钥、SMTP/AI 的密文原样不外泄
- *      （`setting` 里的敏感键按掩码导出，与 GET /settings 同一口径）
- *   2 **同步导出、不落盘**：规范给的 `:id` 形态需要附件存储 L2 来承载导出包文件（尚未落地），
- *      因此本期提供**同步 JSON 导出**并在响应头标注 `schemaVersion` 与 `x-export-mode: inline`。
- *      **不假装已有异步打包任务** —— 前端与文档都按"同步"说明。
+ * 兼容合规 JSON 导出（inline / async），不用于系统迁移。
+ * 数据范围和字段脱敏由 registry 的 safe + compliance 投影决定；
+ * migration safe 保留密码哈希，绝不能直接用于本接口。系统迁移使用 /system/backups。
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -16,32 +11,17 @@ import { forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
 import { listSettings } from "./setting.service.ts";
+import { datasetRegistry, orderedDatasets, tableClassifications } from "./system-backup/registry.ts";
 
 export const FULL_EXPORT_SCHEMA_VERSION = "1";
 
-/** 逐表导出（表名 → 行数 + 数据）；敏感表单独处理 */
-const TABLES: { name: string; sensitive?: boolean }[] = [
-  { name: "organization" }, { name: "team" }, { name: "role" }, { name: "permission" },
-  { name: "role_assignment" }, { name: "project" }, { name: "project_status_def" },
-  { name: "project_membership" }, { name: "workflow" }, { name: "workflow_state" },
-  { name: "workflow_transition" }, { name: "work_item" }, { name: "work_item_relation" },
-  { name: "work_item_collaborator" }, { name: "custom_field_def" }, { name: "custom_field_value" },
-  { name: "milestone" }, { name: "iteration" }, { name: "release" }, { name: "module" },
-  { name: "saved_view" }, { name: "comment" }, { name: "subscription" }, { name: "attachment" },
-  { name: "notification" }, { name: "notification_preference" }, { name: "todo" },
-  { name: "activity_entry" }, { name: "audit_entry" }, { name: "idea" }, { name: "idea_vote" },
-  { name: "intake_form" }, { name: "intake_submission" }, { name: "import_batch" },
-  { name: "import_mapping" }, { name: "metric_snapshot" }, { name: "dashboard" },
-  { name: "dashboard_widget" }, { name: "page" }, { name: "page_permission" },
-  { name: "page_revision" }, { name: "page_chunk" }, { name: "index_job" },
-  { name: "webhook_endpoint" }, { name: "webhook_delivery" }, { name: "time_block" },
-  { name: "focus_session" }, { name: "portfolio" }, { name: "portfolio_project" },
-  { name: "ai_provider_config" }, { name: "ai_usage_counter" }, { name: "idempotency_key" },
-  { name: "skill" }, { name: "dev_activity_daily" }, { name: "rag_consent" },
-];
-
 /** 明确排除的表及原因（导出必须能解释自己少了什么） */
 export const EXCLUDED_TABLES: Record<string, string> = {
+  ...Object.fromEntries(Object.entries(tableClassifications).map(([name, disposition]) => [name,
+    disposition === "rebuild" ? "派生索引或统计，不属于合规业务数据" : "临时状态、控制记录或安全材料不导出",
+  ])),
+  ...Object.fromEntries(datasetRegistry.filter((dataset) => dataset.minimumMode === "full")
+    .map((dataset) => [dataset.tableName, "含安全材料，不属于 safe 合规数据范围"])),
   member: "仅导出非敏感字段（不含密码哈希）",
   session: "会话令牌哈希属安全材料",
   api_token: "令牌哈希属安全材料（元数据见 /me/data-export）",
@@ -59,25 +39,34 @@ async function buildExport() {
   const data: Record<string, unknown> = {};
   const counts: Record<string, number> = {};
 
-  for (const t of TABLES) {
-    // 表名来自代码内常量白名单（不来自请求），因此这里是安全的标识符拼接
-    const rows = await db.execute<Record<string, unknown>>(sql.raw(`select * from "${t.name}" limit 20000`));
-    data[t.name] = rows;
-    counts[t.name] = rows.length;
+  for (const dataset of orderedDatasets("safe")) {
+    const databaseRows = await db.execute<Record<string, unknown>>(sql`
+      select ${sql.join(dataset.columns.map((column) => sql.identifier(column)), sql`, `)}
+      from ${sql.identifier(dataset.tableName)}
+      order by ${sql.join(dataset.orderBy.map((column) => sql.identifier(column)), sql`, `)} limit 20000
+    `);
+    const rows = databaseRows.flatMap((databaseRow) => {
+      const row = dataset.encodeRow(databaseRow, { mode: "safe", purpose: "compliance" });
+      return row ? [row] : [];
+    });
+    if (dataset.tableName === "setting") {
+      // registry 不回显 setting.value，且会过滤秘密行；兼容层只消费已经脱敏的公开视图。
+      // 普通设置必须存在于合规投影；秘密设置仅保留公开接口的掩码占位，不补回数据库原值。
+      const projectedKeys = new Set(rows.map((row) => row.key));
+      const settings = (await listSettings()).filter((row) => row.isSecret || projectedKeys.has(row.key));
+      data.setting = settings;
+      counts.setting = settings.length;
+    } else {
+      data[dataset.tableName] = rows;
+      counts[dataset.tableName] = rows.length;
+    }
   }
-  // 成员：**去掉密码哈希**
-  const members = await db.execute<Record<string, unknown>>(sql.raw(
-    `select id, username, name, email, status, locale, timezone, is_initial_admin, anonymized_at, created_at from "member" limit 20000`));
-  data.member = members;
-  counts.member = members.length;
-  // 设置：按对外口径（敏感键掩码）
-  data.setting = await listSettings();
 
   return {
     schemaVersion: FULL_EXPORT_SCHEMA_VERSION,
     generatedAt: new Date().toISOString(),
     excludedTables: EXCLUDED_TABLES,
-    orderHint: "建议导入顺序：organization/team/role → member → project → workflow → work_item → 其余",
+    orderHint: "兼容合规导出不提供恢复或导入顺序；系统迁移请使用 /system/backups 的加密迁移包。",
     counts,
     totalRows: Object.values(counts).reduce((a, b) => a + b, 0),
     data,

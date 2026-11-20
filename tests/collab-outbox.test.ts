@@ -40,6 +40,15 @@ const entry = (
 });
 
 describe("collab outbox", () => {
+  it("同账号前缀恢复多个标签页队列，同时隔离其他账号及相似前缀", async () => {
+    const outbox = createCollabOutbox({ indexedDB, localStorage: new MemoryStorage(), namespace: `tabs-${Date.now()}` });
+    await outbox.put({ ...entry("a", 1), clientId: "account-a.tab-1" });
+    await outbox.put({ ...entry("b", 2), clientId: "account-a.tab-2" });
+    await outbox.put({ ...entry("c", 3), clientId: "account-b.tab-1" });
+    await outbox.put({ ...entry("d", 4), clientId: "account-ab.tab-1" });
+    expect((await outbox.list("PAGE/page-1", "account-a")).map(entry => entry.operationId)).toEqual(["a", "b"]);
+    expect((await outbox.list("PAGE/page-1", "account-a.tab-1")).map(entry => entry.operationId)).toEqual(["a"]);
+  });
   it("使用 IndexedDB 持久化，并在确认后移除已发送 update", async () => {
     const namespace = `test-indexeddb-${Date.now()}-${Math.random()}`;
     const first = createCollabOutbox({
@@ -115,6 +124,46 @@ describe("collab outbox", () => {
     await expect(outbox.list("PAGE/page-1", "client-1")).resolves.toEqual([
       entry("op-1", 10),
     ]);
+  });
+
+  it("IndexedDB 被拒绝时读取降级队列不会提前删除尚未确认的操作", async () => {
+    const storage = new MemoryStorage();
+    const unavailable = { open: () => { throw new Error("IndexedDB denied"); } } as unknown as IDBFactory;
+    const outbox = createCollabOutbox({ indexedDB: unavailable, localStorage: storage, namespace: "denied" });
+    await outbox.put(entry("pending", 10));
+    await expect(outbox.list("PAGE/page-1", "client-1")).resolves.toEqual([entry("pending", 10)]);
+    const reopened = createCollabOutbox({ indexedDB: unavailable, localStorage: storage, namespace: "denied" });
+    await expect(reopened.list("PAGE/page-1", "client-1")).resolves.toEqual([entry("pending", 10)]);
+    await outbox.remove("pending");
+    await expect(outbox.list("PAGE/page-1", "client-1")).resolves.toEqual([]);
+  });
+
+  it("升级旧版 localStorage 数组时保留操作，重新打开后仍可按确认删除", async () => {
+    const storage = new MemoryStorage();
+    const unavailable = { open: () => { throw new Error("IndexedDB denied"); } } as unknown as IDBFactory;
+    const options = { indexedDB: unavailable, localStorage: storage, namespace: "legacy-array" };
+    storage.setItem(options.namespace, JSON.stringify([entry("legacy", 10), null, { invalid: true }]));
+    const first = createCollabOutbox(options);
+    await expect(first.list("PAGE/page-1", "client-1")).resolves.toEqual([entry("legacy", 10)]);
+    expect(storage.getItem(options.namespace)).toBeNull();
+    const reopened = createCollabOutbox(options);
+    await expect(reopened.list("PAGE/page-1", "client-1")).resolves.toEqual([entry("legacy", 10)]);
+    await reopened.remove("legacy");
+    await expect(first.list("PAGE/page-1", "client-1")).resolves.toEqual([]);
+  });
+
+  it("多个标签的降级队列互不覆盖，确认操作不会复活其他标签已移除的操作", async () => {
+    const storage = new MemoryStorage();
+    const unavailable = { open: () => { throw new Error("IndexedDB denied"); } } as unknown as IDBFactory;
+    const options = { indexedDB: unavailable, localStorage: storage, namespace: "fallback-tabs" };
+    const first = createCollabOutbox(options);
+    const second = createCollabOutbox(options);
+    await first.put(entry("first", 10));
+    await second.put(entry("second", 20));
+    await expect(first.list("PAGE/page-1", "client-1")).resolves.toEqual([entry("first", 10), entry("second", 20)]);
+    await second.remove("first");
+    await first.put(entry("third", 30));
+    await expect(createCollabOutbox(options).list("PAGE/page-1", "client-1")).resolves.toEqual([entry("second", 20), entry("third", 30)]);
   });
 
   it("IndexedDB 恢复后迁移降级队列并清理旧存储", async () => {

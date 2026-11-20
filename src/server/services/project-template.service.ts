@@ -17,6 +17,7 @@ import { can, type PermissionContext } from "../permission/engine.ts";
 import * as projectService from "./project.service.ts";
 import * as planningService from "./planning.service.ts";
 import * as wiService from "./work-item.service.ts";
+import { publishWorkspaceInvalidation } from "./workspace-events.service.ts";
 
 function ctxOf(actor: Actor): PermissionContext {
   return { memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId };
@@ -62,6 +63,7 @@ export async function createTemplate(actor: Actor, input: { name: string; payloa
   const [row] = await db.insert(projectTemplate).values({
     name: input.name.trim(), payload: parsed.data as object, isBuiltin: false,
   }).returning();
+  await publishWorkspaceInvalidation({ domain: "projectTemplate", resourceType: "PROJECT_TEMPLATE", resourceId: row!.id });
   return row;
 }
 
@@ -80,6 +82,7 @@ export async function updateTemplate(actor: Actor, id: string, patch: { name?: s
     ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
     ...(payload !== undefined ? { payload: payload as object } : {}),
   }).where(eq(projectTemplate.id, id)).returning();
+  await publishWorkspaceInvalidation({ domain: "projectTemplate", resourceType: "PROJECT_TEMPLATE", resourceId: id });
   return updated;
 }
 
@@ -89,6 +92,7 @@ export async function deleteTemplate(actor: Actor, id: string): Promise<void> {
   if (!row) throw forbidden();
   if (row.isBuiltin) throw new DomainError("FORBIDDEN", "内置模板不可删除", null);
   await db.delete(projectTemplate).where(eq(projectTemplate.id, id));
+  await publishWorkspaceInvalidation({ domain: "projectTemplate", resourceType: "PROJECT_TEMPLATE", resourceId: id });
 }
 
 /** 从模板新建项目：先建项目（权限/KEY 唯一等由 projectService 判定），再逐项套用初始集 */

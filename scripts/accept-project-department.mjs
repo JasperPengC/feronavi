@@ -17,7 +17,7 @@ const browser = await chromium.launch({ channel: "chrome" });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 }, colorScheme: "light" });
 await ctx.addCookies([{ name: "feronavi_theme", value: "light", domain: "127.0.0.1", path: "/" }]);
 const page = await ctx.newPage();
-let deptId = null, projectId = null;
+let deptId = null, projectId = null, actorId = null, actorName;
 try {
   await page.goto(`${BASE}/login`); await page.waitForTimeout(500);
   await page.evaluate(async () => { await fetch("/api/v1/auth/login", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: "demo", password: "demo-password-12345" }) }); });
@@ -27,11 +27,12 @@ try {
     const d = await fetch("/api/v1/departments", { method: "POST", headers, body: JSON.stringify({ name: dept }) });
     const deptBody = await d.json();
     const me = await (await fetch("/api/v1/auth/me")).json();
-    await fetch(`/api/v1/members/${me.memberId}/organization`, { method: "PATCH", headers, body: JSON.stringify({ departmentId: deptBody.id }) });
-    return { deptId: deptBody.id, status: d.status };
+    const assigned = await fetch(`/api/v1/members/${me.memberId}/organization`, { method: "PATCH", headers, body: JSON.stringify({ departmentId: deptBody.id }) });
+    return { deptId: deptBody.id, status: d.status, assignedStatus: assigned.status, actorId: me.memberId, actorName: me.name };
   }, DEPT);
   deptId = prep.deptId;
-  check("真实创建部门并把 demo 归属该部门", prep.status === 201 && !!deptId);
+  actorId = prep.actorId; actorName = prep.actorName;
+  check("真实创建部门并把 demo 归属该部门", prep.status === 201 && prep.assignedStatus === 200 && !!deptId);
 
   await page.goto(`${BASE}/projects`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2200);
   await page.getByRole("button", { name: "新建项目", exact: true }).click();
@@ -52,16 +53,21 @@ try {
   await page.screenshot({ path: "/tmp/project-department.png" });
 
   await page.goto(`${BASE}/members`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(1800);
-  await page.locator('.page [aria-label="按部门筛选"]').click();
-  await page.getByRole("option", { name: DEPT, exact: true }).click();
+  await page.locator(".members-table tbody tr").first().waitFor();
+  const allMembers = await page.locator(".members-table tbody tr").count();
+  await page.getByRole("complementary", { name: "部门", exact: true }).getByRole("button").filter({ hasText: DEPT }).click();
   await page.waitForTimeout(1200);
-  const memberBody = await page.locator("main").innerText();
-  check("成员页按部门筛选后只显示该部门成员", memberBody.includes("演示管理员") && (await page.locator(".members-load-row").count()) === 1);
+  const memberRows = page.locator(".members-table tbody tr");
+  check("成员页按部门筛选后只显示该部门成员", await memberRows.count() === 1 && (await memberRows.first().innerText()).includes(actorName)
+    && (await memberRows.first().innerText()).includes(DEPT) && allMembers > 1);
+  await page.getByRole("complementary", { name: "部门", exact: true }).getByRole("button").filter({ hasText: "全部成员" }).click();
+  await page.waitForFunction((count) => document.querySelectorAll(".members-table tbody tr").length === count, allMembers);
+  check("清除部门筛选后恢复完整成员目录", await memberRows.count() === allMembers);
 } finally {
   try {
     if (projectId) await sql`delete from project where id = ${projectId}`;
     if (deptId) {
-      await sql`update member set department_id = null where username = 'demo'`;
+      if (actorId) await sql`update member set department_id = null where id = ${actorId}`;
       await sql`delete from department where id = ${deptId}`;
     }
     await sql`delete from audit_entry where action like 'project.%' or action = 'member.organization_updated'`;

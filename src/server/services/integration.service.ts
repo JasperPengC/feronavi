@@ -106,11 +106,19 @@ export async function updateIntegration(actor: Actor, id: string, patch: {
 }): Promise<IntegrationView> {
   const row = (await db.select().from(integration).where(eq(integration.id, id)).limit(1))[0];
   if (!row) throw forbidden();
+  // 修改目标前必须仍可管理原范围，不能借换项目绕过原项目授权。
+  await assertProjectVisible(actor, row.projectId);
+  assertManage(actor, row.projectId);
   const projectId = patch.projectId !== undefined ? patch.projectId : row.projectId;
   await assertProjectVisible(actor, projectId);
   assertManage(actor, projectId);
   if (patch.baseUrl !== undefined && patch.baseUrl !== row.baseUrl) await assertSafeOutboundUrl(patch.baseUrl);
-  if (patch.baseUrl !== undefined || patch.projectId !== undefined) {
+  const normalizedUrl = (value: string) => new URL(value).toString().replace(/\/+$/u, "");
+  const destinationChanged = patch.baseUrl !== undefined && normalizedUrl(patch.baseUrl) !== normalizedUrl(row.baseUrl);
+  if ((destinationChanged || projectId !== row.projectId) && !patch.token?.trim()) {
+    throw new DomainError("VALIDATION", "更换服务地址或项目时请重新提供对应的访问令牌", null);
+  }
+  if (patch.baseUrl !== undefined || patch.projectId !== undefined || patch.config !== undefined) {
     await assertNoDuplicate(row.kind, projectId, patch.baseUrl ?? row.baseUrl,
       String((patch.config ?? row.config as Record<string, unknown>)?.repo ?? ""), id);
   }

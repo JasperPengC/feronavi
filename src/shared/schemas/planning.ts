@@ -42,6 +42,22 @@ export const updateIterationSchema = z.object({
   carryOver: z.boolean().optional(),
 }).strict();
 
+/** 未提供目标沿用 carryOver 策略；null 表示明确移回待规划。 */
+export const completeIterationSchema = z.object({
+  targetIterationId: z.string().uuid().nullable().optional(),
+}).strict();
+
+export interface PlanCompletionResult {
+  id: string;
+  projectId: string;
+  completedAt: string;
+  targetIterationId: string | null;
+  carriedOverCount: number | null;
+  remainingCount: number | null;
+  movedCount: number | null;
+  movedWorkItemIds: string[] | null;
+}
+
 // ── 版本 ──────────────────────────────────────────────────
 export const createReleaseSchema = z.object({
   ...nameDesc,

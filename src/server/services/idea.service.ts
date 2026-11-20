@@ -10,13 +10,15 @@
  */
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../../db/index.ts";
-import { idea, ideaVote, workItem } from "../../db/schema.ts";
+import { activityEntry, idea, ideaVote, workItem } from "../../db/schema.ts";
 import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
 import * as projectRepo from "../repos/project.repo.ts";
+import { lockProjectTree } from "./project-tree.ts";
 import * as wiService from "./work-item.service.ts";
 import { recordBusinessEvent } from "./event-log.ts";
+import { businessEffects } from "./business-effects.ts";
 
 export const IDEA_STATUSES = ["NEW", "UNDER_REVIEW", "PLANNED", "REJECTED"] as const;
 
@@ -86,6 +88,9 @@ export async function createIdea(actor: Actor, projectId: string, input: {
     actor, action: "idea.created", targetType: "IDEA", targetId: row!.id, projectId,
     summary: `${actor.name} 提交了想法「${row!.title}」`,
   });
+  await businessEffects().deliverWebhook("idea.created", {
+    id: row!.id, projectId, actorId: actor.memberId,
+  }, projectId);
   return row;
 }
 
@@ -146,37 +151,49 @@ export async function unvote(actor: Actor, id: string): Promise<void> {
  * **幂等**：已转过直接返回既有工作项（不重复创建）。
  */
 export async function promote(actor: Actor, id: string, input: { type?: string; priority?: string | null } = {}) {
-  const it = await loadIdea(actor, id);
-  assertCan(actor, "idea:manage", it.projectId);
-  assertCan(actor, "work_item:create", it.projectId);
+  const visible = await getIdea(actor,id);
+  return db.transaction(async () => {
+    // 与助手确认和工作项创建保持 project→idea 的锁序；锁后仍重新检查当前资源。
+    await lockProjectTree(visible.projectId);
+    // 锁后读取最新回填，等待中的并发调用只返回已经创建的工作项。
+    const [it] = await db.select().from(idea)
+      .where(and(eq(idea.id, id), isNull(idea.deletedAt))).for("update");
+    if (!it) throw forbidden();
+    await assertProjectVisible(actor, it.projectId);
+    assertCan(actor, "idea:manage", it.projectId);
+    assertCan(actor, "work_item:create", it.projectId);
 
-  if (it.promotedWorkItemId) {
-    const existing = await db.select().from(workItem).where(eq(workItem.id, it.promotedWorkItemId)).limit(1);
-    return { workItem: existing[0] ?? null, alreadyPromoted: true };
-  }
+    if (it.promotedWorkItemId) {
+      const existing = await db.select().from(workItem).where(eq(workItem.id, it.promotedWorkItemId)).limit(1);
+      return { workItem: existing[0] ?? null, alreadyPromoted: true };
+    }
 
-  const created = await wiService.createWorkItem(actor, it.projectId, {
-    type: (input.type ?? "REQUIREMENT") as "REQUIREMENT",
-    title: it.title,
-    description: it.description ?? undefined,
-    priority: (input.priority ?? undefined) as undefined,
+    const created = await wiService.createWorkItem(actor, it.projectId, {
+      type: (input.type ?? "REQUIREMENT") as "REQUIREMENT",
+      title: it.title,
+      description: it.description ?? undefined,
+      priority: (input.priority ?? undefined) as undefined,
+    });
+    if (!created) throw new DomainError("INTERNAL", "转工作项失败：未返回工作项", null);
+    await db.update(idea)
+      .set({ promotedWorkItemId: created.id, status: "PLANNED", updatedAt: new Date() })
+      .where(eq(idea.id, id));
+    // 转换活动是业务结果的一部分，写入失败必须回滚，不能走吞错的通用活动 helper。
+    await db.insert(activityEntry).values({
+      projectId: it.projectId, actorId: actor.memberId, targetType: "IDEA", targetId: id,
+      action: "idea.promoted",
+      summary: `${actor.name} 把想法「${it.title}」转成了工作项 ${created.key}`,
+    });
+    {
+      // 规范：转工作项时写 work_item_link **双向引用**（单行表达会在删除清理时漏一侧）
+      const { createPromoteLinks } = await import("./work-item-link.service.ts");
+      await createPromoteLinks(created.id, id);
+    }
+    await businessEffects().deliverWebhook("idea.promoted", {
+      id, workItemId: created.id, projectId: it.projectId, actorId: actor.memberId,
+    }, it.projectId);
+    return { workItem: created, alreadyPromoted: false };
   });
-  if (!created) throw new DomainError("INTERNAL", "转工作项失败：未返回工作项", null);
-  await db.update(idea)
-    .set({ promotedWorkItemId: created.id, status: "PLANNED", updatedAt: new Date() })
-    .where(eq(idea.id, id));
-  const { writeActivity } = await import("./audit.service.ts");
-  await writeActivity({
-    projectId: it.projectId, actorId: actor.memberId, targetType: "IDEA", targetId: id,
-    action: "idea.promoted",
-    summary: `${actor.name} 把想法「${it.title}」转成了工作项 ${created.key}`,
-  });
-  {
-    // 规范：转工作项时写 work_item_link **双向引用**（单行表达会在删除清理时漏一侧）
-    const { createPromoteLinks } = await import("./work-item-link.service.ts");
-    await createPromoteLinks(created.id, id);
-  }
-  return { workItem: created, alreadyPromoted: false };
 }
 
 export async function deleteIdea(actor: Actor, id: string): Promise<void> {

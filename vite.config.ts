@@ -1,5 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { fileURLToPath } from "node:url";
+import { mermaidParserGrammars } from "./scripts/build-tools/mermaid-parser-grammars.ts";
 
 /**
  * 前端构建：产出静态 SPA，由 Fastify 托管（内部系统不需要 SSR）。
@@ -8,7 +10,10 @@ import react from "@vitejs/plugin-react";
  * 生产构建产物在 `dist/`，由 `@fastify/static` 直接托管。
  */
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), mermaidParserGrammars()],
+  resolve: {
+    alias: [{ find: "elkjs/lib/elk.bundled.js", replacement: fileURLToPath(new URL("./src/client/lib/mermaid-elk.ts", import.meta.url)) }],
+  },
   // 源码在 src/client，产物到 dist（与 Fastify 的静态目录约定一致）
   root: ".",
   build: {
@@ -25,13 +30,22 @@ export default defineConfig({
       output: {
         // 共享依赖从入口拆出，避免首屏入口被编辑器和协作依赖撑大。
         manualChunks(id) {
+          if (id.startsWith("\0mermaid-parser-grammar:")) return "mermaid-parser-grammars";
           if (!id.includes("/node_modules/")) return undefined;
           if (id.includes("/react/") || id.includes("/react-dom/") || id.includes("/scheduler/")) return "framework";
           if (id.includes("/@tanstack/")) return "tanstack";
           if (id.includes("/@dnd-kit/")) return "dnd-kit";
           if (id.includes("/zod/")) return "validation";
           if (id.includes("/yjs/") || id.includes("/lib0/")) return "collaboration";
-          return "vendor";
+          const parserChunk = /\/@mermaid-js\/parser\/dist\/chunks\/mermaid-parser\.core\/([^/]+)\.mjs/.exec(id);
+          if (parserChunk) return `mermaid-parser-${parserChunk[1]}`;
+          if (id.includes("/@mermaid-js/parser/")) return "mermaid-parser";
+          if (id.includes("/chevrotain/") || id.includes("/@chevrotain/")) return "mermaid-grammar";
+          // Mermaid已按源码模块预分块；保留共享模块边界，避免核心重新合并成大包。
+          const mermaidChunk = /\/mermaid\/dist\/chunks\/mermaid\.core\/(chunk-[^/]+)\.mjs/.exec(id);
+          if (mermaidChunk) return `mermaid-${mermaidChunk[1]}`;
+          // 其余依赖保留动态导入边界；Mermaid按图表类型按需加载，避免首屏拉取全部绘图库。
+          return undefined;
         },
       },
     },

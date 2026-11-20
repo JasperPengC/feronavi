@@ -16,7 +16,11 @@ export async function availablePort(): Promise<number> {
   await new Promise<void>((resolvePort, reject) => server.close((error) => error ? reject(error) : resolvePort()));
   return address.port;
 }
-export async function runNode(args: string[], env: NodeJS.ProcessEnv, timeout = 120_000, signal?: AbortSignal): Promise<{ stdout: string; stderr: string }> {
+export interface TerminationOptions { terminationGraceMs?: number }
+
+export async function runNode(args: string[], env: NodeJS.ProcessEnv, timeout = 120_000, signal?: AbortSignal, options: TerminationOptions = {}): Promise<{ stdout: string; stderr: string }> {
+  const terminationGraceMs = options.terminationGraceMs ?? 10_000;
+  if (!Number.isInteger(terminationGraceMs) || terminationGraceMs < 1 || terminationGraceMs > 10_000) throw new RangeError("terminationGraceMs 必须为1..10000的整数");
   signal?.throwIfAborted();
   return new Promise((resolveRun, reject) => {
     const child = spawn(process.execPath, args, { cwd: repositoryRoot, env, detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"] });
@@ -26,7 +30,7 @@ export async function runNode(args: string[], env: NodeJS.ProcessEnv, timeout = 
     const kill = (name: NodeJS.Signals) => {
       try { if (process.platform === "win32") child.kill(name); else if (child.pid) process.kill(-child.pid, name); } catch { /* 本进程组已结束。 */ }
     };
-    const stop = (reason: Error) => { failure ??= reason; kill("SIGTERM"); forceStop ??= setTimeout(() => kill("SIGKILL"), 10_000); };
+    const stop = (reason: Error) => { failure ??= reason; kill("SIGTERM"); forceStop ??= setTimeout(() => kill("SIGKILL"), terminationGraceMs); };
     const abort = () => stop(new Error("隔离测试子进程已取消"));
     const timer = setTimeout(() => stop(new Error(`隔离测试子进程超时（${timeout}ms）`)), timeout);
     signal?.addEventListener("abort", abort, { once: true });
@@ -115,8 +119,8 @@ export async function createIsolatedDatabase(signal?: AbortSignal) {
 
 export type IsolatedDatabase = Awaited<ReturnType<typeof createIsolatedDatabase>>;
 
-export async function prepareDatabase(database: IsolatedDatabase, signal?: AbortSignal) {
-  await runNode(["scripts/prepare-test-database.ts"], database.env, 120_000, signal);
+export async function prepareDatabase(database: IsolatedDatabase, signal?: AbortSignal, options?: TerminationOptions) {
+  await runNode(["scripts/prepare-test-database.ts"], database.env, 120_000, signal, options);
 }
 
 /** 用 package.json 的真实命令启动临时编译产物，捕获入口目录漂移。 */

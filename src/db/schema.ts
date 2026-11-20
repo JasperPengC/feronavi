@@ -240,6 +240,7 @@ export const approvalRequest = pgTable("approval_request", {
   toStateId: uuid("to_state_id").notNull().references(() => workflowState.id, { onDelete: "cascade" }),
   requestedBy: uuid("requested_by").references(() => member.id, { onDelete: "set null" }),
   approverRoleKeys: jsonb("approver_role_keys").notNull().default(sql`'[]'::jsonb`),
+  transitionFields: jsonb("transition_fields").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
   status: text("status").notNull().default("PENDING"),
   comment: text("comment"),
   decidedBy: uuid("decided_by").references(() => member.id, { onDelete: "set null" }),
@@ -357,6 +358,7 @@ export const setupState = pgTable("setup_state", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   initializedAt: timestamp("initialized_at", { withTimezone: true }),
   currentStep: integer("current_step"),
+  restoredPackageId: uuid("restored_package_id"),
 });
 
 // ══ 1.8 一次性令牌（重置密码 / 邀请）══════════════════════════
@@ -414,6 +416,8 @@ export const milestone = pgTable("milestone", {
 
 // ══ 4.2 迭代 ══════════════════════════════════════════════════
 
+export type PlanCompletionResult = import("../shared/schemas/planning.ts").PlanCompletionResult;
+
 export const iteration = pgTable("iteration", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   projectId: uuid("project_id").notNull().references(() => project.id, { onDelete: "cascade" }),
@@ -422,8 +426,10 @@ export const iteration = pgTable("iteration", {
   startDate: date("start_date").notNull(),
   endDate: date("end_date").notNull(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  completionResult: jsonb("completion_result").$type<PlanCompletionResult>(),
   // 未完成项是否结转到下个迭代
   carryOver: boolean("carry_over").notNull().default(true),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   sortOrder: integer("sort_order").notNull().default(0),
 }, (t) => [index("iteration_project_idx").on(t.projectId)]);
 
@@ -451,6 +457,8 @@ export const release = pgTable("release", {
   // 用户可见更新说明（Round 67 对标 YouQu 更新日志）：为空表示不进入 changelog
   notes: text("notes"),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  completionResult: jsonb("completion_result").$type<PlanCompletionResult>(),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   sortOrder: integer("sort_order").notNull().default(0),
 }, (t) => [
   uniqueIndex("release_project_name_key").on(t.projectId, t.name),
@@ -1184,6 +1192,7 @@ export const indexJob = pgTable("index_job", {
   /** 本任务产出的代号；成功后在单事务内切换生效代（原子切换） */
   generation: integer("generation").notNull().default(1),
   errorMessage: text("error_message"),
+  activatedAt: timestamp("activated_at", { withTimezone: true }),
   heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }),
   startedAt: timestamp("started_at", { withTimezone: true }),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
@@ -1191,6 +1200,7 @@ export const indexJob = pgTable("index_job", {
 }, (t) => [
   index("index_job_status_idx").on(t.status, t.createdAt),
   index("index_job_page_idx").on(t.pageId),
+  index("index_job_page_active_generation_idx").on(t.pageId, t.generation.desc()).where(sql`${t.activatedAt} is not null and ${t.status} = 'SUCCEEDED'`),
   check("index_job_mode_allowed", sql`${t.mode} IN ('INCREMENTAL','FULL','REEMBED')`),
   check("index_job_status_allowed", sql`${t.status} IN ('PENDING','RUNNING','SUCCEEDED','FAILED','CANCELLED')`),
 ]);
@@ -1214,7 +1224,7 @@ export const aiProviderConfig = pgTable("ai_provider_config", {
   isDefault: boolean("is_default").notNull().default(false),
   /** 是否可被新索引/检索使用（停用后保留配置） */
   isActive: boolean("is_active").notNull().default(true),
-  /** 最近一次连接测试（真实 GET /models 或 /api/tags） */
+  /** 最近一次按用途进行的模型调用测试；Ollama使用目录连接探测 */
   lastTestAt: timestamp("last_test_at", { withTimezone: true }),
   lastTestOk: boolean("last_test_ok"),
   lastTestError: text("last_test_error"),
@@ -1630,6 +1640,7 @@ export const automationRule = pgTable("automation_rule", {
   scheduleCron: text("schedule_cron"),
   scheduleTimezone: text("schedule_timezone").default("Asia/Shanghai"),
   lastScheduledAt: timestamp("last_scheduled_at", { withTimezone: true }),
+  scheduleState: jsonb("schedule_state"),
   createdBy: uuid("created_by").references(() => member.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(now),
@@ -1693,4 +1704,101 @@ export const workItemSla = pgTable("work_item_sla", {
   uniqueIndex("work_item_sla_item_key").on(t.workItemId),
   index("work_item_sla_due_idx").on(t.state, t.responseDueAt),
   check("work_item_sla_state_allowed", sql`${t.state} IN ('ACTIVE','MET','BREACHED','CANCELLED')`),
+]);
+
+// ══ 系统数据备份与恢复控制记录 ════════════════════════════════════
+
+export const systemBackup = pgTable("system_backup", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  requestedBy: uuid("requested_by").references(() => member.id, { onDelete: "set null" }),
+  mode: text("mode").notNull(),
+  status: text("status").notNull().default("PENDING"),
+  headerDraft: jsonb("header_draft").notNull(),
+  packagePath: text("package_path"),
+  bytes: bigint("bytes", { mode: "number" }),
+  manifestSummary: jsonb("manifest_summary"),
+  downloadCount: integer("download_count").notNull().default(0),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(now),
+}, (t) => [
+  index("system_backup_requested_idx").on(t.requestedBy, t.createdAt),
+  check("system_backup_mode_check", sql`${t.mode} in ('safe','full')`),
+  check("system_backup_status_check", sql`${t.status} in ('PENDING','RUNNING','SUCCEEDED','FAILED')`),
+  check("system_backup_download_count_check", sql`${t.downloadCount} >= 0`),
+]);
+
+export const systemRestore = pgTable("system_restore", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  packageId: uuid("package_id"),
+  status: text("status").notNull().default("UPLOADED"),
+  uploadPath: text("upload_path").notNull(),
+  ownerSessionHash: text("owner_session_hash"),
+  mode: text("mode"),
+  sourceVersion: text("source_version"),
+  manifestSummary: jsonb("manifest_summary"),
+  manifestHash: text("manifest_hash"),
+  rebuildJobId: uuid("rebuild_job_id"),
+  rebuildCompletedAt: timestamp("rebuild_completed_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(now),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+}, (t) => [
+  check("system_restore_status_check", sql`${t.status} in ('UPLOADED','PREFLIGHT_PASSED','RESTORING','SUCCEEDED','FAILED')`),
+  check("system_restore_owner_hash_check", sql`${t.ownerSessionHash} is null or ${t.ownerSessionHash} ~ '^[a-f0-9]{64}$'`),
+  check("system_restore_manifest_hash_check", sql`${t.manifestHash} is null or ${t.manifestHash} ~ '^[a-f0-9]{64}$'`),
+]);
+
+// ══ 按账号持久化的知识助手会话 ════════════════════════════════
+export const ragConversation = pgTable("rag_conversation", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  ownerId: uuid("owner_id").notNull().references(() => member.id, { onDelete: "cascade" }),
+  title: text("title").notNull().default("新对话"),
+  titleIsDefault: boolean("title_is_default").notNull().default(true),
+  // 项目删除不能把固定范围悄然改为全部项目。
+  projectId: uuid("project_id").references(() => project.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(now),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+}, (t) => [index("rag_conversation_owner_updated_idx").on(t.ownerId, t.updatedAt, t.id)]);
+
+export const ragMessage = pgTable("rag_message", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: uuid("conversation_id").notNull().references(() => ragConversation.id, { onDelete: "cascade" }),
+  requestId: uuid("request_id").notNull(),
+  question: text("question").notNull(),
+  requestMetadata: jsonb("request_metadata").$type<import("../shared/rag.ts").RagReferences>(),
+  status: text("status").notNull().default("pending"),
+  reply: jsonb("reply").$type<import("../shared/rag.ts").RagChatResult>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(now),
+}, (t) => [
+  uniqueIndex("rag_message_request_key").on(t.conversationId, t.requestId),
+  uniqueIndex("rag_message_pending_key").on(t.conversationId).where(sql`${t.status} = 'pending'`),
+  index("rag_message_conversation_created_idx").on(t.conversationId, t.createdAt, t.id),
+  check("rag_message_status_check", sql`${t.status} in ('pending','completed','failed','cancelled','unavailable')`),
+]);
+
+/** 助手直传临时资料：内容始终加密，标识本身不构成授权，永不参与系统备份。 */
+export const assistantArtifact = pgTable("assistant_artifact", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  ownerId: uuid("owner_id").notNull().references(() => member.id, { onDelete: "cascade" }),
+  sourceTokenId: uuid("source_token_id").references(() => apiToken.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  allowedProjectIds: jsonb("allowed_project_ids").$type<string[]>().notNull(),
+  filename: text("filename"),
+  mimeType: text("mime_type"),
+  sizeBytes: integer("size_bytes"),
+  sha256: text("sha256"),
+  destination: jsonb("destination").$type<{ kind: string; baseUrl: string }>(),
+  payloadEncrypted: text("payload_encrypted").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}, (t) => [
+  index("assistant_artifact_owner_created_idx").on(t.ownerId, t.createdAt),
+  index("assistant_artifact_expires_idx").on(t.expiresAt),
+  check("assistant_artifact_kind_check", sql`${t.kind} in ('FILE','CREDENTIAL')`),
+  check("assistant_artifact_scope_check", sql`jsonb_typeof(${t.allowedProjectIds}) = 'array' and jsonb_array_length(${t.allowedProjectIds}) between 1 and 20`),
+  check("assistant_artifact_size_check", sql`${t.sizeBytes} is null or (${t.sizeBytes} > 0 and ${t.sizeBytes} <= 8388608)`),
 ]);

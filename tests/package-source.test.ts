@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 const script = resolve("scripts/package-source.mjs");
 
 describe("源码发布包的公开边界", () => {
-  it("保留源码、测试、使用文档和许可证，排除内部资料、贡献入口和凭据", () => {
+  it("保留源码、测试、README素材和许可证，排除过程文档、贡献入口和凭据", () => {
     const directory = mkdtempSync(join(tmpdir(), "feronavi-source-test-"));
     const output = join(tmpdir(), `feronavi-source-test-${Date.now()}.tar.gz`);
     try {
@@ -25,6 +25,7 @@ describe("源码发布包的公开边界", () => {
         "docs/screenshots/11-wiki-light.png",
         "docs/screenshots/01-workbench-dark.png",
         "docs/screenshots/04-wiki-dark.png",
+        "docs/deploy.md",
         "docs/superpowers/plans/private-plan.md",
         "docs/evidence/private-result.json",
         "docs/验收/private-report.md",
@@ -43,6 +44,7 @@ describe("源码发布包的公开边界", () => {
         "src/example.ts",
         "scripts/package-source.mjs",
         "package.json",
+        "patches/postgres@3.4.9.patch",
         ".env.example",
         ".env.production",
         "release.pem",
@@ -58,6 +60,8 @@ describe("源码发布包的公开边界", () => {
         writeFileSync(join(directory, file), "test fixture\n");
       }
       execFileSync("git", ["add", "--all"], { cwd: directory });
+      mkdirSync(join(directory, "src/client/routes"), { recursive: true });
+      writeFileSync(join(directory, "src/client/routes/AssistantPage.tsx"), "export const AssistantPage = () => null;\n");
       execFileSync(process.execPath, [script, output], { cwd: directory });
       const archivePaths = execFileSync("tar", ["-tzf", output], {
         encoding: "utf8",
@@ -77,8 +81,10 @@ describe("源码发布包的公开边界", () => {
         "docs/screenshots/11-wiki-light.png",
         "package.json",
         "packages/feronavi-mcp/LICENSE",
+        "patches/postgres@3.4.9.patch",
         "public/design-key.svg",
         "scripts/package-source.mjs",
+        "src/client/routes/AssistantPage.tsx",
         "src/example.ts",
         "tests/example.test.ts",
       ]);
@@ -89,6 +95,19 @@ describe("源码发布包的公开边界", () => {
       rmSync(directory, { recursive: true, force: true });
       for (const suffix of ["", ".files", ".manifest.json"])
         rmSync(output + suffix, { force: true });
+    }
+  });
+
+  it("拒绝缺少既有助手和备份入口的产品快照", () => {
+    const directory = mkdtempSync(join(tmpdir(), "feronavi-source-incomplete-"));
+    try {
+      execFileSync("git", ["init", "--quiet"], { cwd: directory });
+      mkdirSync(join(directory, "src/server"), { recursive: true });
+      writeFileSync(join(directory, "src/server/app.ts"), "export const app = {};\n");
+      expect(() => execFileSync(process.execPath, [script, join(directory, "incomplete.tar.gz")], { cwd: directory, stdio: "pipe" }))
+        .toThrow(/Incomplete product source/);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
     }
   });
 });

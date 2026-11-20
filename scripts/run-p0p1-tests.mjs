@@ -10,9 +10,10 @@ const steps = [
   ["对比度", ["scripts/check-contrast.mjs"]],
   ["隔离集成", ["node_modules/vitest/vitest.mjs", "run", "--config", "vitest.integration.config.ts"]],
   ["浏览器关键流程与生产构建", ["node_modules/@playwright/test/cli.js", "test"]],
-  ...["a11y", "keyboard-a11y", "ldap-scim", "smtp", "automation-sla", "portfolio", "pwa", "backup-restore", "approval", "scheduled", "ops", "migrations"].map((name) => [name, ["scripts/run-isolated-test.ts", "--browser", `scripts/accept-${name}.mjs`]]),
+  ...["a11y", "keyboard-a11y", "ldap-scim", "smtp", "automation-sla", "portfolio", "pwa", "system-backup", "approval", "scheduled", "ops", "migrations"].map((name) => [name, ["scripts/run-isolated-test.ts", "--browser", `scripts/accept-${name}.mjs`]]),
   ["MCP 包", ["scripts/run-isolated-test.ts", "--browser", "scripts/verify-mcp-package.mjs"]],
 ];
+console.log("可选运维检查单独运行：accept:ops-db-restore（依赖 PostgreSQL CLI，不计入产品门禁）");
 let child;
 let interrupted = false;
 const interrupt = () => { interrupted = true; child?.kill("SIGTERM"); };

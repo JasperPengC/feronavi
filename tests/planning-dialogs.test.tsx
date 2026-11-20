@@ -12,12 +12,12 @@ const json = (value: unknown, status = 200) => new Response(JSON.stringify(value
 const discard = "有未保存的修改。确认放弃修改并关闭？";
 type Handler = (path: string, init?: RequestInit) => Response | Promise<Response> | undefined;
 
-function mount(handler: Handler = () => undefined) {
+function mount(handler: Handler = () => undefined, path = "/projects/p1/milestones") {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input), "http://localhost").pathname;
     const response = handler(path, init);
     if (response) return response;
-    if (path.endsWith("/auth/me")) return json({ memberId: "m1", username: "demo", name: "测试", permissions: ["milestone:manage"], dataScopes: [], locale: "zh-CN", mustChangePassword: false });
+    if (path.endsWith("/auth/me")) return json({ memberId: "m1", username: "demo", name: "测试", permissions: ["milestone:manage", "project:create"], dataScopes: [], locale: "zh-CN", mustChangePassword: false });
     if (path.endsWith("/projects")) return json({ items: [] });
     if (path.endsWith("/notifications")) return json({ items: [], unreadCount: 0 });
     if (path.endsWith("/system/status")) return json({ ok: true });
@@ -26,7 +26,7 @@ function mount(handler: Handler = () => undefined) {
     return json({});
   }));
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } }); clients.push(qc);
-  const router = makeRouter(createMemoryHistory({ initialEntries: ["/projects/p1/milestones"] }));
+  const router = makeRouter(createMemoryHistory({ initialEntries: [path] }));
   render(<QueryClientProvider client={qc}><RouterProvider router={router} /></QueryClientProvider>);
   return router;
 }
@@ -138,4 +138,89 @@ it("计划实体和容量读取失败显示实际错误，可原位重试且读�
   const points = await within(dialog).findByLabelText("成员甲 容量点数");
   await waitFor(() => expect((points as HTMLInputElement).value).toBe("8"));
   expect((within(dialog).getByRole("button", { name: "保存", exact: true }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+it("新建项目统一 Modal：草稿可取消离开，提交锁定，失败保留输入并可重试", async () => {
+  let finish!: (response: Response) => void;
+  const writes: Record<string, unknown>[] = [];
+  mount((path, init) => {
+    if (path.endsWith("/departments")) return json({ departments: [] });
+    if (path.endsWith("/project-templates")) return json({ templates: [] });
+    if (path.endsWith("/projects") && init?.method === "POST") {
+      writes.push(JSON.parse(String(init.body)));
+      return writes.length === 1 ? new Promise<Response>(done => { finish = done; }) : json({ id: "p2" }, 201);
+    }
+  }, "/projects");
+  const trigger = await screen.findByRole("button", { name: "新建项目", exact: true });
+  trigger.focus(); fireEvent.click(trigger);
+  const dialog = await screen.findByRole("dialog", { name: "新建项目", exact: true });
+  expect(dialog.classList.contains("ui-modal")).toBe(true);
+  fireEvent.change(dialog.querySelector("#p-key")!, { target: { value: "TEST" } });
+  fireEvent.change(dialog.querySelector("#p-name")!, { target: { value: "一致交互项目" } });
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  fireEvent.click(within(await screen.findByRole("dialog", { name: discard })).getByRole("button", { name: "取消", exact: true }));
+  const submit = within(dialog).getByRole("button", { name: "创建", exact: true });
+  fireEvent.click(submit);
+  await waitFor(() => expect(writes).toHaveLength(1));
+  expect(dialog.querySelector("#p-name")!.matches(":disabled")).toBe(true);
+  fireEvent.keyDown(dialog, { key: "Escape" }); fireEvent.mouseDown(dialog.parentElement!); fireEvent.click(submit);
+  expect(writes).toHaveLength(1); expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  await act(async () => finish(json({ code: "CONFLICT", message: "项目代号重复" }, 409)));
+  expect((await within(dialog).findByRole("alert")).textContent).toContain("项目代号重复");
+  expect((dialog.querySelector("#p-name") as HTMLInputElement).value).toBe("一致交互项目");
+  fireEvent.click(submit);
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(writes[1]).toMatchObject({ key: "TEST", name: "一致交互项目", description: null, departmentId: null });
+  expect(document.activeElement).toBe(trigger);
+});
+
+it("计划实体短表单统一 Modal：编辑不误判草稿，失败保留且提交中锁定退出", async () => {
+  let finish!: (response: Response) => void; let writes = 0;
+  mount((path, init) => {
+    if (path.endsWith("/iterations/it1") && init?.method === "PATCH") {
+      writes++; return new Promise<Response>(done => { finish = done; });
+    }
+  });
+  fireEvent.click(await screen.findByRole("tab", { name: "迭代", exact: true }));
+  const row = (await screen.findByText(iteration.name)).closest("li")!;
+  fireEvent.click(within(row).getByRole("button", { name: "编辑", exact: true }));
+  let dialog = screen.getByRole("dialog", { name: /编辑.*迭代/ });
+  expect(dialog.classList.contains("ui-modal")).toBe(true);
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  fireEvent.click(within(row).getByRole("button", { name: "编辑", exact: true }));
+  dialog = screen.getByRole("dialog", { name: /编辑.*迭代/ });
+  fireEvent.change(within(dialog).getByLabelText(/名称/), { target: { value: "修改后迭代" } });
+  fireEvent.mouseDown(dialog.parentElement!);
+  fireEvent.click(within(await screen.findByRole("dialog", { name: discard })).getByRole("button", { name: "取消", exact: true }));
+  fireEvent.click(within(dialog).getByRole("button", { name: "保存", exact: true }));
+  await waitFor(() => expect(writes).toBe(1));
+  expect(within(dialog).getByLabelText(/名称/).matches(":disabled")).toBe(true);
+  fireEvent.keyDown(dialog, { key: "Escape" }); fireEvent.click(within(dialog).getByRole("button", { name: "关闭" }));
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  await act(async () => finish(json({ code: "CONFLICT", message: "迭代保存失败" }, 409)));
+  expect((await within(dialog).findByRole("alert")).textContent).toContain("迭代保存失败");
+  expect((within(dialog).getByLabelText(/名称/) as HTMLInputElement).value).toBe("修改后迭代");
+});
+
+it("项目集空态从统一 Modal 创建，失败保留输入且确认后可丢弃", async () => {
+  const writes: unknown[] = [];
+  mount((path, init) => {
+    if (path.endsWith("/portfolios")) {
+      if (init?.method === "POST") { writes.push(JSON.parse(String(init.body))); return json({ code: "CONFLICT", message: "项目集名称冲突" }, 409); }
+      return json({ portfolios: [] });
+    }
+  }, "/portfolios");
+  const trigger = await screen.findByRole("button", { name: "新建项目集" });
+  trigger.focus(); fireEvent.click(trigger);
+  const modal = screen.getByRole("dialog", { name: "新建项目集" });
+  fireEvent.change(within(modal).getByLabelText("新项目集名称"), { target: { value: "产品线" } });
+  fireEvent.click(within(modal).getByRole("button", { name: "新建项目集" }));
+  expect((await within(modal).findByRole("alert")).textContent).toContain("项目集名称冲突");
+  expect(writes).toEqual([{ name: "产品线" }]);
+  expect((within(modal).getByLabelText("新项目集名称") as HTMLInputElement).value).toBe("产品线");
+  fireEvent.keyDown(modal, { key: "Escape" });
+  fireEvent.click(within(await screen.findByRole("dialog", { name: discard })).getByRole("button", { name: "确认", exact: true }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(document.activeElement).toBe(trigger);
 });

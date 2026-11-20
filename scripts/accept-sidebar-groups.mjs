@@ -26,8 +26,8 @@ try {
     workspaceHeight: Math.round(document.querySelector(".workspace-switcher")?.getBoundingClientRect().height ?? 0),
   }));
   check("侧栏宽度 224px（YouQu 宽度）", initial.width === 224, String(initial.width));
-  check("一级入口为「概览/今日聚焦/问题追踪 + 项目/管理/平台」", initial.direct.length === 3 && initial.groups.map((g) => g.text).join(",") === "项目,管理,平台", JSON.stringify({ direct: initial.direct, groups: initial.groups.map((g) => g.text) }));
-  check("项目默认展开，管理/平台默认收起", initial.groups.find((g) => g.text === "项目")?.expanded === "true" && initial.groups.find((g) => g.text === "管理")?.expanded === "false" && initial.groups.find((g) => g.text === "平台")?.expanded === "false", JSON.stringify(initial.groups));
+  check("一级入口为「总览/知识助手/问题追踪 + 项目/管理/设置/平台」", initial.direct.join(",") === "总览,知识助手,问题追踪" && initial.groups.map((g) => g.text).join(",") === "项目,管理,设置,平台", JSON.stringify({ direct: initial.direct, groups: initial.groups.map((g) => g.text) }));
+  check("项目与设置默认展开，管理与平台默认收起", ["项目", "设置"].every((name) => initial.groups.find((g) => g.text === name)?.expanded === "true") && ["管理", "平台"].every((name) => initial.groups.find((g) => g.text === name)?.expanded === "false"), JSON.stringify(initial.groups));
   check("一级项 36 / 子项 32、缩进+引导线", initial.itemHeights.every((h) => h === 36 || h === 32) && parseFloat(initial.guide) === 1, JSON.stringify({ heights: [...new Set(initial.itemHeights)], guide: initial.guide }));
   check("项目切换器压成紧凑一行（≤44px）", initial.workspaceHeight > 0 && initial.workspaceHeight <= 44, String(initial.workspaceHeight));
 
@@ -45,8 +45,10 @@ try {
   check("折叠状态刷新后持久化", (await page.locator('.nav-group-toggle', { hasText: "管理" }).getAttribute("aria-expanded")) === "false");
 
   // 当前路由自动展开所在一级
+  const settingsGroup = page.locator('.nav-group[data-nav-group="settings"]');
+  await settingsGroup.locator(".nav-group-toggle").click();
   await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(900);
-  check("进入 /settings 自动展开「管理」", (await page.locator('.nav-group-toggle', { hasText: "管理" }).getAttribute("aria-expanded")) === "true");
+  check("进入 /settings 自动展开设置组并激活个人偏好", (await settingsGroup.locator(".nav-group-toggle").getAttribute("aria-expanded")) === "true" && new URL(page.url()).pathname === "/settings/personal" && await settingsGroup.getByRole("link", { name: "个人偏好", exact: true }).isVisible());
 
   // 项目内菜单只在选中项目后出现，且不会再出现“点计划突然冒组”
   await page.goto(`${BASE}/workbench`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(700);
@@ -56,16 +58,19 @@ try {
   check("未选项目时侧栏不含项目内「计划/时间线/知识库」", !workbenchText.includes("计划") && !workbenchText.includes("时间线") && !workbenchText.includes("知识库"), (await projectGroup.innerText()).slice(0, 80));
   check("未选项目时项目子菜单只有全局入口", beforeItems === 2, String(beforeItems));
   await page.goto(`${BASE}/projects/${pid}`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(1000);
-  if (await projectGroup.locator(".nav-group-toggle").getAttribute("aria-expanded") === "false") {
-    await projectGroup.locator(".nav-group-toggle").click(); await page.waitForTimeout(300);
+  const currentProject = page.locator('.nav-group[data-nav-group="currentProject"]');
+  if (await currentProject.locator(".nav-group-toggle").getAttribute("aria-expanded") === "false") {
+    await currentProject.locator(".nav-group-toggle").click(); await page.waitForTimeout(300);
   }
-  const afterItems = await projectGroup.locator(".shell-nav-item").count();
-  const projectMenuText = await projectGroup.innerText();
-  check("选中项目后项目子菜单出现项目概览/看板/计划/知识库", afterItems >= 6 && projectMenuText.includes("项目概览") && projectMenuText.includes("计划") && projectMenuText.includes("知识库"), `${beforeItems}→${afterItems} ${projectMenuText.slice(0, 100)}`);
+  const afterItems = await currentProject.locator(".shell-nav-item").count();
+  const projectMenuText = await currentProject.innerText();
+  const projectLinks = await currentProject.locator(".shell-nav-item").evaluateAll((links) => links.map((link) => new URL(link.href).pathname));
+  check("选中项目后当前项目组含概览/工作项/计划/知识库/洞察/活动", afterItems === 6 && ["", "/board", "/milestones", "/wiki", "/insights", "/activity"].every((suffix) => projectLinks.includes(`/projects/${pid}${suffix}`)), projectMenuText.slice(0, 100));
+  check("全局项目组继续保留全部项目与项目集", await projectGroup.locator(".shell-nav-item").count() === beforeItems && beforeItems === 2);
   await page.screenshot({ path: "/tmp/sidebar-v3-project.png" });
 
   // 桌面折叠态
-  await page.locator(".shell-collapse-button").click(); await page.waitForTimeout(300);
+  await page.getByRole("button", { name: "收起侧栏", exact: true }).click(); await page.waitForTimeout(300);
   const collapsed = await page.evaluate(() => ({ sidebar: Math.round(document.querySelector(".shell-sidebar").getBoundingClientRect().width), labelVisible: getComputedStyle(document.querySelector(".nav-group-label")).display !== "none" }));
   check("桌面折叠态隐藏文字且仅图标可读", collapsed.sidebar <= 90 && !collapsed.labelVisible, JSON.stringify(collapsed));
   await page.locator('.nav-group-toggle', { hasText: "平台" }).click(); await page.waitForTimeout(300);

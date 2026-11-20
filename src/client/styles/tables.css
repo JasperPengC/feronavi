@@ -200,7 +200,7 @@
 .audit-date-range { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .audit-date-range .date-filter { flex: none; }
 .audit-date-range .date-filter > .input { width: 138px; }
-.audit-page .audit-category { display: flex; align-items: center; gap: 5px; }
+.audit-page .data-scroll .table-secondary.audit-category { display: flex; align-items: center; gap: 5px; }
 .audit-page .audit-table { table-layout: fixed; }
 @media (min-width: 721px) {
   .audit-table th:first-child { width: 30%; }

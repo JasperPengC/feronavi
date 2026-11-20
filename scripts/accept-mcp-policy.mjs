@@ -36,7 +36,8 @@ try {
   tokenId = prep.tokenId;
   check("真实创建令牌并 MCP initialize", !!tokenId && prep.initOk, String(prep.initOk));
 
-  await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2600);
+  await page.goto(`${BASE}/tokens`, { waitUntil: "domcontentloaded" });
+  await page.getByRole("tab", { name: "MCP 客户端", exact: true }).click();
   const section = page.locator(".settings-section", { hasText: "MCP 客户端" });
   await section.scrollIntoViewIfNeeded();
   check("设置页出现「MCP 客户端」区块", (await section.count()) === 1);

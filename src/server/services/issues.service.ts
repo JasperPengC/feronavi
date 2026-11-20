@@ -1,3 +1,4 @@
+import { recordBusinessEvent } from "./event-log.ts";
 /**
  * 问题追踪（Round 64 · 对标 YouQu「问题追踪」P1）
  *
@@ -16,7 +17,6 @@ import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 import * as wiService from "./work-item.service.ts";
-import { writeActivity } from "./audit.service.ts";
 
 function hasOrgGrant(actor: Actor): boolean { return actor.grants.some((g) => g.scopeType === "ORG"); }
 async function assertVisible(actor: Actor, projectId: string): Promise<void> {
@@ -339,20 +339,34 @@ function canEditProgress(actor: Actor, wi: { reporterId: string | null; assignee
     || wi.reporterId === actor.memberId || wi.assigneeId === actor.memberId;
 }
 
+/** 实际写入与缓存重放共用当前进展编辑权。 */
+export async function authorizeProgressCreate(actor: Actor, workItemId: string) {
+  const wi = await wiService.getWorkItem(actor, workItemId);
+  if (!canEditProgress(actor, wi)) throw forbidden();
+  return wi;
+}
+
+export async function authorizeProgressDelete(actor: Actor, updateId: string) {
+  const row = (await db.select().from(workItemProgressUpdate).where(eq(workItemProgressUpdate.id, updateId)).limit(1))[0];
+  if (!row) throw forbidden();
+  const wi = await wiService.getWorkItem(actor, row.workItemId);
+  if (row.authorId !== actor.memberId && !canEditProgress(actor, wi)) throw forbidden();
+  return row;
+}
+
 export async function addProgressUpdate(actor: Actor, workItemId: string, input: {
   summary: string; nextSteps?: string | null; blockers?: string | null;
 }) {
-  const wi = await wiService.getWorkItem(actor, workItemId);
-  const full = wi as unknown as { reporterId: string | null; assigneeId: string | null; projectId: string };
-  if (!canEditProgress(actor, full)) throw forbidden();
+  const wi = await authorizeProgressCreate(actor, workItemId);
+  const full = wi;
   const [row] = await db.insert(workItemProgressUpdate).values({
     projectId: full.projectId, workItemId, authorId: actor.memberId,
     summary: input.summary.trim(),
     nextSteps: input.nextSteps?.trim() || null,
     blockers: input.blockers?.trim() || null,
   }).returning();
-  await writeActivity({
-    projectId: full.projectId, actorId: actor.memberId, targetType: "WORK_ITEM", targetId: workItemId,
+  await recordBusinessEvent({
+    projectId: full.projectId, actor, targetType: "WORK_ITEM", targetId: workItemId,
     action: "work_item.progress_added",
     summary: `${actor.name} 更新了问题「${(wi as unknown as { key: string }).key}」处理进展：${input.summary.slice(0, 60)}`,
   });
@@ -360,11 +374,7 @@ export async function addProgressUpdate(actor: Actor, workItemId: string, input:
 }
 
 export async function deleteProgressUpdate(actor: Actor, updateId: string): Promise<void> {
-  const row = (await db.select().from(workItemProgressUpdate).where(eq(workItemProgressUpdate.id, updateId)).limit(1))[0];
-  if (!row) throw forbidden();
-  const wi = await wiService.getWorkItem(actor, row.workItemId).catch(() => null);
-  if (!wi) throw forbidden();
-  const full = wi as unknown as { reporterId: string | null; assigneeId: string | null; projectId: string };
-  if (row.authorId !== actor.memberId && !canEditProgress(actor, full)) throw forbidden();
+  const row = await authorizeProgressDelete(actor, updateId);
   await db.delete(workItemProgressUpdate).where(eq(workItemProgressUpdate.id, updateId));
+  await recordBusinessEvent({ actor, action: "work_item.progress_deleted", targetType: "WORK_ITEM", targetId: row.workItemId, projectId: row.projectId });
 }

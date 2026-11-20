@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Actor } from "../src/server/permission/actor.ts";
 
 const mocks = vi.hoisted(() => {
@@ -85,6 +85,7 @@ beforeEach(() => {
   mocks.state.transaction.mockClear();
   mocks.state.cacheDel.mockClear();
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe("role.service", () => {
   it("拒绝缺少 role:manage 或 ORG 范围的服务调用，且不访问数据库", async () => {
@@ -116,6 +117,7 @@ describe("role.service", () => {
   });
 
   it("修改角色权限后清理每个受影响成员的权限上下文缓存", async () => {
+    vi.stubEnv("REDIS_URL", "redis://isolated-cache.invalid:6379");
     mocks.state.selects.push(
       [{ id: "role-custom", key: "custom:reviewer", name: "Reviewer", isBuiltin: false, isSystem: false }],
       [{ memberId: "member-2" }, { memberId: "member-3" }],

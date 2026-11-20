@@ -12,7 +12,7 @@ describe("COMMAND 协作命令契约", () => {
     expect(COLLAB_COMMANDS.WORK_ITEM).toContain("workitem.update");
     expect(COLLAB_COMMANDS.PLAN).toContain("plan.createMilestone");
     expect(COLLAB_COMMANDS.APPROVAL).toEqual(["approval.approve", "approval.reject"]);
-    expect(COLLAB_COMMANDS.AUTOMATION).toEqual(["automation.createRule"]);
+    expect(COLLAB_COMMANDS.AUTOMATION).toEqual(["automation.createRule", "automation.updateRule", "automation.disableRule", "automation.deleteRule", "automation.dryRun"]);
     for (const action of [...COLLAB_COMMANDS.WORK_ITEM, ...COLLAB_COMMANDS.PLAN, ...COLLAB_COMMANDS.APPROVAL, ...COLLAB_COMMANDS.AUTOMATION]) {
       expect(WRITE_ACTIONS.has(action)).toBe(true);
     }
@@ -25,5 +25,16 @@ describe("COMMAND 协作命令契约", () => {
     expect((tool?.inputSchema as { required?: string[] }).required).toEqual(expect.arrayContaining([
       "resourceType", "resourceId", "action", "userConfirmed",
     ]));
+  });
+
+  it("PLAN 声明四类计划的更新和归档，以及迭代版本完成命令", () => {
+    for (const suffix of ["Milestone", "Iteration", "Release", "Module"]) {
+      for (const action of ["create", "update", "archive", "unarchive"]) {
+        expect(COLLAB_COMMANDS.PLAN).toContain(`plan.${action}${suffix}`);
+        expect(WRITE_ACTIONS.has(`plan.${action}${suffix}`)).toBe(true);
+      }
+    }
+    expect(COLLAB_COMMANDS.PLAN).toContain("plan.completeIteration");
+    expect(COLLAB_COMMANDS.PLAN).toContain("plan.completeRelease");
   });
 });

@@ -2,14 +2,11 @@
 import type { FastifyInstance } from "fastify";
 import "../plugins-types.ts";
 import { z } from "zod";
-import { eq, sql } from "drizzle-orm";
 import { DomainError } from "../../shared/errors.ts";
 import * as planningService from "../services/planning.service.ts";
-import { db } from "../../db/index.ts";
-import { iterationCapacity, projectMembership } from "../../db/schema.ts";
-import { can, type PermissionContext } from "../permission/engine.ts";
+import * as lifecycle from "../services/planning-lifecycle.service.ts";
 import {
-  createSavedViewSchema,
+  createSavedViewSchema, completeIterationSchema,
 } from "../../shared/schemas/planning.ts";
 import type { Actor } from "../permission/actor.ts";
 
@@ -110,7 +107,7 @@ export async function registerPlanningRoutes(app: FastifyInstance): Promise<void
   app.get("/api/v1/projects/:projectId/iterations", async (req) => {
     const actor = actorOf(req);
     const { projectId } = pidParam.parse(req.params);
-    return planningService.list(actor, projectId, "iteration");
+    return planningService.list(actor, projectId, "iteration", { includeArchived: (req.query as { archived?: string }).archived === "true" });
   });
   app.post("/api/v1/projects/:projectId/iterations", { onRequest: app.csrfProtection }, async (req, reply) => {
     const actor = actorOf(req);
@@ -124,55 +121,20 @@ export async function registerPlanningRoutes(app: FastifyInstance): Promise<void
   app.get("/api/v1/iterations/:id/capacity", async (req) => {
     const actor = actorOf(req);
     const { id } = idParam.parse(req.params);
-    const it = await planningService.get(actor, id, "iteration");
-    const rows = await db.execute(sql`
-      select pm.member_id::text as member_id, m.name, m.username,
-             ic.capacity_points::float8 as capacity_points,
-             ic.capacity_hours::float8 as capacity_hours,
-             coalesce(ic.logged_points, 0)::float8 as logged_points
-      from project_membership pm
-      join member m on m.id = pm.member_id
-      left join iteration_capacity ic on ic.iteration_id = ${id} and ic.member_id = pm.member_id
-      where pm.project_id = ${it.projectId}
-      order by m.name
-    `) as unknown as { member_id: string; name: string; username: string; capacity_points: number | null; capacity_hours: number | null; logged_points: number }[];
-    return { members: rows.map((r) => ({ memberId: r.member_id, name: r.name, username: r.username,
-      capacityPoints: r.capacity_points, capacityHours: r.capacity_hours, loggedPoints: r.logged_points })) };
+    return planningService.getIterationCapacity(actor, id);
   });
 
   app.put("/api/v1/iterations/:id/capacity/:memberId", { onRequest: app.csrfProtection }, async (req) => {
     const actor = actorOf(req);
     const { id, memberId } = z.object({ id: z.string().uuid(), memberId: z.string().uuid() }).parse(req.params);
-    const it = await planningService.get(actor, id, "iteration");
-    const ctx: PermissionContext = { memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId };
-    if (!can(actor, "iteration:manage", { projectId: it.projectId, teamId: null }, ctx)) throw new DomainError("FORBIDDEN", "无权访问该资源", null);
-    const body = z.object({
-      capacityPoints: z.number().min(0).max(99999).nullable().optional(),
-      capacityHours: z.number().min(0).max(999999).nullable().optional(),
-    }).safeParse(req.body);
-    if (!body.success) throw new DomainError("VALIDATION", "参数不合法", body.error.issues);
-    const hasPoints = body.data.capacityPoints != null;
-    const hasHours = body.data.capacityHours != null;
-    if (hasPoints === hasHours) throw new DomainError("VALIDATION", "容量点数与容量小时必须二选一", null);
-    const memberRows = await db.select({ memberId: projectMembership.memberId }).from(projectMembership)
-      .where(eq(projectMembership.projectId, it.projectId));
-    if (!memberRows.some((m) => m.memberId === memberId)) throw new DomainError("VALIDATION", "成员不属于该项目", null);
-    const values = {
-      iterationId: id, memberId,
-      capacityPoints: body.data.capacityPoints != null ? String(body.data.capacityPoints) : null,
-      capacityHours: body.data.capacityHours != null ? String(body.data.capacityHours) : null,
-    };
-    const [row] = await db.insert(iterationCapacity).values(values).onConflictDoUpdate({
-      target: [iterationCapacity.iterationId, iterationCapacity.memberId],
-      set: { capacityPoints: values.capacityPoints, capacityHours: values.capacityHours },
-    }).returning();
+    const row = await planningService.setIterationCapacity(actor, id, memberId, req.body);
     return { ok: true, capacity: row };
   });
 
   app.get("/api/v1/iterations/:id", async (req) => {
     const actor = actorOf(req);
     const { id } = idParam.parse(req.params);
-    return planningService.get(actor, id, "iteration");
+    return planningService.getDetail(actor, id, "iteration");
   });
   app.patch("/api/v1/iterations/:id", { onRequest: app.csrfProtection }, async (req) => {
     const actor = actorOf(req);
@@ -184,7 +146,7 @@ export async function registerPlanningRoutes(app: FastifyInstance): Promise<void
   app.get("/api/v1/projects/:projectId/releases", async (req) => {
     const actor = actorOf(req);
     const { projectId } = pidParam.parse(req.params);
-    return planningService.list(actor, projectId, "release");
+    return planningService.list(actor, projectId, "release", { includeArchived: (req.query as { archived?: string }).archived === "true" });
   });
   app.post("/api/v1/projects/:projectId/releases", { onRequest: app.csrfProtection }, async (req, reply) => {
     const actor = actorOf(req);
@@ -197,7 +159,7 @@ export async function registerPlanningRoutes(app: FastifyInstance): Promise<void
   app.get("/api/v1/releases/:id", async (req) => {
     const actor = actorOf(req);
     const { id } = idParam.parse(req.params);
-    return planningService.get(actor, id, "release");
+    return planningService.getDetail(actor, id, "release");
   });
   app.patch("/api/v1/releases/:id", { onRequest: app.csrfProtection }, async (req) => {
     const actor = actorOf(req);
@@ -232,13 +194,20 @@ export async function registerPlanningRoutes(app: FastifyInstance): Promise<void
   });
 
   // ══ 归档 / 取消归档 ═══════════════════════════════════════
-  /**
-   * ⚠️ **只给有 archived_at 列的实体注册**。
-   *    iteration / release 在数据模型里**没有 archived_at**（它们的生命周期靠
-   *    completed_at 表达），给它们挂 /archive 只会得到一个注定 409 的端点 ——
-   *    那是把「服务层不支持」暴露成「用户操作失败」，纯属设计错误。
-   *    实测踩到：调用 iteration 的 archive 抛 CONFLICT。
-   */
+  // 里程碑/模块仍走原归档规则；迭代/版本共用完成和结转生命周期服务。
+  for (const kind of ["iteration", "release"] as const) {
+    app.post(`/api/v1/${kind}s/:id/complete`, { onRequest: app.csrfProtection }, async req => {
+      const actor = actorOf(req);
+      const { id } = idParam.parse(req.params);
+      const body = (kind === "iteration" ? completeIterationSchema : z.object({}).strict()).safeParse(req.body ?? {});
+      if (!body.success) throw new DomainError("VALIDATION", "完成计划参数不合法", body.error.issues);
+      return lifecycle.complete(actor, id, kind, body.data);
+    });
+    for (const action of ["archive", "unarchive"] as const) app.post(`/api/v1/${kind}s/:id/${action}`, { onRequest: app.csrfProtection }, async req => {
+      const { id } = idParam.parse(req.params);
+      return lifecycle.setArchived(actorOf(req), id, kind, action === "archive");
+    });
+  }
   const ARCHIVABLE = ["milestone", "module"] as const;
   for (const kind of ARCHIVABLE) {
     for (const [action, fn] of [

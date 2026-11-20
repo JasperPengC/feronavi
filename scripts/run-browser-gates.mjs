@@ -1,7 +1,7 @@
 /** 各浏览器闸门独立建库/启动，失败保留真实退出码，不自动重跑。 */
 import { spawn } from "node:child_process";
 import { repositoryRoot } from "../tests/support/isolated-database.ts";
-const gates = ["verify-structure.mjs", "verify-density.mjs", "verify-i18n-dom.mjs", "verify-row-style.mjs", "verify-performance.mjs"];
+const gates = ["verify-structure.mjs", "verify-density.mjs", "verify-i18n-dom.mjs", "verify-row-style.mjs", "verify-performance.mjs", "accept-system-backup.mjs"];
 let child;
 let interrupted = false;
 const interrupt = () => { interrupted = true; child?.kill("SIGTERM"); };

@@ -1,16 +1,17 @@
+import { businessEffects } from "./business-effects.ts";
 /** 工作项领域服务 */
 import { DomainError, forbidden } from "../../shared/errors.ts";
 import { createWorkItemSchema, updateWorkItemSchema, type CreateWorkItemInput } from "../../shared/schemas/work-item.ts";
 import { z } from "zod";
 
 import type { Actor } from "../permission/actor.ts";
-import { can, type PermissionContext } from "../permission/engine.ts";
+import { can, roleKeysForScope, type PermissionContext } from "../permission/engine.ts";
 import * as wiRepo from "../repos/work-item.repo.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 import * as wfRepo from "../repos/workflow.repo.ts";
 import { db, sql } from "../../db/index.ts";
-import { and, asc, eq, isNull, sql as dsql } from "drizzle-orm";
-import { workItem, workItemTransfer } from "../../db/schema.ts";
+import { and, asc, desc, eq, ilike, or, isNull, sql as dsql } from "drizzle-orm";
+import { workItem, workItemTransfer, workflowState } from "../../db/schema.ts";
 import { assertTreeParent, lockProjectTree } from "./project-tree.ts";
 
 const serviceUpdateSchema = updateWorkItemSchema.extend({ assigneeReason: z.string().max(2000).nullable().optional() }).strict();
@@ -33,12 +34,11 @@ export async function createWorkItem(
   projectId: string,
   input: CreateWorkItemInput,
 ): Promise<Awaited<ReturnType<typeof wiRepo.findById>>> {
+  businessEffects(); // Fail before writes if an entry point omitted application composition.
   const parsed = createWorkItemSchema.strict().safeParse(input);
   if (!parsed.success) throw new DomainError("VALIDATION", "工作项参数不合法", parsed.error.issues);
   input = parsed.data;
   await assertProjectVisible(actor, projectId);
-  // 与 updateWorkItem 同口径：计划实体必须与工作项同项目（否则可以跨项目挂接）
-  await assertPlanRefsSameProject(input, projectId);
 
   const project = await projectRepo.findById(projectId);
   if (!project) throw forbidden();
@@ -117,6 +117,8 @@ export async function createWorkItem(
   //    存在而踩空）。与 updateWorkItem 的回读口径保持一致。
   const created = await db.transaction(async () => {
     await lockProjectTree(projectId);
+    // 与完成/归档共用项目锁；校验与关联写入必须在同一事务。
+    await assertPlanRefsSameProject(input, projectId);
     if (input.parentId) await assertTreeParent("work_item", projectId, input.parentId);
     return wiRepo.insertWithNumber({
     projectId,
@@ -146,8 +148,11 @@ export async function createWorkItem(
   const full = await wiRepo.findById(created.id);
   // 刚插入的行必然可回读；回读不到说明事务/可见性出了问题，宁可显式报错也不返回残缺对象
   if (!full) throw new DomainError("INTERNAL", "工作项创建后回读失败", null);
-  void (await import("./automation.service.ts")).runAutomation("WORK_ITEM_CREATED", full.id);
-  void (await import("./sla.service.ts")).ensureSla(full.id);
+  await businessEffects().deliverWebhook("work_item.created", {
+    id: full.id, key: full.key, projectId, version: full.version, actorId: actor.memberId,
+  }, projectId);
+  void businessEffects().runAutomation("WORK_ITEM_CREATED", full.id);
+  void businessEffects().ensureSla(full.id);
   return full;
 }
 
@@ -161,7 +166,10 @@ export async function getWorkItem(actor: Actor, id: string) {
     const { isCollaborator } = await import("./collab.service.ts");
     if (!(await isCollaborator(actor.memberId, id))) throw forbidden();
   }
-  return wi;
+  // 当前状态属于工作项自身读取事实，不依赖工作流管理或另一工具权限。
+  const state = await wfRepo.findStateById(wi.statusId);
+  const currentState = state?.workflowId === wi.workflowId ? state : null;
+  return { ...wi, statusKey: currentState?.key ?? null, statusName: currentState?.name ?? null, statusCategory: currentState?.category ?? null };
 }
 
 /** 子工作项列表（父子层级 UI 用；只读，不改变主列表投影）。 */
@@ -189,6 +197,7 @@ export async function updateWorkItem(
   id: string,
   patch: Record<string, unknown>,
 ): Promise<ReturnType<typeof wiRepo.findById>> {
+  businessEffects(); // Fail before writes if an entry point omitted application composition.
   const parsed = serviceUpdateSchema.safeParse(patch);
   if (!parsed.success) throw new DomainError("VALIDATION", "工作项更新参数不合法", parsed.error.issues);
   patch = parsed.data;
@@ -221,8 +230,6 @@ export async function updateWorkItem(
    * 「按项目过滤」与「按关联过滤」会给出矛盾结果 —— 例如 A 项目的人
    * 看到自己项目的工作项挂在 B 项目的里程碑下，而他对 B 项目根本不可见。
    */
-  await assertPlanRefsSameProject(fields, wi.projectId);
-
   // 严重度与类型一致性（改 severity 时用现有 type 校验）
   if (fields.severity && wi.type !== "DEFECT") {
     throw new DomainError("VALIDATION", "严重度只对缺陷类型有效", null);
@@ -231,9 +238,11 @@ export async function updateWorkItem(
   if (wi.type === "SUBTASK" && fields.parentId === null) {
     throw new DomainError("VALIDATION", "子任务必须指定父工作项", null);
   }
-  const updated = fields.parentId !== undefined
+  const changesRelations = ["parentId", "milestoneId", "iterationId", "releaseId", "moduleId"].some(field => fields[field] !== undefined);
+  const updated = changesRelations
     ? await db.transaction(async () => {
         await lockProjectTree(wi.projectId);
+        await assertPlanRefsSameProject(fields, wi.projectId, wi);
         if (typeof fields.parentId === "string") await assertTreeParent("work_item", wi.projectId, fields.parentId, id);
         return wiRepo.updateWithVersion(id, version, fields);
       })
@@ -286,8 +295,12 @@ export async function updateWorkItem(
     }
   } catch { /* 可丢 */ }
 
-  void (await import("./automation.service.ts")).runAutomation("WORK_ITEM_UPDATED", id);
-  void (await import("./sla.service.ts")).ensureSla(id);
+  await businessEffects().deliverWebhook("work_item.updated", {
+    id, key: updated.key, projectId: wi.projectId, version: updated.version,
+    actorId: actor.memberId, changedFields: Object.keys(fields),
+  }, wi.projectId);
+  void businessEffects().runAutomation("WORK_ITEM_UPDATED", id);
+  void businessEffects().ensureSla(id);
 
   // ── 指派变更 → 通知新指派人 ───────────────────────────────
   // 只在「真的换了人」时发，且不给自己发。ASSIGN 类走免打扰与聚合：
@@ -332,6 +345,9 @@ export async function deleteWorkItem(actor: Actor, id: string): Promise<void> {
     const { cleanupLinksFor } = await import("./work-item-link.service.ts");
     await cleanupLinksFor("WORK_ITEM", id);
   }
+  await businessEffects().deliverWebhook("work_item.deleted", {
+    id, key: wi.key, projectId: wi.projectId, version: wi.version, actorId: actor.memberId,
+  }, wi.projectId);
 }
 
 
@@ -354,6 +370,7 @@ export async function transitionWorkItem(
   input: { toStateKey: string; version: number; fields?: Record<string, unknown> },
   opts: { skipApproval?: boolean } = {},
 ): Promise<NonNullable<Awaited<ReturnType<typeof wiRepo.findById>>>> {
+  businessEffects(); // Fail before writes if an entry point omitted application composition.
   const wi = await wiRepo.findById(id);
   if (!wi) throw forbidden();
   await assertProjectVisible(actor, wi.projectId);
@@ -383,8 +400,7 @@ export async function transitionWorkItem(
   // ③ 迁移权限：`allowed_role_ids` 为空 = 不限制（所有有 work_item:transition 的人都能用）
   const allowedRoles = (edge.allowedRoleIds ?? []) as string[];
   if (allowedRoles.length > 0) {
-    const myRoles = new Set(actor.grants.map((g) => g.roleKey));
-    // 角色可能是 id 也可能是 key —— 两种都认，避免配置侧写法不一致时静默失效
+    const myRoles = roleKeysForScope(actor, { projectId: wi.projectId });
     const ok = allowedRoles.some((r) => myRoles.has(r));
     if (!ok) throw forbidden();
   }
@@ -399,10 +415,11 @@ export async function transitionWorkItem(
 
   // 审批边：先落审批请求，不直接流转（内部审批通过时 skipApproval）
   if (edge.requiresApproval && !opts.skipApproval) {
-    const { requestApproval } = await import("./approval.service.ts");
+    const { requestApproval } = businessEffects();
     const approval = await requestApproval(actor, wi, {
       fromStateId: wi.statusId, toStateId: target.id,
       approverRoleKeys: (edge.approverRoleKeys ?? []) as string[],
+      fields: input.fields,
     });
     throw new DomainError("BLOCKED_BY_PREREQUISITE", "已提交审批，等待审批人处理", { approvalId: approval.id });
   }
@@ -413,9 +430,14 @@ export async function transitionWorkItem(
   const leavingTerminal = fromState?.category === "TERMINAL";
   const completedAt = enteringTerminal ? new Date() : leavingTerminal ? null : wi.completedAt;
 
-  const updated = await wiRepo.updateWithVersion(id, input.version, {
-    statusId: target.id,
-    completedAt,
+  const updated = await db.transaction(async () => {
+    await lockProjectTree(wi.projectId);
+    // 终态重开不能给已关闭的计划重新引入未完成项。
+    // carryOver=false 保留的历史未完成项仍可继续处理至终态。
+    if (leavingTerminal && !enteringTerminal) {
+      await assertPlanRefsSameProject({ iterationId: wi.iterationId, releaseId: wi.releaseId }, wi.projectId);
+    }
+    return wiRepo.updateWithVersion(id, input.version, { statusId: target.id, completedAt });
   });
   if (!updated) {
     // 极小概率：③④ 之间被别人改了。乐观锁兜住，不静默覆盖
@@ -471,15 +493,19 @@ export async function transitionWorkItem(
     }
   }
 
-  void (await import("./automation.service.ts")).runAutomation("STATUS_CHANGED", id);
-  void (await import("./sla.service.ts")).markTransition(id, target.category);
+  await businessEffects().deliverWebhook("work_item.transitioned", {
+    id, key: updated.key, projectId: wi.projectId, version: updated.version,
+    actorId: actor.memberId, fromStateId: wi.statusId, toStateId: target.id,
+  }, wi.projectId);
+  void businessEffects().runAutomation("STATUS_CHANGED", id);
+  void businessEffects().markTransition(id, target.category);
   return updated;
 }
 
 /** 详情页用：当前状态下当前 Actor 可用的迁移边 */
-export async function allowedTransitions(actor: Actor, wi: { workflowId: string; statusId: string }) {
+export async function allowedTransitions(actor: Actor, wi: { workflowId: string; statusId: string; projectId: string }) {
   const edges = await wfRepo.listTransitionsFrom(wi.workflowId, wi.statusId);
-  const myRoles = new Set(actor.grants.map((g) => g.roleKey));
+  const myRoles = roleKeysForScope(actor, { projectId: wi.projectId });
   return edges
     .filter((e) => {
       const allowed = (e.allowedRoleIds ?? []) as string[];
@@ -515,6 +541,7 @@ export async function loadBoardColumn(actor: Actor, projectId: string, stateKey:
 async function assertPlanRefsSameProject(
   fields: Record<string, unknown>,
   projectId: string,
+  previous: Record<string, unknown> = {},
 ): Promise<void> {
   const checks = [
     ["milestoneId", "milestone"],
@@ -534,7 +561,9 @@ async function assertPlanRefsSameProject(
     //    必须用 sql(ident) 辅助函数；同时保留白名单，双保险。
     const TABLE_OK = new Set(["milestone", "iteration", "release", "module"]);
     if (!TABLE_OK.has(table)) throw new Error(`内部错误：未知计划实体表 ${table}`);
-    const rows = await sql<{ project_id: string | null }[]>`select project_id from ${sql(table)} where id = ${String(v)}::uuid limit 1`;
+    const rows = table === "iteration" || table === "release"
+      ? await sql<{ project_id: string | null; completed_at?: Date | null; archived_at?: Date | null }[]>`select project_id, completed_at, archived_at from ${sql(table)} where id = ${String(v)}::uuid limit 1`
+      : await sql<{ project_id: string | null; completed_at?: Date | null; archived_at?: Date | null }[]>`select project_id, archived_at from ${sql(table)} where id = ${String(v)}::uuid limit 1`;
 
     const row = rows[0];
     if (!row) {
@@ -543,21 +572,24 @@ async function assertPlanRefsSameProject(
     if (row.project_id !== projectId) {
       throw new DomainError("VALIDATION", `${table} 必须与工作项属于同一项目`, { field });
     }
+    if (v !== previous[field] && (row.completed_at || row.archived_at)) {
+      throw new DomainError("BLOCKED_BY_PREREQUISITE", "不能关联到已完成或归档的计划", { field });
+    }
   }
 }
 
 /**
- * 分页读取工作项（第六期：MCP `workitem.list` 的读路径）
- *
- * ⚠️ 与 REST 列表的关系：REST 的 `GET /work-items` 还支持视图分发（table/calendar/timeline）
- * 与更多筛选参数，其过滤逻辑目前仍在路由层。此处实现的是**同一口径的读子集**
- * （statusKey / assigneeId / type / 分页），供 MCP 工具使用；两者的可见性判定都走
- * `assertProjectVisible`，不会出现口径分叉。
+ * REST 普通列表与 MCP 共用授权、筛选、检索和投影；视图分发仍由路由处理。
+ * 未指定排序的服务调用保留编号升序；REST 传入 schema 默认的 created 排序。
  */
 export async function listWorkItems(
   actor: Actor,
   projectId: string,
-  filters: { statusKey?: string; assigneeId?: string; type?: string; page?: number; pageSize?: number } = {},
+  filters: { statusKey?: string; assigneeId?: string; type?: string; q?: string; priority?: string; parentId?: string;
+    iterationId?: string; milestoneId?: string; releaseId?: string; moduleId?: string; unscheduled?: boolean;
+    sort?: "created" | "updated" | "priority" | "dueDate";
+    sortBy?: "created_at" | "updated_at" | "due_date" | "priority" | "number";
+    sortDir?: "asc" | "desc"; page?: number; pageSize?: number } = {},
 ) {
   await assertProjectVisible(actor, projectId);
   const page = Math.max(1, filters.page ?? 1);
@@ -566,6 +598,22 @@ export async function listWorkItems(
   const conds = [eq(workItem.projectId, projectId), isNull(workItem.deletedAt)];
   if (filters.assigneeId) conds.push(eq(workItem.assigneeId, filters.assigneeId));
   if (filters.type) conds.push(eq(workItem.type, filters.type));
+  if (filters.priority) conds.push(eq(workItem.priority, filters.priority));
+  if (filters.q) {
+    // 同时保留 REST 的中文分词检索与服务的标题/编号/描述子串检索。
+    conds.push(or(
+      dsql`to_tsvector('chinese_zh', coalesce(${workItem.title}, '') || ' ' || coalesce(${workItem.description}, ''))
+        @@ plainto_tsquery('chinese_zh', ${filters.q})`,
+      ilike(workItem.title, `%${filters.q}%`),
+      ilike(workItem.key, `%${filters.q}%`),
+      ilike(workItem.description, `%${filters.q}%`),
+    )!);
+  }
+  for (const field of ["parentId", "iterationId", "milestoneId", "releaseId", "moduleId"] as const) {
+    if (filters[field]) conds.push(eq(workItem[field], filters[field]!));
+  }
+  if (filters.unscheduled === true) conds.push(and(isNull(workItem.startDate), isNull(workItem.dueDate))!);
+  if (filters.unscheduled === false) conds.push(dsql`(${workItem.startDate} is not null or ${workItem.dueDate} is not null)`);
   if (filters.statusKey) {
     // ⚠️ 本文件里 sql 是 postgres.js 客户端，drizzle 的构造器用 dsql（同项目第三次踩这个坑，已固化注释）
     conds.push(dsql`${workItem.statusId} in (
@@ -573,17 +621,35 @@ export async function listWorkItems(
     )`);
   }
 
+  const legacySort = { created: "created_at", updated: "updated_at", priority: "priority", dueDate: "due_date" } as const;
+  const sortBy = filters.sortBy ?? (filters.sort ? legacySort[filters.sort] : "number");
+  const sortable = {
+    created_at: workItem.createdAt,
+    updated_at: workItem.updatedAt,
+    due_date: workItem.dueDate,
+    // 字符串字母序不代表业务紧急程度。
+    priority: dsql`case ${workItem.priority}
+      when 'LOWEST' then 1 when 'LOW' then 2 when 'MEDIUM' then 3
+      when 'HIGH' then 4 when 'URGENT' then 5 end`,
+    number: workItem.number,
+  };
+  const direction = filters.sortDir ?? (["created_at", "updated_at", "priority"].includes(sortBy) ? "desc" : "asc");
+  const order = direction === "desc" ? desc : asc;
   const rows = await db.select({
     id: workItem.id, key: workItem.key, number: workItem.number, title: workItem.title,
     type: workItem.type, priority: workItem.priority, severity: workItem.severity,
     assigneeId: workItem.assigneeId, statusId: workItem.statusId,
+    projectId: workItem.projectId, workflowId: workItem.workflowId,
+    statusKey: workflowState.key, statusName: workflowState.name, statusCategory: workflowState.category,
     startDate: workItem.startDate, dueDate: workItem.dueDate,
+    createdAt: workItem.createdAt, updatedAt: workItem.updatedAt,
     version: workItem.version,
     // 计划实体关联（MCP plan.getMilestone 需按 milestoneId 过滤）
     milestoneId: workItem.milestoneId, iterationId: workItem.iterationId,
     releaseId: workItem.releaseId, moduleId: workItem.moduleId,
-  }).from(workItem).where(and(...conds))
-    .orderBy(asc(workItem.number)).limit(pageSize).offset((page - 1) * pageSize);
+  }).from(workItem).leftJoin(workflowState, and(eq(workItem.statusId, workflowState.id), eq(workItem.workflowId, workflowState.workflowId))).where(and(...conds))
+    .orderBy(dsql`${order(sortable[sortBy])} nulls last`, asc(workItem.number))
+    .limit(pageSize).offset((page - 1) * pageSize);
 
   const cnt = await db.select({ n: dsql<number>`count(*)::int` }).from(workItem).where(and(...conds));
   return { items: rows, total: cnt[0]?.n ?? 0, page, pageSize };

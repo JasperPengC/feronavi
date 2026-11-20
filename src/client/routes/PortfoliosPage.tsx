@@ -9,6 +9,8 @@ import { Panel } from "../components/ui/Panel.tsx";
 import { MetricCard } from "../components/ui/MetricCard.tsx";
 import { toast } from "../components/ui/Toast.tsx";
 import { Button } from "../components/ui/Button.tsx";
+import { Modal } from "../components/ui/Modal.tsx";
+import { useSettingsDraft } from "../components/settings/SettingsDraft.tsx";
 import { TextInput } from "../components/ui/TextInput.tsx";
 import { apiDelete, apiGet, apiPost, ApiError } from "../lib/api.ts";
 import { useCan } from "../lib/actor.ts";
@@ -25,6 +27,8 @@ export function PortfoliosPage() {
   // ⚠️ 门控必须与服务端一致：createPortfolio 要求的是 project:create（portfolio.service.ts）。
   // 此前写的 "portfolio:manage" 在权限目录里根本不存在 → 所有人永远看不到创建入口（走查 P3-8）。
   const canManage = useCan("project:create");
+  const [formOpen, setFormOpen] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [projectSearch, setProjectSearch] = useState("");
   // undefined 表示初次默认选中；null 表示用户主动收起。
@@ -47,9 +51,9 @@ export function PortfoliosPage() {
 
   const create = useMutation({
     mutationFn: () => apiPost("/api/v1/portfolios", { name }),
-    onSuccess: async () => { setName(""); await qc.invalidateQueries({ queryKey: ["portfolios"] }); },
+    onSuccess: async () => { setName(""); setFormOpen(false); setFormError(null); await qc.invalidateQueries({ queryKey: ["portfolios"] }); },
     // 操作失败 → toast（页面级 alert 会把列表顶下去，且不自动消失）
-    onError: (e) => toast.error(e instanceof ApiError ? e.message : t("pf.createFailed")),
+    onError: (e) => setFormError(e instanceof ApiError ? e.message : t("pf.createFailed")),
   });
   const addOne = useMutation({
     mutationFn: ({ portfolioId, projectId }: { portfolioId: string; projectId: string }) =>
@@ -78,19 +82,24 @@ export function PortfoliosPage() {
   const candidates = (projects.data?.items ?? []).filter((p) => !detail.data?.projects.some((linked) => linked.id === p.id));
   const matchingProjects = candidates.filter((p) => `${p.key} ${p.name}`.toLowerCase().includes(projectSearch.trim().toLowerCase()));
 
+  const draft = useSettingsDraft(formOpen, name, create.isPending);
+  const requestClose = () => void draft.leave(() => { setFormOpen(false); setName(""); setFormError(null); });
   return (
     <div className="page collection-page portfolios-page data-page">
+      {draft.guard}
+      <Modal open={formOpen} title={t("pf.create")} onClose={requestClose} width="sm" footer={<>
+        <Button disabled={create.isPending} onClick={requestClose}>{t("common.cancel")}</Button>
+        <Button variant="primary" loading={create.isPending} disabled={!name.trim() || create.isPending} onClick={() => { setFormError(null); create.mutate(); }}>{t("pf.create")}</Button>
+      </>}>
+        {formError && <p className="field-error" role="alert">{formError}</p>}
+        <fieldset disabled={create.isPending} className="settings-form-fields">
+          <TextInput label={t("pf.namePlaceholder")} aria-label={t("pf.namePlaceholder")} value={name} onChange={event => setName(event.target.value)} />
+          <p className="muted">{t("pf.createHint")}</p>
+        </fieldset>
+      </Modal>
       <PageHead
         title={t("pf.title")}
-        actions={canManage && items.length > 0 && (
-          <div className="portfolio-create-inline">
-            <TextInput placeholder={t("pf.namePlaceholder")} aria-label={t("pf.namePlaceholder")} value={name}
-              onChange={(e) => setName(e.target.value)} />
-            <Button variant="primary" disabled={!name.trim() || create.isPending} onClick={() => create.mutate()}>
-              {create.isPending ? t("pf.creating") : t("pf.create")}
-            </Button>
-          </div>
-        )}
+        actions={canManage && items.length > 0 && <Button variant="primary" aria-haspopup="dialog" onClick={() => setFormOpen(true)}>{t("pf.create")}</Button>}
       />
 
       {items.length > 0 && (
@@ -111,14 +120,7 @@ export function PortfoliosPage() {
                   <p>{t("pf.emptyHint")}</p>
                 </div>
                 {canManage && (
-                  <div className="portfolio-create">
-                    <TextInput placeholder={t("pf.namePlaceholder")} aria-label={t("pf.namePlaceholder")} value={name}
-                      onChange={(e) => setName(e.target.value)} inputClassName="portfolio-name-input" />
-                    <Button variant="primary" disabled={!name.trim() || create.isPending} onClick={() => create.mutate()}>
-                      {create.isPending ? t("pf.creating") : t("pf.create")}
-                    </Button>
-                    <p>{t("pf.createHint")}</p>
-                  </div>
+                  <Button variant="primary" aria-haspopup="dialog" onClick={() => setFormOpen(true)}>{t("pf.create")}</Button>
                 )}
               </div>
             </Panel>

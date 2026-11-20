@@ -59,4 +59,17 @@ describe("说明和图表提示交互", () => {
     expect(screen.getAllByRole("tooltip")).toHaveLength(1);
     expect(screen.getByRole("tooltip").textContent).toBe("第二个说明");
   });
+
+  it("键盘聚焦引发滚动时保留提示，悬停提示滚动时关闭", () => {
+    render(<InfoTip text="键盘可读说明" label="说明" />);
+    const trigger = screen.getByRole("button", { name: "说明" });
+    trigger.focus();
+    fireEvent.focus(trigger);
+    fireEvent.scroll(window);
+    expect(screen.getByRole("tooltip").textContent).toBe("键盘可读说明");
+    trigger.blur();
+    fireEvent.pointerEnter(trigger);
+    fireEvent.scroll(window);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
 });

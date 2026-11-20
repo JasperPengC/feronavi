@@ -37,8 +37,15 @@ const setup = await page.evaluate(async () => {
   const j = (r) => r.json();
   const projects = await fetch("/api/v1/projects").then(j);
   const pid = projects.items[0].id;
-  const iters = await fetch(`/api/v1/projects/${pid}/iterations`).then(j);
-  const iterationId = (iters[0] || iters.items?.[0] || {}).id ?? "";
+  // 使用当前日期的新迭代和真实估点工作项，避免历史演示迭代为空而只渲染空态。
+  const headers = { "content-type": "application/json", "x-csrf-token": csrf() };
+  const start = new Date(); start.setUTCDate(start.getUTCDate() - 1);
+  const end = new Date(); end.setUTCDate(end.getUTCDate() + 7);
+  const iteration = await fetch(`/api/v1/projects/${pid}/iterations`, { method: "POST", headers, body: JSON.stringify({ name: `图表验收-${Date.now()}`, startDate: start.toISOString().slice(0, 10), endDate: end.toISOString().slice(0, 10) }) }).then(j);
+  if (!iteration.id) throw new Error(`迭代创建失败 ${JSON.stringify(iteration)}`);
+  const iterationId = iteration.id;
+  const item = await fetch(`/api/v1/projects/${pid}/work-items`, { method: "POST", headers, body: JSON.stringify({ type: "TASK", title: "图表验收工作项", iterationId, estimatePoints: 5 }) }).then(j);
+  if (!item.id) throw new Error(`工作项创建失败 ${JSON.stringify(item)}`);
   const name = `验收洞察-${Date.now()}`;
   const d = await fetch("/api/v1/dashboards", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-csrf-token": csrf() }, body: JSON.stringify({ name, projectId: pid }) }).then(j);
   const types = ["BURNDOWN", "CUMULATIVE_FLOW", "COUNT", "PIE", "LIST", "ACTIVITY_HEATMAP"];
@@ -54,11 +61,12 @@ p.on("response", (r) => { if (r.url().includes("/widgets/") && r.url().endsWith(
 
 // 2) 打开洞察页并选择新仪表盘
 await p.goto(`${HOST}/projects/${setup.pid}/insights`, { waitUntil: "domcontentloaded" });
-await p.waitForTimeout(2500);
-await p.getByRole("button", { name: setup.name, exact: true }).click();
+await p.getByRole("tab", { name: "仪表盘", exact: true }).click();
+await p.getByRole("button", { name: "选择仪表盘", exact: true }).click();
+await p.getByRole("option", { name: setup.name, exact: true }).click();
 await p.waitForTimeout(2500);
 
-check("仪表盘面板只有一个", await p.locator("section.panel", { hasText: "把关心的指标拼成一屏" }).count() === 1);
+check("仪表盘面板只有一个", await p.locator("section.insight-dashboard").count() === 1);
 check("页面不再出现「尚未实现」占位", await p.getByText(/尚未实现/).count() === 0);
 const cards = p.locator(".widget-card");
 check("六个挂件都出现", await cards.count() === 6, `count=${await cards.count()}`);
@@ -75,7 +83,9 @@ await p.screenshot({ path: "/tmp/insight-dash-light.png" });
 // 3) 深色截图
 await put(p, { theme: "dark", locale: "zh-CN", timezone: "Asia/Shanghai", density: "comfortable" });
 await p.reload({ waitUntil: "domcontentloaded" }); await p.waitForTimeout(2600);
-await p.getByRole("button", { name: setup.name, exact: true }).click();
+await p.getByRole("tab", { name: "仪表盘", exact: true }).click();
+await p.getByRole("button", { name: "选择仪表盘", exact: true }).click();
+await p.getByRole("option", { name: setup.name, exact: true }).click();
 await p.waitForTimeout(2200);
 await p.screenshot({ path: "/tmp/insight-dash-dark.png" });
 await put(p, { theme: "system", locale: "zh-CN", timezone: "Asia/Shanghai", density: "comfortable" });

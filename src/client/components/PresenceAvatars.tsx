@@ -8,10 +8,13 @@ import { queryKeys } from "../lib/query-keys.ts";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "../lib/api.ts";
 import { t } from "../i18n/index.ts";
+import { firstGrapheme } from "../lib/first-grapheme.ts";
+import { useActor } from "../lib/actor.ts";
 
 interface OnlineMember { memberId: string; name: string; username: string; lastSeen: number }
 
-export function PresenceAvatars() {
+export function PresenceAvatars({ countOnly = false }: { countOnly?: boolean }) {
+  const actor = useActor();
   const q = useQuery({
     queryKey: queryKeys.presence(),
     queryFn: () => apiGet<{ online: OnlineMember[]; count: number }>("/api/v1/presence"),
@@ -20,15 +23,16 @@ export function PresenceAvatars() {
     retry: false,
   });
   const online = q.data?.online ?? [];
-  if (online.length === 0) return null;
+  const others = online.filter((member) => member.memberId !== actor.memberId);
+  if (online.length === 0 || (!countOnly && others.length === 0)) return null;
   return (
     <div className="presence-avatars" role="group" aria-label={t("presence.online", { n: String(online.length) })}>
-      {online.slice(0, 3).map((m) => (
+      {!countOnly && others.slice(0, 3).map((m) => (
         <span key={m.memberId} className="presence-avatar" title={`${m.name} @${m.username}`} aria-label={`${m.name} @${m.username}`}>
-          {(m.name || m.username || "?").slice(0, 1)}
+          {firstGrapheme(m.name, m.username)}
         </span>
       ))}
-      {online.length > 3 && <span className="presence-more">+{online.length - 3}</span>}
+      {!countOnly && others.length > 3 && <span className="presence-more">+{others.length - 3}</span>}
       <span className="presence-count">{t("presence.online", { n: String(online.length) })}</span>
     </div>
   );

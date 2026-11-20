@@ -10,6 +10,9 @@ export function SettingsSection({
   footer,
   className = "",
   fullWidth = false,
+  variant = "card",
+  leading,
+  status,
 }: {
   title: ReactNode;
   description?: ReactNode;
@@ -20,12 +23,16 @@ export function SettingsSection({
   footer?: ReactNode;
   className?: string;
   fullWidth?: boolean;
+  variant?: "card" | "row";
+  leading?: ReactNode;
+  status?: ReactNode;
 }) {
   return (
-    <section className={["settings-section", fullWidth ? "settings-section--full" : "", className].filter(Boolean).join(" ")}>
+    <section className={["settings-section", variant === "row" ? "settings-section--row" : "", fullWidth ? "settings-section--full" : "", className].filter(Boolean).join(" ")}>
       <div className="settings-section__head">
+        {leading && <span className="settings-section__leading" aria-hidden="true">{leading}</span>}
         <div className="settings-section__heading">
-          <h2 className="settings-section__title">{title}{hint && <InfoTip text={hint} />}</h2>
+          <h2 className="settings-section__title">{title}{hint && <InfoTip text={hint} />}{status && <span className="settings-section__status">{status}</span>}</h2>
           {description && <p className="settings-section__description">{description}</p>}
         </div>
         {actions && <div className="settings-section__actions">{actions}</div>}

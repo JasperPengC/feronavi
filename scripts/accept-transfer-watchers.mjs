@@ -39,13 +39,14 @@ try {
   await page.getByText("总登记", { exact: true }).waitFor({ timeout: 15_000 });
   await page.getByText(TITLE, { exact: true }).click();
   const drawer = page.locator(".ui-drawer");
+  await drawer.locator("summary", { hasText: "协作与工时" }).click();
   await drawer.getByText("转派与关注", { exact: true }).waitFor({ timeout: 10_000 });
   check("工作项抽屉显示转派与关注区块", (await drawer.innerText()).includes("转派与关注"));
 
   // 关注 / 取消关注
   await drawer.getByRole("button", { name: "关注", exact: true }).click();
   await page.waitForTimeout(800);
-  check("点击关注后变为已关注并出现在关注者列表", (await drawer.innerText()).includes("已关注") && (await drawer.innerText()).includes("演示管理员"));
+  check("点击关注后变为已关注并出现在关注者列表", (await drawer.innerText()).includes("已关注") && (await drawer.innerText()).includes("测试管理员"));
 
   // 转派（选临时成员 + 原因）
   await drawer.locator('[aria-label="转派给"]').click();
@@ -54,7 +55,7 @@ try {
   await drawer.getByRole("button", { name: "转派", exact: true }).click();
   await page.waitForTimeout(1200);
   const drawerText = await drawer.innerText();
-  check("转派后历史出现 from→to 与原因", drawerText.includes(`演示管理员 → ${NAME}`) && drawerText.includes(REASON), drawerText.slice(0, 200));
+  check("转派后历史出现 from→to 与原因", drawerText.includes(`测试管理员 → ${NAME}`) && drawerText.includes(REASON), drawerText.slice(0, 200));
   const [tr] = await sql`select count(*)::int as n from work_item_transfer where work_item_id = ${wiId} and reason = ${REASON}`;
   check("转派历史真实入库", tr.n === 1);
   const [sub] = await sql`select count(*)::int as n from subscription where target_id = ${wiId} and member_id = (select id from member where username = 'demo')`;

@@ -1,4 +1,4 @@
-/** 公开健康检查：供负载均衡/容器编排/告警脚本使用，不暴露业务数据。 */
+/** 公开 readiness：数据库必须就绪；可选缓存降级不影响就绪，不暴露业务数据。 */
 import type { FastifyInstance } from "fastify";
 import { pgSqlProbe } from "../repos/health.repo.ts";
 

@@ -85,8 +85,12 @@ function buildTransport(cfg: MailConfig): Transporter {
     secure: cfg.port === 465,
     // 测试用的本地假 SMTP 不接受认证：给了用户名才启用 auth
     auth: cfg.user ? { user: cfg.user, pass: cfg.password ?? "" } : undefined,
-    // 自签证书的私有部署常见，交由部署者决定是否配置可信证书
-    tls: { rejectUnauthorized: false },
+    // 有认证时必须先建立 TLS；私有 CA 通过 NODE_EXTRA_CA_CERTS 配置信任。
+    requireTLS: !!cfg.user && cfg.port !== 465,
+    tls: { rejectUnauthorized: true, minVersion: "TLSv1.2" },
+    connectionTimeout: 15_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 20_000,
   });
 }
 

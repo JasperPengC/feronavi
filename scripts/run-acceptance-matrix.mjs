@@ -3,10 +3,12 @@ import { spawn } from "node:child_process";
 import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { repositoryRoot } from "../tests/support/isolated-database.ts";
+import { classifyAcceptanceExit, acceptanceSuiteKind } from "./lib/acceptance-result.mjs";
 
 const onlyArg = process.argv.find((arg) => arg.startsWith("--only="))?.slice(7);
 const only = onlyArg ? new Set(onlyArg.split(",").map((name) => `${name.replace(/\.mjs$/, "")}.mjs`)) : null;
-const scripts = readdirSync(join(repositoryRoot, "scripts")).filter((name) => /^accept-.*\.mjs$/u.test(name) && (!only || only.has(name))).sort();
+const scripts = readdirSync(join(repositoryRoot, "scripts")).filter((name) => /^accept-.*\.mjs$/u.test(name)
+  && (only ? only.has(name) : acceptanceSuiteKind(name) === "product")).sort();
 if (!scripts.length || (only && scripts.length !== only.size)) throw new Error("验收套件名称不存在");
 const output = join(repositoryRoot, ".cache", `acceptance-matrix-${Date.now()}`);
 mkdirSync(output, { recursive: true });
@@ -30,14 +32,17 @@ try {
       child.once("exit", (code) => done(code ?? 1));
     });
     writeFileSync(join(output, `${name}.log`), log);
-    results.push({ name, exit, ms: Date.now() - started });
-    console.log(`${exit === 0 ? "OK" : "FAIL"} ${name}`);
+    const status = classifyAcceptanceExit(exit);
+    results.push({ name, kind: acceptanceSuiteKind(name), exit, status, ms: Date.now() - started });
+    console.log(`${status === "passed" ? "OK" : status === "skipped" ? "SKIP" : "FAIL"} ${name}`);
   }
 } finally {
   process.removeListener("SIGINT", interrupt);
   process.removeListener("SIGTERM", interrupt);
-  const passed = results.filter((result) => result.exit === 0).length;
-  writeFileSync(join(output, "report.json"), JSON.stringify({ total: scripts.length, passed, interrupted, results }, null, 2));
-  console.log(`验收矩阵：${passed}/${scripts.length} 通过；报告 ${output}`);
-  process.exitCode = !interrupted && passed === scripts.length ? 0 : 1;
+  const passed = results.filter((result) => result.status === "passed").length;
+  const skipped = results.filter((result) => result.status === "skipped").length;
+  const failed = results.filter((result) => result.status === "failed").length;
+  writeFileSync(join(output, "report.json"), JSON.stringify({ total: scripts.length, passed, skipped, failed, interrupted, results }, null, 2));
+  console.log(`验收矩阵：${passed}/${scripts.length} 通过，${skipped} 跳过，${failed} 失败；报告 ${output}`);
+  process.exitCode = !interrupted && failed === 0 && results.length === scripts.length ? 0 : 1;
 }

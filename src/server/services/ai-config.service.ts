@@ -153,31 +153,72 @@ export async function setDefaultProvider(actor: Actor, id: string) {
   return { ...row!, apiKeyEncrypted: undefined };
 }
 
-/** 真实连接测试：GET /models（OpenAI 兼容）或 /api/tags（Ollama），记录最近结果 */
+/** OpenAI兼容供应商按用途做最小真实推理；模型目录可访问不代表有余额或所选模型可用。 */
 export async function testProvider(actor: Actor, id: string) {
   assertConfigure(actor);
   const cur = await loadProvider(id);
   if (!cur) throw forbidden();
   const base = cur.baseUrl.replace(/\/+$/, "");
-  await assertSafeOutboundUrl(base);   // 每次出站前都过同一 SSRF 模块（C-17）
   const key = cur.apiKeyEncrypted ? decryptSecret(cur.apiKeyEncrypted) : null;
   const started = Date.now();
   try {
-    const res = await safeOutboundFetch(probeUrl(cur.provider, base), {
-      headers: key ? { authorization: `Bearer ${key}` } : {},
-      signal: AbortSignal.timeout(8_000),
-    });
-    const raw = await res.text();
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${raw.slice(0, 200)}`);
-    let parsed: unknown = null;
-    try { parsed = JSON.parse(raw); } catch { throw new Error("返回不是 JSON，连接测试不通过"); }
-    void parsed;
+    const signal = AbortSignal.timeout(12_000);
+    const probe = async (url: string, body?: object): Promise<unknown> => {
+      const res = await safeOutboundFetch(url, {
+        method: body ? "POST" : "GET",
+        headers: { ...(key ? { authorization: `Bearer ${key}` } : {}), ...(body ? { "content-type": "application/json" } : {}) },
+        ...(body ? { body: JSON.stringify(body) } : {}), signal,
+      });
+      if (!res.ok) {
+        await res.body?.cancel();
+        const hint = res.status === 402 ? "账户余额不足，请在模型服务商处充值后重试"
+          : res.status === 401 || res.status === 403 ? "认证或模型权限不足，请检查 API Key 和模型授权"
+          : res.status === 404 ? "模型或接口不存在，请检查模型名称和 Base URL"
+          : res.status === 429 ? "请求受限或额度耗尽，请检查服务商配额后重试" : "模型服务调用失败";
+        // 不保存上游原始错误正文，避免服务商回显密钥/请求内容进入持久记录。
+        throw new Error(`HTTP ${res.status}：${hint}`);
+      }
+      if (!res.body) throw new Error("模型服务返回空响应");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let raw = "", bytes = 0;
+      try {
+        while (true) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          bytes += chunk.value.byteLength;
+          if (bytes > 262_144) { await reader.cancel(); throw new Error("模型测试响应过大"); }
+          raw += decoder.decode(chunk.value, { stream: true });
+        }
+        raw += decoder.decode();
+      } finally { reader.releaseLock(); }
+      try { return JSON.parse(raw); } catch { throw new Error("返回不是 JSON，模型测试不通过"); }
+    };
+    if (cur.provider === "OLLAMA") {
+      await probe(probeUrl(cur.provider, base));
+    } else {
+      if (cur.purpose !== "EMBEDDING") {
+        const result = await probe(`${base}/chat/completions`, {
+          model: cur.model, messages: [{ role: "user", content: "这是连接测试，请只回复OK。" }], max_tokens: 256, stream: false,
+        }) as { choices?: { message?: { content?: unknown } }[] } | null;
+        const content = result?.choices?.[0]?.message?.content;
+        if (typeof content !== "string" || !content.trim()) throw new Error("对话模型未返回有效回答，请检查所选模型");
+      }
+      if (cur.purpose !== "LLM") {
+        const result = await probe(`${base}/embeddings`, { model: cur.embeddingModel, input: ["Feronavi connection test"] }) as { data?: { embedding?: unknown }[] } | null;
+        const vector = result?.data?.[0]?.embedding;
+        if (!Array.isArray(result?.data) || result.data.length !== 1 || !Array.isArray(vector)) throw new Error("向量模型未返回有效向量");
+        if (vector.length !== 1024) throw new Error(`模型返回 ${vector.length} 维向量，与库内 vector(1024) 不一致`);
+        if (!vector.every(value => typeof value === "number" && Number.isFinite(value))) throw new Error("向量模型返回了无效数值");
+      }
+    }
     const latencyMs = Date.now() - started;
     await db.update(aiProviderConfig).set({ lastTestAt: new Date(), lastTestOk: true, lastTestError: null, updatedAt: new Date() })
       .where(eq(aiProviderConfig.id, id));
     return { ok: true, latencyMs };
   } catch (e) {
-    const message = (e as Error).message.slice(0, 300);
+    const message = ((e as Error).name === "TimeoutError" ? "模型调用超时，请稍后重试" : (e as Error).message)
+      .replaceAll(key || "\u0000", "[redacted]").slice(0, 300);
     await db.update(aiProviderConfig).set({ lastTestAt: new Date(), lastTestOk: false, lastTestError: message, updatedAt: new Date() })
       .where(eq(aiProviderConfig.id, id));
     return { ok: false, error: message };

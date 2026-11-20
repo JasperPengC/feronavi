@@ -14,9 +14,28 @@ import { department, member, position, role, roleAssignment, workItem } from "..
 import { DomainError } from "../../shared/errors.ts";
 import { ANONYMIZED_PASSWORD_SENTINEL } from "../auth/password.ts";
 import { revokeMemberCredentials } from "../auth/session.ts";
+import type { Actor } from "../permission/actor.ts";
+import { can } from "../permission/engine.ts";
+import { writeSecurityAudit } from "./audit.service.ts";
+import { publishWorkspaceInvalidation } from "./workspace-events.service.ts";
 
 /** 匿名化后的固定展示名（数据模型 1.3 的两列表） */
 const ANONYMIZED_NAME = "已注销成员";
+
+/** REST 与 MCP 共用组织权限、生命周期事务、安全审计和提交后事件。 */
+export async function manageMemberLifecycle(actor: Actor, memberId: string, action: "disabled" | "enabled" | "anonymized", ip?: string) {
+  if (!can(actor, "member:manage", { projectId: null, teamId: null }, { memberId: actor.memberId, memberProjectIds: new Set(), memberTeamIds: new Set() })) {
+    throw new DomainError("FORBIDDEN", "无权访问该资源", null);
+  }
+  return db.transaction(async () => {
+    let username: string | undefined;
+    if (action === "disabled") await disableMember(memberId);
+    else if (action === "enabled") await enableMember(memberId);
+    else username = (await anonymizeMember(memberId)).username;
+    await writeSecurityAudit({ actorId: actor.memberId, action: `member.${action}`, targetType: "MEMBER", targetId: memberId, ip });
+    return { ok: true as const, ...(username === undefined ? {} : { username }) };
+  });
+}
 
 /**
  * 匿名化一个成员（C-26 逐列语义）。
@@ -59,6 +78,8 @@ export async function anonymizeMember(memberId: string): Promise<{ username: str
 
     // 角色指派随之清理（否则匿名化账号仍持有权限）
     await tx.delete(roleAssignment).where(eq(roleAssignment.memberId, memberId));
+    await publishWorkspaceInvalidation({ domain: "directory", resourceType: "MEMBER", resourceId: memberId });
+    await publishWorkspaceInvalidation({ domain: "role", resourceType: "MEMBER", resourceId: memberId });
 
     // ⚠️ 刻意不做的事：不删内容、不改内容归属、不删审计与活动记录
     return { username };
@@ -94,6 +115,7 @@ export async function disableMember(memberId: string): Promise<void> {
       .returning({ id: member.id });
     if (res.length === 0) throw new DomainError("CONFLICT", "成员不存在或已注销", null);
     await revokeMemberCredentials(memberId);
+    await publishWorkspaceInvalidation({ domain: "directory", resourceType: "MEMBER", resourceId: memberId });
   });
 }
 
@@ -103,6 +125,7 @@ export async function enableMember(memberId: string): Promise<void> {
     .where(and(eq(member.id, memberId), isNull(member.anonymizedAt)))
     .returning({ id: member.id });
   if (res.length === 0) throw new DomainError("CONFLICT", "成员不存在或已注销", null);
+  await publishWorkspaceInvalidation({ domain: "directory", resourceType: "MEMBER", resourceId: memberId });
 }
 
 void sql;

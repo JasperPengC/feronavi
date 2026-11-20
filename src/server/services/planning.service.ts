@@ -7,10 +7,11 @@
  *   3 不可见与不存在返回**同形**错误
  *   4 权限判定走 `assertCan`，路由里不判
  */
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "../../db/index.ts";
 import {
-  milestone, iteration, release, module, project,
+  milestone, iteration, release, module, project, workItem, workflowState, iterationCapacity, projectMembership,
 } from "../../db/schema.ts";
 import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
@@ -18,68 +19,44 @@ import { can, type PermissionContext } from "../permission/engine.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 import { assertTreeParent, lockProjectTree } from "./project-tree.ts";
 
-/** 计划实体的统一权限动作（四实体共用 `milestone:manage` 之外的动作） */
-const PERM: Record<string, string> = {
-  milestone: "milestone:manage",
-  iteration: "iteration:manage",
-  release: "release:manage",
-  module: "module:manage",
-};
-
-export type PlanKind = "milestone" | "iteration" | "release" | "module";
-
-/** 四表行类型映射：get/list 按 kind 返回精确行，路由层可安全访问 kind 特有列 */
-type PlanRowMap = {
-  milestone: typeof milestone.$inferSelect;
-  iteration: typeof iteration.$inferSelect;
-  release: typeof release.$inferSelect;
-  module: typeof module.$inferSelect;
-};
+import { get, assertCanManage, assertProjectVisible, type PlanKind, type PlanRowMap } from "./planning-access.ts";
+export { get, assertCanManage as assertPlanManagement } from "./planning-access.ts";
+export type { PlanKind } from "./planning-access.ts";
+type PlanDetail<K extends PlanKind> = PlanRowMap[K] & (K extends "iteration" | "release" ? { pendingWorkItemCount: number } : object);
 const TABLE = { milestone, iteration, release, module } as const;
-const SORT = {
-  milestone: milestone.sortOrder, iteration: iteration.startDate,
-  release: release.sortOrder, module: module.sortOrder,
-};
-
-function hasOrgGrant(actor: Actor): boolean {
-  return actor.grants.some((g) => g.scopeType === "ORG");
-}
-
-async function assertProjectVisible(actor: Actor, projectId: string): Promise<void> {
-  if (!(await projectRepo.isVisibleTo(actor.memberId, projectId, hasOrgGrant(actor)))) throw forbidden();
-}
-
-async function assertCanManage(actor: Actor, kind: PlanKind, projectId: string): Promise<void> {
-  const ctx: PermissionContext = {
-    memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId,
-  };
-  if (!can(actor, PERM[kind]!, { projectId, teamId: null }, ctx)) throw forbidden();
-}
+const SORT = { milestone: milestone.sortOrder, iteration: iteration.startDate, release: release.sortOrder, module: module.sortOrder };
 
 /** 列表（**软删过滤只在这里做**） */
-export async function list<K extends PlanKind>(actor: Actor, projectId: string, kind: K, opts: { includeArchived?: boolean } = {}): Promise<PlanRowMap[K][]> {
+export async function list<K extends PlanKind>(actor: Actor, projectId: string, kind: K, opts: { includeArchived?: boolean } = {}): Promise<PlanDetail<K>[]> {
   await assertProjectVisible(actor, projectId);
   // milestone 列集是四表公共列超集，本服务只用公共列 + archivedAt，故统一按其类型访问
   const t = TABLE[kind]! as typeof milestone;
 
-  // milestone / module 有 archived_at；iteration / release 没有（规范里未定义）
-  const hasArchive = kind === "milestone" || kind === "module";
   const conds = [eq(t.projectId, projectId)];
-  if (hasArchive && !opts.includeArchived) conds.push(isNull(t.archivedAt));
+  if (!opts.includeArchived) conds.push(isNull(t.archivedAt));
 
   // 运行时行形状由 kind 决定，编译期 cast 经 unknown 中转（列访问在 t 上已按公共列超集收口）
-  return db.select().from(t).where(and(...conds)).orderBy(asc(SORT[kind]!)) as unknown as Promise<PlanRowMap[K][]>;
+  const rows = await db.select().from(t).where(and(...conds)).orderBy(asc(SORT[kind]!)) as unknown as PlanRowMap[K][];
+  return withPendingCounts(rows, kind);
 }
 
-/** 详情（不可见与不存在同形） */
-export async function get<K extends PlanKind>(actor: Actor, id: string, kind: K): Promise<PlanRowMap[K]> {
-  // milestone 列集是四表公共列超集，本服务只用公共列 + archivedAt，故统一按其类型访问
-  const t = TABLE[kind]! as typeof milestone;
-  const rows = await db.select().from(t).where(eq(t.id, id)).limit(1);
-  const row = rows[0];
-  if (!row) throw forbidden();
-  await assertProjectVisible(actor, row.projectId);
-  return row as PlanRowMap[K];
+/** 与完成/结转共用终态口径；软删除工作项不计入待处理项。 */
+export function pendingWorkItemCondition() {
+  return and(isNull(workItem.deletedAt), ne(workflowState.category, "TERMINAL"));
+}
+
+async function withPendingCounts<K extends PlanKind>(rows: PlanRowMap[K][], kind: K): Promise<PlanDetail<K>[]> {
+  if ((kind !== "iteration" && kind !== "release") || rows.length === 0) return rows as PlanDetail<K>[];
+  const column = kind === "iteration" ? workItem.iterationId : workItem.releaseId;
+  const counts = await db.select({ id: column, count: sql<number>`count(*)::int` }).from(workItem)
+    .innerJoin(workflowState, eq(workItem.statusId, workflowState.id))
+    .where(and(inArray(column, rows.map(row => row.id)), pendingWorkItemCondition())).groupBy(column);
+  const byId = new Map(counts.map(row => [row.id, row.count]));
+  return rows.map(row => ({ ...row, pendingWorkItemCount: byId.get(row.id) ?? 0 })) as PlanDetail<K>[];
+}
+
+export async function getDetail<K extends PlanKind>(actor: Actor, id: string, kind: K): Promise<PlanDetail<K>> {
+  return (await withPendingCounts([await get(actor, id, kind)], kind))[0]!;
 }
 
 /** REST/MCP 共用更新入口：权限、字段白名单、关系校验与事件在同一服务内。 */
@@ -96,9 +73,13 @@ export async function updatePlan(actor: Actor, id: string, kind: PlanKind, raw: 
   }
   const table = TABLE[kind] as typeof milestone;
   const write = () => db.update(table).set(patch).where(eq(table.id, id)).returning();
-  const [row] = kind === "module" && patch.parentId !== undefined
+  const [row] = kind === "iteration" || kind === "release" || (kind === "module" && patch.parentId !== undefined)
     ? await db.transaction(async () => {
         await lockProjectTree(current.projectId);
+        if (kind === "iteration" || kind === "release") {
+          const locked = await get(actor, id, kind);
+          if (locked.completedAt || locked.archivedAt) throw new DomainError("BLOCKED_BY_PREREQUISITE", "已完成或归档的计划不能修改", null);
+        }
         if (typeof patch.parentId === "string") await assertTreeParent("module", current.projectId, patch.parentId, id);
         return write();
       })
@@ -108,6 +89,57 @@ export async function updatePlan(actor: Actor, id: string, kind: PlanKind, raw: 
     summary: `${actor.name} 更新了${planKindLabel(kind)}「${row!.name}」`, changes: parsed.data,
   });
   return row;
+}
+
+/** REST/MCP 共用容量读取，成员集合和历史容量遵循同一口径。 */
+export async function getIterationCapacity(actor: Actor, id: string) {
+  const it = await get(actor, id, "iteration");
+  const rows = await db.execute(sql`
+    select pm.member_id::text as member_id, m.name, m.username,
+           ic.capacity_points::float8 as capacity_points,
+           ic.capacity_hours::float8 as capacity_hours,
+           coalesce(ic.logged_points, 0)::float8 as logged_points
+    from project_membership pm
+    join member m on m.id = pm.member_id
+    left join iteration_capacity ic on ic.iteration_id = ${id} and ic.member_id = pm.member_id
+    where pm.project_id = ${it.projectId}
+    order by m.name
+  `) as unknown as { member_id: string; name: string; username: string; capacity_points: number | null; capacity_hours: number | null; logged_points: number }[];
+  return { members: rows.map(row => ({ memberId: row.member_id, name: row.name, username: row.username,
+    capacityPoints: row.capacity_points, capacityHours: row.capacity_hours, loggedPoints: row.logged_points })) };
+}
+
+/** 容量写入与完成共用项目锁；等待完成事务后必须重新检查迭代状态。 */
+export async function setIterationCapacity(actor: Actor, id: string, memberId: string, raw: unknown) {
+  const current = await get(actor, id, "iteration");
+  await assertCanManage(actor, "iteration", current.projectId);
+  const body = z.object({
+    capacityPoints: z.number().min(0).max(99999).nullable().optional(),
+    capacityHours: z.number().min(0).max(999999).nullable().optional(),
+  }).safeParse(raw);
+  if (!body.success) throw new DomainError("VALIDATION", "参数不合法", body.error.issues);
+  const hasPoints = body.data.capacityPoints != null;
+  const hasHours = body.data.capacityHours != null;
+  if (hasPoints === hasHours) throw new DomainError("VALIDATION", "容量点数与容量小时必须二选一", null);
+  return db.transaction(async () => {
+    await lockProjectTree(current.projectId);
+    const locked = await get(actor, id, "iteration");
+    if (locked.completedAt || locked.archivedAt) throw new DomainError("BLOCKED_BY_PREREQUISITE", "已完成或归档的迭代不能修改容量", null);
+    const [membership] = await db.select({ memberId: projectMembership.memberId }).from(projectMembership)
+      .where(and(eq(projectMembership.projectId, locked.projectId), eq(projectMembership.memberId, memberId))).limit(1);
+    if (!membership) throw new DomainError("VALIDATION", "成员不属于该项目", null);
+    const values = {
+      iterationId: id, memberId,
+      capacityPoints: body.data.capacityPoints != null ? String(body.data.capacityPoints) : null,
+      capacityHours: body.data.capacityHours != null ? String(body.data.capacityHours) : null,
+    };
+    const [row] = await db.insert(iterationCapacity).values(values).onConflictDoUpdate({
+      target: [iterationCapacity.iterationId, iterationCapacity.memberId],
+      set: { capacityPoints: values.capacityPoints, capacityHours: values.capacityHours },
+    }).returning();
+    await recordBusinessEvent({ actor, action: "plan.iteration.capacity_updated", targetType: "ITERATION", targetId: id, projectId: locked.projectId });
+    return row;
+  });
 }
 
 /** 关联工作项数（归档前提示用） */
@@ -123,41 +155,59 @@ export async function countLinkedWorkItems(kind: PlanKind, id: string): Promise<
   return rows[0]?.n ?? 0;
 }
 
-/** 归档（= 删除）。有未完成关联工作项时拒绝 —— 避免用户以为数据丢了 */
+/** 归档（= 删除）。有关联工作项时拒绝，避免用户以为数据丢了。 */
 export async function archive(actor: Actor, id: string, kind: PlanKind): Promise<void> {
+  if (kind === "iteration" || kind === "release") {
+    await (await import("./planning-lifecycle.service.ts")).setArchived(actor, id, kind, true);
+    return;
+  }
   // milestone 列集是四表公共列超集，本服务只用公共列 + archivedAt，故统一按其类型访问
   const t = TABLE[kind]! as typeof milestone;
-  const row = await get(actor, id, kind);
-  await assertCanManage(actor, kind, row.projectId);
-
-  const linked = await countLinkedWorkItems(kind, id);
-  if (linked > 0) {
-    throw new DomainError("BLOCKED_BY_PREREQUISITE",
-      `该${kind === "milestone" ? "里程碑" : kind === "iteration" ? "迭代" : kind === "release" ? "版本" : "模块"}下还有 ${linked} 个工作项，请先移出或归档它们`,
-      { linked });
-  }
+  const current = await get(actor, id, kind);
+  await assertCanManage(actor, kind, current.projectId);
   if (!t.archivedAt) throw new DomainError("CONFLICT", "该实体不支持归档操作", null);
 
-  await db.update(t).set({ archivedAt: new Date(), updatedAt: new Date() })
-    .where(eq(t.id, id));
-  await recordBusinessEvent({
-    actor, action: `plan.${kind}.archived`, targetType: kind.toUpperCase(), targetId: id, projectId: row.projectId,
-    summary: `${actor.name} 归档了${planKindLabel(kind)}「${row.name}」`,
+  await db.transaction(async () => {
+    // 与工作项挂接共用项目锁，保证关联计数与归档写入不可交错。
+    await lockProjectTree(current.projectId);
+    const row = await get(actor, id, kind);
+    if (row.archivedAt) return;
+    const linked = await countLinkedWorkItems(kind, id);
+    if (linked > 0) {
+      throw new DomainError("BLOCKED_BY_PREREQUISITE",
+        `该${kind === "milestone" ? "里程碑" : "模块"}下还有 ${linked} 个工作项，请先移出或归档它们`,
+        { linked });
+    }
+    await db.update(t).set({ archivedAt: new Date(), ...(kind === "milestone" ? { updatedAt: new Date() } : {}) })
+      .where(eq(t.id, id));
+    await recordBusinessEvent({
+      actor, action: `plan.${kind}.archived`, targetType: kind.toUpperCase(), targetId: id, projectId: row.projectId,
+      summary: `${actor.name} 归档了${planKindLabel(kind)}「${row.name}」`,
+    });
   });
 }
 
 export async function unarchive(actor: Actor, id: string, kind: PlanKind): Promise<void> {
+  if (kind === "iteration" || kind === "release") {
+    await (await import("./planning-lifecycle.service.ts")).setArchived(actor, id, kind, false);
+    return;
+  }
   // milestone 列集是四表公共列超集，本服务只用公共列 + archivedAt，故统一按其类型访问
   const t = TABLE[kind]! as typeof milestone;
   const row = await get(actor, id, kind);
   await assertCanManage(actor, kind, row.projectId);
-  if (!t.archivedAt) throw new DomainError("CONFLICT", "该实体不支持取消归档", null);
-  await db.update(t).set({ archivedAt: null, updatedAt: new Date() }).where(eq(t.id, id));
-  await recordBusinessEvent({
-    actor, action: `plan.${kind}.unarchived`, targetType: kind.toUpperCase(), targetId: id, projectId: row.projectId,
-    summary: `${actor.name} 取消了${planKindLabel(kind)}「${row.name}」的归档`,
+  await db.transaction(async () => {
+    await lockProjectTree(row.projectId);
+    if (!(await get(actor, id, kind)).archivedAt) return;
+    await db.update(t).set({ archivedAt: null, ...(kind === "milestone" ? { updatedAt: new Date() } : {}) }).where(eq(t.id, id));
+    await recordBusinessEvent({
+      actor, action: `plan.${kind}.unarchived`, targetType: kind.toUpperCase(), targetId: id, projectId: row.projectId,
+      summary: `${actor.name} 取消了${planKindLabel(kind)}「${row.name}」的归档`,
+    });
   });
 }
+
+export { completeIteration, completeRelease } from "./plan-lifecycle.service.ts";
 
 function planKindLabel(kind: PlanKind): string {
   return kind === "milestone" ? "里程碑" : kind === "iteration" ? "迭代" : kind === "release" ? "版本" : "模块";
@@ -169,7 +219,9 @@ void project;
 
 // ── 保存视图（Spec V8）──────────────────────────────────────
 import { savedView } from "../../db/schema.ts";
+import { publishWorkspaceInvalidation } from "./workspace-events.service.ts";
 import { recordBusinessEvent } from "./event-log.ts";
+import { businessEffects } from "./business-effects.ts";
 import {
   createMilestoneSchema, createIterationSchema, createReleaseSchema, createModuleSchema,
   updateMilestoneSchema, updateIterationSchema, updateReleaseSchema, updateModuleSchema,
@@ -180,10 +232,8 @@ import {
  * 一致性由 DB 的 CHECK 兜底（saved_view_shared_needs_project / personal_no_project），
  * 这里再前置校验一次，给出可读文案。
  */
-export async function createSavedView(actor: Actor, input: {
-  name: string; viewType: string; scope?: string; projectId?: string | null;
-  filters?: Record<string, unknown>; sorts?: unknown[];
-}) {
+/** 创建与幂等重放共用当前项目可见性检查；个人视图仅依赖当前身份。 */
+export async function authorizeSavedViewCreation(actor: Actor, input: { scope?: string; projectId?: string | null }) {
   const scope = input.scope ?? "PERSONAL";
   if (scope === "PROJECT_SHARED" && !input.projectId) {
     throw new DomainError("VALIDATION", "项目共享视图必须指定项目", null);
@@ -192,6 +242,14 @@ export async function createSavedView(actor: Actor, input: {
     throw new DomainError("VALIDATION", "个人视图不应指定项目", null);
   }
   if (input.projectId) await assertProjectVisible(actor, input.projectId);
+  return scope;
+}
+
+export async function createSavedView(actor: Actor, input: {
+  name: string; viewType: string; scope?: string; projectId?: string | null;
+  filters?: Record<string, unknown>; sorts?: unknown[];
+}) {
+  const scope = await authorizeSavedViewCreation(actor, input);
 
   const maxOrder = (await db.select({ n: savedView.sortOrder }).from(savedView)
     .where(eq(savedView.ownerId, actor.memberId))).reduce((m, r) => Math.max(m, r.n), -1);
@@ -205,6 +263,7 @@ export async function createSavedView(actor: Actor, input: {
     filters: (input.filters ?? {}) as object,
     sorts: (input.sorts ?? []) as unknown as object[],
   }).returning();
+  await publishWorkspaceInvalidation({ domain: "savedView", resourceType: "SAVED_VIEW", resourceId: row!.id, projectId: row!.projectId, ...(row!.projectId ? {} : { memberId: row!.ownerId }) });
   return row;
 }
 
@@ -234,11 +293,13 @@ export async function getSavedView(actor: Actor, id: string) {
 export async function reorderSavedViews(actor: Actor, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   if (new Set(ids).size !== ids.length) throw new DomainError("VALIDATION", "ids 不能重复", null);
-  const rows = await db.select({ id: savedView.id, ownerId: savedView.ownerId }).from(savedView).where(inArray(savedView.id, ids));
+  const rows = await db.select({ id: savedView.id, ownerId: savedView.ownerId, projectId: savedView.projectId }).from(savedView).where(inArray(savedView.id, ids));
   if (rows.length !== ids.length || rows.some((r) => r.ownerId !== actor.memberId)) throw forbidden();
   await db.transaction(async (tx) => {
     for (const [i, id] of ids.entries()) {
       await tx.update(savedView).set({ sortOrder: i, updatedAt: new Date() }).where(eq(savedView.id, id));
+      const row = rows.find(row => row.id === id)!;
+      await publishWorkspaceInvalidation({ domain: "savedView", resourceType: "SAVED_VIEW", resourceId: id, projectId: row.projectId, ...(row.projectId ? {} : { memberId: row.ownerId }) });
     }
   });
 }
@@ -256,15 +317,17 @@ export async function updateSavedView(actor: Actor, id: string, patch: {
     ...(patch.sorts !== undefined ? { sorts: patch.sorts as unknown as object[] } : {}),
     updatedAt: new Date(),
   }).where(eq(savedView.id, id)).returning();
+  await publishWorkspaceInvalidation({ domain: "savedView", resourceType: "SAVED_VIEW", resourceId: id, projectId: row.projectId, ...(row.projectId ? {} : { memberId: row.ownerId }) });
   return updated;
 }
 
 export async function deleteSavedView(actor: Actor, id: string): Promise<void> {
   const res = await db.delete(savedView)
     .where(and(eq(savedView.id, id), eq(savedView.ownerId, actor.memberId)))
-    .returning({ id: savedView.id });
+    .returning({ id: savedView.id, projectId: savedView.projectId });
   // 删别人的视图与删不存在的同形
   if (res.length === 0) throw forbidden();
+  await publishWorkspaceInvalidation({ domain: "savedView", resourceType: "SAVED_VIEW", resourceId: id, projectId: res[0]!.projectId, ...(res[0]!.projectId ? {} : { memberId: actor.memberId }) });
 }
 
 /**
@@ -320,6 +383,9 @@ export async function createPlan(actor: Actor, projectId: string, kind: PlanCrea
       actor, action: "plan.milestone.created", targetType: "MILESTONE", targetId: row!.id, projectId,
       summary: `${actor.name} 创建了里程碑「${row!.name}」`,
     });
+    await businessEffects().deliverWebhook("milestone.created", {
+      id: row!.id, projectId, actorId: actor.memberId,
+    }, projectId);
     return row;
   }
   if (kind === "iteration") {
@@ -355,3 +421,5 @@ export async function createPlan(actor: Actor, projectId: string, kind: PlanCrea
   });
   return row;
 }
+
+/** MCP 缓存重放与实际写入共用领域管理权限判定。 */

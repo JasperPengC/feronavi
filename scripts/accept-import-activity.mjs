@@ -1,7 +1,7 @@
 import "./_env.ts";
 /**
  * 导入活动的界面验收（Round 25 长任务第 31 项）——可重复执行、自建自清。
- * 真实 HTTP 导入（上传→映射→确认→回滚）→ 活动页「导入」筛选可见三类事件。
+ * 真实 HTTP 导入（上传→映射→试运行→确认→回滚）→ 活动页「导入」筛选可见三类事件。
  */
 import { chromium } from "playwright";
 import postgres from "postgres";
@@ -29,13 +29,18 @@ try {
     const upBody = await up.json();
     const id = upBody.batchId;
     const map = await fetch(`/api/v1/imports/${id}/mapping`, { method: "PUT", credentials: "same-origin", headers: { "content-type": "application/json", "x-csrf-token": csrf() }, body: JSON.stringify({ fieldMap: { 标题: "title" }, externalIdColumn: "外部ID", defaultType: "TASK" }) });
+    const beforePreview = await fetch(`/api/v1/imports/${id}/confirm`, { method: "POST", credentials: "same-origin", headers: { "x-csrf-token": csrf() } });
+    const beforePreviewBody = await beforePreview.json();
+    const preview = await fetch(`/api/v1/imports/${id}/dry-run`, { method: "POST", credentials: "same-origin", headers: { "x-csrf-token": csrf() } });
+    const previewBody = await preview.json();
     const conf = await fetch(`/api/v1/imports/${id}/confirm`, { method: "POST", credentials: "same-origin", headers: { "x-csrf-token": csrf() } });
     const confBody = await conf.json();
     const rb = await fetch(`/api/v1/imports/${id}/rollback`, { method: "POST", credentials: "same-origin", headers: { "x-csrf-token": csrf() } });
-    return { status: up.status, batchId: id, mapStatus: map.status, confStatus: conf.status, created: confBody.created, rbStatus: rb.status };
+    return { status: up.status, batchId: id, mapStatus: map.status, beforePreviewStatus: beforePreview.status, beforePreviewMessage: beforePreviewBody.message, previewStatus: preview.status, preview: previewBody, confStatus: conf.status, created: confBody.created, rbStatus: rb.status };
   }, { pid, stamp });
   batchId = flow.batchId;
-  check("真实导入链路（上传/映射/确认/回滚）", flow.status === 201 && flow.mapStatus === 200 && flow.confStatus === 200 && flow.created === 2 && flow.rbStatus === 200, JSON.stringify(flow));
+  check("未完成试运行时确认导入被拒绝", flow.beforePreviewStatus === 409 && flow.beforePreviewMessage.includes("试运行"), JSON.stringify({ status: flow.beforePreviewStatus, message: flow.beforePreviewMessage }));
+  check("真实导入链路（上传/映射/试运行/确认/回滚）", flow.status === 201 && flow.mapStatus === 200 && flow.previewStatus === 200 && flow.preview.willCreate === 2 && flow.preview.failed === 0 && flow.confStatus === 200 && flow.created === 2 && flow.rbStatus === 200, JSON.stringify(flow));
 
   await page.goto(`${BASE}/projects/${pid}/activity`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2400);
   await page.getByRole("button", { name: "导入", exact: true }).click();

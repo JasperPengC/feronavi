@@ -18,19 +18,20 @@ const created = [];
 try {
   await page.goto(`${BASE}/login`); await page.waitForTimeout(500);
   await page.evaluate(async () => { await fetch("/api/v1/auth/login", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: "demo", password: "demo-password-12345" }) }); });
-  await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2200);
-  const section = page.locator(".settings-section", { hasText: "AI（BYOK）" }).first();
+  await page.goto(`${BASE}/settings/integrations`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2200);
+  const section = page.locator(".ai-provider-card").first();
   await section.scrollIntoViewIfNeeded();
-  check("设置页显示 AI（BYOK）区块", (await section.count()) === 1);
+  check("集成页分别显示 LLM 和 Embedding 供应商区块", (await page.locator(".ai-provider-card").count()) === 2);
 
   const createProvider = async (suffix) => {
-    await section.getByRole("button", { name: "AI 供应商类型" }).click();
+    await section.getByRole("button", { name: "添加供应商", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "AI 供应商类型" }).click();
     await page.getByRole("option", { name: /Ollama/i }).click();
-    await section.getByLabel(/Base URL/).fill(`https://example.com/ollama-${STAMP}-${suffix}`);
-    await section.getByLabel("AI 模型", { exact: true }).fill(`mock-${STAMP}-${suffix}`);
-    await section.getByLabel("AI 嵌入模型", { exact: true }).fill("nomic-embed-text");
-    await section.getByLabel("AI API Key", { exact: true }).fill("sk-acceptance-dummy");
-    await section.getByRole("button", { name: "保存供应商", exact: true }).click();
+    await dialog.getByLabel("LLM Base URL", { exact: true }).fill(`https://example.com/ollama-${STAMP}-${suffix}`);
+    await dialog.getByLabel("LLM model", { exact: true }).fill(`mock-${STAMP}-${suffix}`);
+    await dialog.getByLabel("LLM API Key", { exact: true }).fill("sk-acceptance-dummy");
+    await dialog.getByRole("button", { name: "保存供应商", exact: true }).click();
     await page.waitForTimeout(1200);
   };
   await createProvider("a");
@@ -61,7 +62,7 @@ try {
   await page.waitForTimeout(9000);
   const failText = await section.innerText();
   const [tested] = await sql`select last_test_ok, last_test_error from ai_provider_config where id = ${created[0]}`;
-  check("连接测试失败如实显示并落库", failText.includes("连接失败") && tested?.last_test_ok === false && !!tested?.last_test_error, JSON.stringify(tested));
+  check("连接测试失败如实显示并落库", !!tested?.last_test_error && failText.includes(tested.last_test_error) && tested.last_test_ok === false);
 
   await firstRow.getByRole("button", { name: "停用", exact: true }).click();
   await page.waitForTimeout(900);

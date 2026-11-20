@@ -4,7 +4,7 @@ const state = vi.hoisted(() => ({
   pageVisible: true,
   projectVisible: true,
   page: { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", projectId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", currentRevisionId: "cccccccc-cccc-cccc-cccc-cccccccccccc", deletedAt: null },
-  jobs: [{ id: "job-1", status: "SUCCEEDED" }],
+  jobs: [{ id: "job-1", status: "SUCCEEDED", generation: 7 }],
   chunks: [{ id: "chunk-1", headingPath: "指南 > 备份", content: "备份数据库", tokenCount: 8, createdAt: new Date(0), hasVector: true }],
   queryTables: [] as string[],
   db: { select: vi.fn() },

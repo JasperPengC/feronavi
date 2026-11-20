@@ -46,9 +46,8 @@ try {
   const wiD = await wiService.createWorkItem(admin, projectId, { type: "TASK", title: "D" });
   const r2 = await relationService.addRelation(admin, wiA.id, { targetId: wiD.id, type: "BLOCKED_BY" });
   ok("BLOCKED_BY 归一为 BLOCKS", r2.type === "BLOCKS" && r2.sourceId === wiD.id);
-  let dup = false;
-  try { await relationService.addRelation(admin, wiA.id, { targetId: wiB.id, type: "BLOCKS" }); } catch (e) { dup = (e as { code?: string }).code === "VALIDATION"; }
-  ok("重复边 → VALIDATION", dup);
+  const duplicate = await relationService.addRelation(admin, wiA.id, { targetId: wiB.id, type: "BLOCKS" });
+  ok("重复边幂等返回原关系", duplicate?.id === r1.id);
   let selfRel = false;
   try { await relationService.addRelation(admin, wiA.id, { targetId: wiA.id, type: "RELATES_TO" }); } catch (e) { selfRel = (e as { code?: string }).code === "VALIDATION"; }
   ok("自环 → VALIDATION", selfRel);

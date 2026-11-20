@@ -18,7 +18,7 @@ export function ProjectSettingsDrawer({
   open, project, onClose, onSaved,
 }: {
   open: boolean;
-  project: { id: string; name: string; description: string | null; lead: { id: string; name: string } | null; status: { key: string; name: string } | null };
+  project: { id: string; key: string; name: string; description: string | null; lead: { id: string; name: string } | null; status: { key: string; name: string } | null };
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -76,14 +76,14 @@ export function ProjectSettingsDrawer({
       <fieldset disabled={save.isPending} className="settings-form-fields">
       <div style={{ display: "grid", gap: 12 }}>
         <TextInput label={t("common.name")} required value={name} onChange={(e) => setName(e.target.value)} />
-        <TextInput label={t("po.key")} value={project.id.slice(0, 8)} disabled hint={t("po.keyImmutable")} />
+        <TextInput label={t("po.key")} value={project.key} disabled hint={t("po.keyImmutable")} />
         <TextArea label={t("common.description")} rows={4} value={description} onChange={(e) => setDescription(e.target.value)} />
         <Select label={t("po.status")} value={statusKey} ariaLabel={t("po.status")}
           onChange={setStatusKey}
           options={[{ value: "", label: t("wie.none") }, ...(statuses.data ?? []).map((s) => ({ value: s.key, label: s.name }))]} />
         <Select label={t("po.lead")} value={leadId} ariaLabel={t("po.lead")} searchable
           onChange={setLeadId}
-          options={[{ value: "", label: t("wie.unassigned") }, ...(members.data ?? []).map((m) => ({ value: m.id, label: `${m.name} @${m.username}` }))]} />
+          options={[{ value: "", label: t("wie.unassigned") }, ...(members.data ?? []).map((m) => ({ value: m.id, label: m.name || m.username, secondaryLabel: `@${m.username}` }))]} />
         {error && <p className="field-error" role="alert">{error}</p>}
         <div className="drawer-actions">
           <Button variant="ghost" onClick={requestClose} disabled={save.isPending}>{t("common.cancel")}</Button>

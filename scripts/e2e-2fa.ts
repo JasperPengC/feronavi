@@ -108,17 +108,16 @@ try {
   ok("关闭后登录不再要求动态码", !!afterDisable.token);
 
   // ── HTTP ──
-  const login1 = await fetch(`${BASE}/api/v1/auth/login`, {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ username: U, password: "w14-password-1234" }),
-  });
-  const cookie = login1.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
-  const csrf = ((await login1.json()) as { csrfToken: string }).csrfToken;
+  // 复用刚验证成功的会话，避免本套连续登录耗尽同账号限流预算。
+  const sessionCookie = `feronavi_session=${afterDisable.token}`;
+  const csrfResponse = await fetch(`${BASE}/api/v1/auth/csrf`, { headers: { cookie: sessionCookie } });
+  const cookie = [sessionCookie, ...csrfResponse.headers.getSetCookie().map(c => c.split(";")[0])].join("; ");
+  const csrf = ((await csrfResponse.json()) as { csrfToken: string }).csrfToken;
   const httpSetup = await fetch(`${BASE}/api/v1/auth/2fa/setup`, {
     method: "POST", headers: { "content-type": "application/json", cookie, "x-csrf-token": csrf }, body: "{}",
   });
   const setupBody = (await httpSetup.json()) as { otpauthUrl?: string; recoveryCodes?: string[] };
-  ok("HTTP setup 200 且返回 otpauth", httpSetup.status === 200 && !!setupBody.otpauthUrl, String(httpSetup.status));
+  ok("HTTP setup 200 且返回 otpauth", httpSetup.status === 200 && !!setupBody.otpauthUrl, `${httpSetup.status} ${JSON.stringify(setupBody)}`);
   const httpState = await fetch(`${BASE}/api/v1/auth/2fa`, { headers: { cookie } });
   ok("HTTP 状态查询显示 pending", ((await httpState.json()) as { pending: boolean }).pending === true);
   const anon = await fetch(`${BASE}/api/v1/auth/2fa`);

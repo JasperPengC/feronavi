@@ -55,7 +55,8 @@ export function Tooltip({ content, children, followPointer = false, className = 
       const result = tooltipPosition({ left: target.left - offsetX, right: target.right - offsetX, top: target.top - offsetY, bottom: target.bottom - offsetY }, bubble.current!.getBoundingClientRect(), { width, height }, !!anchor.point);
       setPosition({ left: result.left + offsetX, top: result.top + offsetY });
     };
-    const onScroll = close;
+    // 键盘聚焦可能让浏览器自动滚动；此时保留并重新定位提示。
+    const onScroll = () => document.activeElement === anchor.element ? update() : close();
     update();
     const observer = new ResizeObserver(update);
     observer.observe(bubble.current);

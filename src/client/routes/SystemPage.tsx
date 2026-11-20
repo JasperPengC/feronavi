@@ -8,9 +8,9 @@
  *   3 原始命令/升级步骤/调度间隔放 `<details>` 展开，不占主视觉；
  *   4 真实数据，不伪造"已同步/正常"等状态。
  *
- * 备份仍不由平台执行（自托管下备份是部署方动作），界面给命令与恢复步骤而不是假按钮。
+ * 数据库级灾备仍由部署方执行；应用迁移包只覆盖产品支持的数据范围。
  */
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ExternalLinkButton } from "../components/ui/LinkButton.tsx";
 import { ArrowLink } from "../components/ui/ArrowLink.tsx";
@@ -23,6 +23,7 @@ import { PageHead } from "../components/Page.tsx";
 import { useActor, useCan } from "../lib/actor.ts";
 import { LoadingBlock, StateBlock } from "../components/ui/StateBlock.tsx";
 import { FeatureFlagSettings } from "../components/settings/FeatureFlagSettings.tsx";
+import { SystemBackupPanel } from "../components/system/SystemBackupPanel.tsx";
 import { toast } from "../components/ui/Toast.tsx";
 
 interface MigrationStatus {
@@ -69,62 +70,6 @@ export function SystemPage() {
   const actor = useActor();
   const canExport = useCan("setting:manage");
   const canOps = actor.permissions.includes("setting:manage");
-  const [exportState, setExportState] = useState<{ id?: string; phase: "idle" | "pending" | "ready" | "error"; message?: string; url?: string; size?: number }>({ phase: "idle" });
-  const exportTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const exportEpoch = useRef(0);
-  const exportUrl = useRef<string | null>(null);
-  const exportRequest = useRef<AbortController | null>(null);
-  useEffect(() => () => {
-    exportEpoch.current++;
-    if (exportTimer.current) clearInterval(exportTimer.current);
-    exportRequest.current?.abort();
-    if (exportUrl.current) URL.revokeObjectURL(exportUrl.current);
-  }, []);
-  const pollExport = (id: string) => {
-    if (exportTimer.current) clearInterval(exportTimer.current);
-    exportTimer.current = setInterval(() => {
-      void (async () => {
-        if (exportRequest.current) return;
-        const controller = new AbortController();
-        exportRequest.current = controller;
-        try {
-          const res = await fetch(`/api/v1/system/exports/${id}`, { credentials: "same-origin", signal: controller.signal });
-          if (res.status === 409) return;
-          if (!res.ok) {
-            if (exportTimer.current) clearInterval(exportTimer.current);
-            setExportState({ id, phase: "error", message: `HTTP ${res.status}` });
-            return;
-          }
-          const blob = await res.blob();
-          if (exportTimer.current) clearInterval(exportTimer.current);
-          if (controller.signal.aborted) return;
-          if (exportUrl.current) URL.revokeObjectURL(exportUrl.current);
-          exportUrl.current = URL.createObjectURL(blob);
-          setExportState({ id, phase: "ready", url: exportUrl.current, size: blob.size });
-        } catch {
-          if (controller.signal.aborted) return;
-          if (exportTimer.current) clearInterval(exportTimer.current);
-          setExportState({ id, phase: "error", message: t("sys.exportFailed") });
-        } finally { if (exportRequest.current === controller) exportRequest.current = null; }
-      })();
-    }, 1500);
-  };
-  const startExport = async () => {
-    if (exportState.phase === "pending") return;
-    const epoch = exportEpoch.current;
-    setExportState({ phase: "pending" });
-    try {
-      const r = await apiPost<{ id: string | null }>("/api/v1/system/exports", {});
-      if (epoch !== exportEpoch.current) return;
-      if (!r.id) throw new Error("no id");
-      setExportState({ id: r.id, phase: "pending" });
-      pollExport(r.id);
-    } catch (e) {
-      if (epoch !== exportEpoch.current) return;
-      setExportState({ phase: "error", message: e instanceof ApiError ? e.message : t("sys.exportFailed") });
-    }
-  };
-
   type SysTab = "overview" | "ops" | "data" | "integrations" | "security";
   const SYS_TABS: { id: SysTab; label: string }[] = [
     { id: "overview", label: t("sys.tabOverview") },
@@ -333,6 +278,15 @@ export function SystemPage() {
                 </details>
               </>
             )}
+            <details className="sys-details sys-backup-ops-details">
+              <summary>{t("sys.backupOpsTitle")}</summary>
+              <p className="muted">
+                {t("sys.backupByDeployer")}<strong>{t("sys.backupThree")}</strong>{t("sys.backupWhy")}
+              </p>
+              <pre className="sys-pre" data-custom-scroll>{BACKUP_CMD}</pre>
+              <h3>{t("sys.restoreSteps")}</h3>
+              <ol className="muted sys-steps">{RESTORE_STEPS.map((step) => <li key={step}>{step}</li>)}</ol>
+            </details>
           </section>
         )}
         </div>
@@ -364,34 +318,7 @@ export function SystemPage() {
           )}
         </section>
 
-        {/* 全量导出 */}
-        <section className="card sys-section" aria-labelledby="sys-export-title">
-          <div className="sys-section-head"><h2 id="sys-export-title">{t("sys.exportTitle")}</h2></div>
-          <p className="muted">{t("sys.exportHint")}</p>
-          {canExport && (exportState.phase === "idle" || exportState.phase === "error") && <Button size="sm" variant="primary" onClick={() => void startExport()}>{t("sys.exportStart")}</Button>}
-          {exportState.phase === "pending" && <p className="muted" role="status">{t("sys.exportGenerating")}</p>}
-          {exportState.phase === "error" && <p className="field-error" role="alert">{t("sys.exportFailed")}（{exportState.message}）</p>}
-          {exportState.phase === "ready" && exportState.url && (
-            <p className="sys-export-ready">
-              <a className="btn-link" href={exportState.url} download={`feronavi-full-export-${exportState.id}.json`}>{t("sys.exportDownload")}</a>
-              <span className="muted">{Math.max(1, Math.round((exportState.size ?? 0) / 1024))} KB</span>
-            </p>
-          )}
-        </section>
-
-        {/* 备份与恢复 */}
-        <section className="card sys-section" aria-labelledby="sys-backup-title">
-          <div className="sys-section-head"><h2 id="sys-backup-title">{t("sys.backup")}</h2></div>
-          <p className="muted">{t("sys.backupByDeployer")}<strong>{t("sys.backupThree")}</strong>{t("sys.backupWhy")}</p>
-          <details className="sys-details">
-            <summary>{t("sys.backupCmd")}</summary>
-            <pre className="sys-pre" data-custom-scroll>{BACKUP_CMD}</pre>
-          </details>
-          <details className="sys-details">
-            <summary>{t("sys.restoreSteps")}</summary>
-            <ol className="muted sys-steps">{RESTORE_STEPS.map((s) => <li key={s}>{s}</li>)}</ol>
-          </details>
-        </section>
+        {canExport && <SystemBackupPanel />}
       </>}</TabPanel>
 
       <TabPanel tabsId="system" value="integrations" activeValue={tab} className="page-tab-panel--stack">{() => <>

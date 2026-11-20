@@ -15,7 +15,7 @@ import { apiToken, mcpClient, mcpToolPolicy } from "../../db/schema.ts";
 import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
-import { TOOL_NAMES } from "../mcp/tools.ts";
+import { assistantCapabilities } from "./assistant-capabilities.ts";
 
 export const MCP_POLICY_EFFECTS = ["ALLOW", "DENY"] as const;
 export type McpPolicyEffect = (typeof MCP_POLICY_EFFECTS)[number];
@@ -89,7 +89,7 @@ export async function replaceClientPolicies(actor: Actor, clientId: string, inpu
   assertManageAny(actor);
   const client = (await db.select({ tokenId: mcpClient.tokenId }).from(mcpClient).where(eq(mcpClient.id, clientId)).limit(1))[0];
   if (!client) throw forbidden();
-  const known = new Set(TOOL_NAMES);
+  const known = new Set(assistantCapabilities().map(tool => tool.name));
   const seen = new Set<string>();
   for (const p of input) {
     if (!(MCP_POLICY_EFFECTS as readonly string[]).includes(p.effect)) {

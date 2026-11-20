@@ -7,7 +7,7 @@ import { TableScroll } from "../components/ui/TableScroll.tsx";
  *   2 试运行结果用「将创建 / 将跳过（已导入过）/ 失败」三栏，**先看统计再决定**
  *   3 回滚按钮旁写明「该批次数据及其后续修改都会被删除」（规范要求明示，这不是 bug 是既定语义）
  */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PageTabs, TabPanel } from "../components/ui/PageTabs.tsx";
 import { useParams } from "@tanstack/react-router";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -27,6 +27,7 @@ interface Batch {
 }
 interface DryResult { totalRows: number; willCreate: number; willSkip: number; failed: number; errorReport: { index: number; reason?: string; externalId?: string }[] }
 interface BatchDetail extends Batch {
+  preview?: DryResult | null;
   header: string[];
   fieldMap: Record<string, string>;
   mappingConfig?: {
@@ -189,12 +190,30 @@ function ImportBatchSession({ batch, projectId }: { batch: BatchDetail; projectI
   const [fieldMap, setFieldMap] = useState<Record<string, string>>(() => ({ ...batch.fieldMap }));
   const [externalIdColumn, setExternalIdColumn] = useState(batch.mappingConfig?.externalIdColumn ?? "");
   const [savedSignature, setSavedSignature] = useState(() => mappingSignature(batch.fieldMap, batch.mappingConfig?.externalIdColumn ?? ""));
-  const [preview, setPreview] = useState<{ signature: string; result: DryResult } | null>(null);
+  const [preview, setPreview] = useState<{ signature: string; result: DryResult } | null>(() => batch.preview && batch.status === "PENDING_CONFIRM" ? { signature: mappingSignature(batch.fieldMap, batch.mappingConfig?.externalIdColumn ?? ""), result: batch.preview } : null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState<ImportStep>(() => ["SUCCEEDED", "PARTIAL", "FAILED", "ROLLED_BACK", "RUNNING"].includes(batch.status) ? 3 : Object.values(batch.fieldMap).includes("title") ? 2 : 1);
+  const [step, setStep] = useState<ImportStep>(() => batch.preview || ["SUCCEEDED", "PARTIAL", "FAILED", "ROLLED_BACK", "RUNNING"].includes(batch.status) ? 3 : Object.values(batch.fieldMap).includes("title") ? 2 : 1);
   const confirmLock = useRef(false);
   const signature = mappingSignature(fieldMap, externalIdColumn);
+  const serverSignature = mappingSignature(batch.fieldMap, batch.mappingConfig?.externalIdColumn ?? "");
+  const serverState = JSON.stringify([serverSignature, batch.preview, batch.status, batch.createdCount, batch.failedCount]);
+  const lastServerState = useRef(serverState);
+  useEffect(() => {
+    if (lastServerState.current === serverState) return;
+    lastServerState.current = serverState;
+    const terminal = ["SUCCEEDED", "PARTIAL", "FAILED", "ROLLED_BACK", "RUNNING"].includes(batch.status);
+    const clean = signature === savedSignature || signature === serverSignature;
+    if (clean) {
+      setFieldMap({ ...batch.fieldMap });
+      setExternalIdColumn(batch.mappingConfig?.externalIdColumn ?? "");
+    }
+    setSavedSignature(serverSignature);
+    setPreview(clean && !terminal && batch.preview ? { signature: serverSignature, result: batch.preview } : null);
+    setResult(null);
+    if (terminal || (clean && batch.preview)) setStep(3);
+    else if (clean) setStep(Object.values(batch.fieldMap).includes("title") ? 2 : 1);
+  }, [serverState, serverSignature, batch, signature, savedSignature]);
   const targets = Object.values(fieldMap).filter(Boolean);
   const missingTitle = !targets.includes("title");
   const duplicateTargets = new Set(targets).size !== targets.length;

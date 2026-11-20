@@ -58,7 +58,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   }
 
   // ── 登录（公开，不挂 CSRF）──────────────────────────────────
-  app.post("/api/v1/auth/login", async (req, reply) => {
+  app.post("/api/v1/auth/login", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req, reply) => {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) throw new DomainError("VALIDATION", "登录参数不合法", parsed.error.issues);
 
@@ -94,7 +94,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ── LDAP / AD 登录（公开，不挂 CSRF；由 login-guard 限流）────────
-  app.post("/api/v1/auth/ldap/login", async (req, reply) => {
+  app.post("/api/v1/auth/ldap/login", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req, reply) => {
     const parsed = z.object({
       idpId: z.string().uuid(),
       username: z.string().min(1).max(200),

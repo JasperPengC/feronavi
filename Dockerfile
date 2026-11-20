@@ -13,13 +13,16 @@
 # syntax=docker/dockerfile:1
 
 ARG NODE_VERSION=24
+ARG RUNTIME_VARIANT=alpine3.24
 
 # ── ① 全量依赖（含 dev，供构建）────────────────────────────────
 FROM node:${NODE_VERSION}-bookworm-slim AS deps
 WORKDIR /app
 RUN corepack enable
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
+ARG NPM_REGISTRY=https://registry.npmjs.org
+RUN pnpm install --frozen-lockfile --registry=${NPM_REGISTRY}
 
 # 开发容器：保留开发依赖和包管理器，源码由工作区挂载。
 FROM deps AS development
@@ -33,23 +36,27 @@ USER node
 CMD ["sleep", "infinity"]
 
 # ── ② 构建：Vite 打前端，tsc 编服务端 ──────────────────────────
-FROM node:${NODE_VERSION}-bookworm-slim AS builder
-WORKDIR /app
-RUN corepack enable
-COPY --from=deps /app/node_modules ./node_modules
+FROM deps AS builder
 COPY . .
 ENV NODE_ENV=production
 RUN pnpm build
 
 # ── ③ 生产依赖（剪掉 devDependencies）─────────────────────────
-FROM node:${NODE_VERSION}-bookworm-slim AS prod-deps
+FROM node:${NODE_VERSION}-${RUNTIME_VARIANT} AS prod-deps
 WORKDIR /app
 RUN corepack enable
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile --prod
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
+ARG NPM_REGISTRY=https://registry.npmjs.org
+RUN pnpm install --frozen-lockfile --prod --registry=${NPM_REGISTRY}
 
 # ── ④ 运行 ────────────────────────────────────────────────────
-FROM node:${NODE_VERSION}-bookworm-slim AS runner
+FROM node:${NODE_VERSION}-${RUNTIME_VARIANT} AS runner
+
+# 生产原生模块在同一 musl 基线安装；不从 glibc 构建层复制 node_modules。
+# 构建工具与 Debian 系统包只保留在构建/开发阶段。
+RUN apk upgrade --no-cache \
+    && apk add --no-cache 'libcrypto3>=3.5.9-r1' 'libssl3>=3.5.9-r1'
 
 ARG FERONAVI_VERSION=dev
 ENV NODE_ENV=production \

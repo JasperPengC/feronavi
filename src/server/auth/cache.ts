@@ -102,13 +102,20 @@ export async function cacheHealthy(): Promise<boolean> {
 }
 
 export async function closeCache(): Promise<void> {
-  try { await client?.quit(); } catch { /* 忽略 */ }
+  const current = client;
   client = null;
+  if (!current) return;
+  try {
+    if (current.status === "ready") await current.quit();
+  } catch { /* 退出不能被缓存故障阻塞 */ }
+  finally { current.disconnect(); }
 }
 
 /** 事件总线等其它子系统复用同一客户端（连接复用，避免每个模块各开一个连接池） */
 export function getRedisClient(): import("ioredis").default {
-  if (!client) client = new Redis(process.env.REDIS_URL ?? "redis://127.0.0.1:6379", {
+  const url = process.env.REDIS_URL;
+  if (!url) throw new Error("可选缓存未配置");
+  if (!client) client = new Redis(url, {
     maxRetriesPerRequest: 2,           // 与会话缓存同纪律：Valkey 可丢，快速失败回源
     lazyConnect: true,
     enableOfflineQueue: false,

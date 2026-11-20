@@ -15,10 +15,16 @@ import {
   ragConsent, session, timeBlock, timeLog, todo, twoFactorSecret, workItem, workItemCollaborator,
 } from "../../db/schema.ts";
 import { DomainError } from "../../shared/errors.ts";
+import type { Actor } from "../permission/actor.ts";
+import { loadActor } from "../auth/actor-loader.ts";
+import { exportConversationData } from "./rag-conversation.service.ts";
 
 export const EXPORT_SCHEMA_VERSION = "1";
 
-export async function exportMemberData(memberId: string) {
+export async function exportMemberData(memberId: string, actor?: Actor) {
+  const currentActor = actor ?? await loadActor(memberId);
+  if (!currentActor || currentActor.memberId !== memberId) throw new DomainError("FORBIDDEN", "无法导出其他账号的数据", null);
+  const savedKnowledge = await exportConversationData(currentActor);
   const profileRows = await db.select({
     id: member.id, username: member.username, name: member.name, email: member.email,
     status: member.status, locale: member.locale, timezone: member.timezone,
@@ -82,11 +88,14 @@ export async function exportMemberData(memberId: string) {
       focusSessions: myFocus,
       ideas: myIdeas,
       ragConsents: myConsents,
+      ragConversations: savedKnowledge.conversations,
+      ragMessages: savedKnowledge.messages,
     },
     counts: {
       todos: todos.length, comments: myComments.length, workItems: myWorkItems.length,
       timeLogs: myTimeLogs.length, ideas: myIdeas.length, sessions: sessions.length,
       apiTokens: tokens.length, ragConsents: myConsents.length,
+      ragConversations: savedKnowledge.conversations.length, ragMessages: savedKnowledge.messages.length,
     },
   };
 }

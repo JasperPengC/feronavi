@@ -6,6 +6,7 @@ import { currentDatabaseContext, databaseContext, type DatabaseContext } from ".
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL 未设置");
+const databaseUrl = url;
 
 const pool = postgres(url, {
   max: Number(process.env.DB_POOL_MAX ?? 10),
@@ -16,6 +17,16 @@ const pool = postgres(url, {
   // 连接池饱和度（6.6 要求"池饱和度 > 80% 告警"）——否则无法与其它客户端区分。
   connection: { application_name: "feronavi-app" },
 });
+
+/** 为必须脱离保留连接运行的协调心跳创建受控独立连接池。调用方负责 end()。 */
+export function createIndependentSql(): postgres.Sql {
+  return postgres(databaseUrl, {
+    max: 1,
+    idle_timeout: 30,
+    connect_timeout: 10,
+    connection: { application_name: "feronavi-heartbeat" },
+  });
+}
 
 const rootDatabase = drizzle(pool, { schema });
 type Database = typeof rootDatabase;

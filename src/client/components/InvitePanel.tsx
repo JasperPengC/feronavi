@@ -12,7 +12,7 @@ import { t } from "../i18n/index.ts";
 import { useCan } from "../lib/actor.ts";
 import { Button } from "./ui/Button.tsx";
 import { confirmDialog } from "./Dialog.tsx";
-import { Drawer } from "./ui/Drawer.tsx";
+import { Modal } from "./ui/Modal.tsx";
 import { TextInput } from "./ui/TextInput.tsx";
 import { Select } from "./Select.tsx";
 import { Panel } from "./ui/Panel.tsx";
@@ -101,10 +101,10 @@ export function InvitePanel() {
       </Panel>
 
       {draft.guard}
-      <Drawer open={open} title={t("invite.new")} onClose={requestClose} width="sm">
+      <Modal open={open} title={t("invite.new")} onClose={requestClose} width="sm">
         {error && <p className="field-error" role="alert">{error}</p>}
         {!created ? (
-          <div style={{ display: "grid", gap: 12 }}>
+          <fieldset disabled={create.isPending} className="settings-form-fields" style={{ display: "grid", gap: 12 }}>
             <TextInput label={t("invite.email")} aria-label={t("invite.email")} type="email" value={email}
               onChange={(e) => setEmail(e.target.value)} />
             <Select label={t("invite.project")} ariaLabel={t("invite.project")} value={projectId}
@@ -122,7 +122,7 @@ export function InvitePanel() {
               <Button variant="primary" loading={create.isPending} disabled={!email.trim() || create.isPending}
                 onClick={() => create.mutate()}>{t("invite.create")}</Button>
             </div>
-          </div>
+          </fieldset>
         ) : (
           <div style={{ display: "grid", gap: 12 }}>
             <p style={{ margin: 0, fontSize: "var(--text-sm)" }}>{t("invite.once")}</p>
@@ -138,7 +138,7 @@ export function InvitePanel() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
     </div>
   );
 }

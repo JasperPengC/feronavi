@@ -1,11 +1,9 @@
-/**
- * 危险操作二次确认按钮（Round 98）：第一次点击不执行，只把按钮变成「确认删除？」；
- * 第二次点击才真正执行。4 秒无操作自动复位，避免误点后一直处于确认态。
- */
+/** 所有危险操作复用全站确认对话框，原调用方保留权限及提交状态。 */
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./Button.tsx";
 import type { ComponentProps, ReactNode } from "react";
 import { t } from "../../i18n/index.ts";
+import { confirmDialog } from "../Dialog.tsx";
 
 type ConfirmProps = ComponentProps<typeof Button> & {
   onConfirm: () => void;
@@ -14,28 +12,33 @@ type ConfirmProps = ComponentProps<typeof Button> & {
 };
 export function ConfirmButton({ onConfirm, children, confirmText, disabled, ...props }: ConfirmProps) {
   const [pending, setPending] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clear = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } };
-  useEffect(() => clear, []);
+  const confirming = useRef(false);
+  const mounted = useRef(true);
+  const disabledRef = useRef(disabled);
+  disabledRef.current = disabled;
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   return (
     <Button
       {...props}
       variant="danger"
       disabled={disabled}
-      onClick={(e) => {
-        if (!pending) {
-          e.preventDefault();
-          setPending(true);
-          clear();
-          timer.current = setTimeout(() => setPending(false), 4000);
-          return;
+      aria-disabled={disabled || pending}
+      aria-haspopup="dialog"
+      onClick={async (e) => {
+        e.preventDefault();
+        if (confirming.current || disabledRef.current) return;
+        confirming.current = true;
+        setPending(true);
+        try {
+          if (await confirmDialog(confirmText ?? t("common.confirmDelete"), { danger: true })
+            && mounted.current && !disabledRef.current) onConfirm();
+        } finally {
+          confirming.current = false;
+          if (mounted.current) setPending(false);
         }
-        clear();
-        setPending(false);
-        onConfirm();
       }}
     >
-      {pending ? (confirmText ?? t("common.confirmDelete")) : children}
+      {children}
     </Button>
   );
 }

@@ -7,7 +7,7 @@
  *   3 键名白名单：不允许任意键写入（防把设置表当 KV 垃圾桶用）
  */
 import { asc, eq, inArray } from "drizzle-orm";
-import { db } from "../../db/index.ts";
+import { db, inTransaction } from "../../db/index.ts";
 import { setting } from "../../db/schema.ts";
 import { DomainError } from "../../shared/errors.ts";
 import { decryptSecret, encryptSecret, isEncrypted, maskSecret } from "./crypto.service.ts";
@@ -82,19 +82,26 @@ export async function putSettings(patch: Record<string, unknown>): Promise<Setti
       throw new DomainError("VALIDATION", "export.retentionHours 必须是 0–8760 的整数（0 = 关闭清理）", { key: "export.retentionHours" });
     }
   }
-  for (const [k, v] of Object.entries(patch)) {
-    const secret = SECRET_KEYS.has(k);
-    // 掩码值与 null 视为"不改动"：界面回显掩码后原样提交不应把密码清空
-    if (secret && (v === null || v === maskSecret() || v === "")) continue;
-    const value = secret && typeof v === "string" ? encryptSecret(v) : v;
-    await db.insert(setting)
-      .values({ key: k, value: value as object, isSecret: secret, updatedAt: new Date() })
-      .onConflictDoUpdate({
-        target: setting.key,
-        set: { value: value as object, isSecret: secret, updatedAt: new Date() },
-      });
-  }
-  return listSettings();
+  return inTransaction(async () => {
+    for (const [k, v] of Object.entries(patch)) {
+      const secret = SECRET_KEYS.has(k);
+      // 掩码值与 null 视为"不改动"：界面回显掩码后原样提交不应把密码清空
+      if (secret && (v === null || v === maskSecret() || v === "")) continue;
+      // 可选非敏感字段null表示清除；setting.value为NOT NULL，不能把SQL NULL写入。
+      if (!secret && v === null) {
+        await db.delete(setting).where(eq(setting.key, k));
+        continue;
+      }
+      const value = secret && typeof v === "string" ? encryptSecret(v) : v;
+      await db.insert(setting)
+        .values({ key: k, value: value as object, isSecret: secret, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: setting.key,
+          set: { value: value as object, isSecret: secret, updatedAt: new Date() },
+        });
+    }
+    return listSettings();
+  });
 }
 
 /** 删除指定设置（用于清除供应商切换后的旧配置；null 不能写入 setting.value） */

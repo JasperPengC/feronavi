@@ -3,7 +3,7 @@ import "./_env.ts";
  * 真实视觉验收脚手架（前端统一化长任务 Round 7）
  *
  * 为什么要有它：前几轮我**每轮灵感式写一次性脚本**，两次因为"猜按钮文案"超时失败
- * （Workflow 的「加状态」、Focus 的「加时间块」），验收成本高且不可重复。
+ * （Workflow 的「添加状态」、Focus 的「加时间块」），验收成本高且不可重复。
  * 这个脚手架把四个环节固化下来：
  *   ① 登录 + 拦截所有写请求返回 500（走真实的 onError 分支）；
  *   ② **枚举页面所有可交互元素**，按**精确文案**点击；找不到时**打印候选**而不是超时；
@@ -18,6 +18,7 @@ import { chromium } from "playwright";
 import { writeFileSync } from "node:fs";
 
 const HOST = process.env.BASE;
+const FAILURE = "服务端故障（验收用）";
 
 /** 枚举可交互元素（用于失败诊断：告诉调用者"页面上到底有哪些按钮"） */
 async function listInteractive(page) {
@@ -44,81 +45,78 @@ async function readState(page) {
   return page.evaluate(() => ({
     toast: [...document.querySelectorAll(".ui-toast")].map((e) => (e.textContent || "").trim().slice(0, 48)),
     页面级alert: !!document.querySelector(".alert.alert-error"),
+    formErrors: [...document.querySelectorAll('.field-error[role="alert"]')].filter((e) => e.getBoundingClientRect().height > 0).map((e) => e.textContent?.trim()),
     输入: [...document.querySelectorAll("input, textarea")].map((e) => e.value || "").filter(Boolean),
   }));
 }
 
-/** 单个用例：导航 → 填输入 → 点按钮 → 断言 */
-
-/** 真实点选 DateTimePicker：点日期触发器 → 选今天 → 选小时 → 选分钟 */
-async function pickDateTime(page, prefix, hour, minute) {
-  await page.locator(`.datepicker-trigger[aria-label^="${prefix}"]`).first().click();
-  await page.waitForTimeout(300);
-  await page.locator('.datepicker-day[aria-current="date"]').first().click();
-  await page.waitForTimeout(300);
-  const selects = page.locator(`.select-trigger[aria-label^="${prefix}"]`);
-  await selects.nth(0).click();
-  await page.waitForTimeout(250);
-  await page.getByRole("option", { name: hour, exact: true }).first().click();
-  await page.waitForTimeout(250);
-  await selects.nth(1).click();
-  await page.waitForTimeout(250);
-  await page.getByRole("option", { name: minute, exact: true }).first().click();
-  await page.waitForTimeout(300);
-}
-
+/** 单个用例：打开当前表单 → 填输入 → 注入真实提交失败 → 验证反馈与草稿保留。 */
 async function runCase(page, c) {
   await page.unrouteAll({ behavior: "ignoreErrors" });
+  const writes = [];
   await page.route("**/api/v1/**", async (route) => {
     const m = route.request().method();
     if (["POST", "PATCH", "PUT", "DELETE"].includes(m)) {
+      writes.push({ method: m, path: new URL(route.request().url()).pathname });
       // 与真实服务端契约一致：扁平 { code, message, details }（嵌套 error 是**错的假体**，
       // 会让自定义 fetch 的页面解析不到 message，产生"空 toast"这种假象 —— Round 14 实测踩到）
       await route.fulfill({ status: 500, contentType: "application/json",
-        body: JSON.stringify({ code: "INTERNAL", message: "服务端故障（验收用）", details: null }) });
+        body: JSON.stringify({ code: "INTERNAL", message: FAILURE, details: null }) });
     } else { await route.continue(); }
   });
   await page.goto(HOST + c.path, { waitUntil: "domcontentloaded" });
+  if (c.redirect) {
+    await page.waitForURL(`**${c.redirect}`);
+    await page.locator(".workbench-page").waitFor();
+    const shot = `/tmp/accept-${c.name}.png`;
+    await page.screenshot({ path: shot });
+    return { name: c.name, pass: new URL(page.url()).pathname === c.redirect, expect: "redirect", state: await readState(page), shot };
+  }
   await page.waitForTimeout(c.wait ?? 2600);
+  if (c.prepare) await c.prepare(page);
+  const drafts = [];
+  for (const [label, value] of Object.entries(c.fields ?? {})) {
+    const box = page.getByLabel(label, { exact: true });
+    await box.fill(value);
+    drafts.push({ box, value });
+  }
   for (const [i, v] of Object.entries(c.fill ?? {})) {
-    const box = page.locator("input, textarea").nth(Number(i));
+    const box = page.locator("input:visible, textarea:visible").nth(Number(i));
     await box.fill(v);
+    drafts.push({ box, value: v });
   }
   if (c.file) await page.locator('input[type="file"]').setInputFiles(c.file);
   if (c.do) await c.do(page);
   if (c.click) await clickExact(page, c.click);
-  await page.waitForTimeout(1500);
-  const st = await readState(page);
-  // 期望可声明：默认 toast（页面级错误→浮动提示）；inline = 该错误本就该在页面/表单内显示（不漂走）
   const expect = c.expect ?? "toast";
-  const pass = expect === "inline"
-    ? (st.页面级alert && st.toast.length === 0)
-    : (st.toast.length > 0 && !st.页面级alert);
+  await page.locator(expect === "inline" ? '.field-error[role="alert"]' : ".ui-toast").filter({ hasText: FAILURE }).first().waitFor();
+  const st = await readState(page);
+  const retained = (await Promise.all(drafts.map(async ({ box, value }) => await box.isVisible() && await box.inputValue() === value))).every(Boolean);
+  const retainedFile = !c.file || await page.locator('input[type="file"]').evaluate((el, name) => el.files?.length === 1 && el.files[0].name === name, c.file.split("/").at(-1));
+  const submitted = writes.some((request) => !c.endpoint || c.endpoint.test(request.path));
+  const feedback = expect === "inline"
+    ? st.formErrors.includes(FAILURE) && st.toast.length === 0 && !st.页面级alert
+    : st.toast.some((text) => text.includes(FAILURE)) && !st.页面级alert;
+  const pass = submitted && feedback && retained && retainedFile && (drafts.length > 0 || !!c.file);
   const shot = `/tmp/accept-${c.name}.png`;
   await page.screenshot({ path: shot });
-  return { name: c.name, pass, expect, state: st, shot };
+  return { name: c.name, pass, expect, state: st, shot, submitted, retained: retained && retainedFile, writes };
 }
 
 const SUITE = [
-  { name: "tokens", path: "/tokens", fill: { 0: "验收令牌" }, click: "创建" },
-  { name: "ideas", path: "__ideas", fill: { 0: "验收想法" }, click: "提交" },
-  { name: "workflow", path: "__workflow", fill: { 0: "ACC_KEY", 1: "验收状态" }, click: "加状态" },
-  // Round 8 新增：先用「发现模式」枚举出各页的真实按钮文案，再写成用例（不再猜）
-  { name: "insights", path: "__insights", fill: { 0: "验收仪表盘" }, click: "新建仪表盘" },
-  { name: "intake", path: "__intake", fill: { 0: "验收表单" }, click: "新建表单" },
-  // focus：Round 19 起两个时间输入是**自绘 DateTimePicker**（日期 + 小时/分钟下拉），必须真实点选
-  { name: "focus", path: "/focus", do: async (page) => {
-      await page.locator("input").first().fill("验收时间块");
-      await pickDateTime(page, "开始时间", "10", "00");
-      await pickDateTime(page, "结束时间", "11", "00");
-    }, click: "加时间块" },
-  // Round 14 更正：自定义字段的创建表单是**页面内卡片**（不是弹窗）→ 与令牌/工作流等页一致走 toast。
-  // 此前判成 inline 是把它当成弹窗了（判断错误，已改）。
-  { name: "fields", path: "__fields", fill: { 0: "acceptance_key", 1: "验收字段" }, click: "创建" },
-  // 导入页：先选一个真实 CSV 文件再点「上传并解析」（写请求被拦成 500 → 期望 toast）
-  { name: "import", path: "__import", file: "/tmp/accept-import.csv", click: "上传并解析" },
-  // 工作台快速添加待办：失败同样走 toast（与想法页快速提交一致）
-  { name: "workbench", path: "/workbench", fill: { 0: "验收待办" }, click: "添加" },
+  { name: "tokens", path: "/tokens", prepare: (page) => clickExact(page, "新建令牌"), fields: { "令牌用途": "验收令牌" }, click: "创建", endpoint: /\/tokens$/ },
+  { name: "ideas", path: "__ideas", fields: { "想法标题": "验收想法" }, click: "提交", endpoint: /\/ideas$/ },
+  { name: "workflow", path: "__workflow", fields: { "KEY（如 IN_REVIEW）": "ACC_KEY", "名称": "验收状态" }, click: "添加状态", endpoint: /\/states$/ },
+  { name: "insights", path: "__insights", prepare: async (page) => {
+    await page.getByRole("tab", { name: "仪表盘", exact: true }).click();
+    await clickExact(page, "新建仪表盘");
+  }, fields: { "仪表盘名称": "验收仪表盘" }, click: "创建", endpoint: /\/dashboards$/ },
+  { name: "intake", path: "__intake", prepare: (page) => page.getByRole("tab", { name: "收集表单", exact: true }).click(), fields: { "表单名称": "验收表单" }, click: "新建表单", endpoint: /\/intake-forms$/ },
+  { name: "focus-redirect", path: "/focus", redirect: "/workbench" },
+  { name: "fields", path: "__fields", prepare: (page) => clickExact(page, "新建字段"), fields: { "字段 key": "acceptance_key", "字段名称": "验收字段" }, click: "创建", expect: "inline", endpoint: /\/custom-fields$/ },
+  // 导入失败贴近文件字段显示，且已选择的真实文件仍可重试。
+  { name: "import", path: "__import", file: "/tmp/accept-import.csv", click: "上传并解析", expect: "inline", endpoint: /\/imports$/ },
+  { name: "workbench", path: "/workbench", fields: { "要做的事": "验收待办" }, click: "添加", endpoint: /\/todos$/ },
 ];
 
 async function main() {
@@ -146,7 +144,10 @@ async function main() {
         "__intake": "intake", "__fields": "fields", "__import": "import" };
       if (cc.path.startsWith("__")) cc.path = `/projects/${pid}/${MAP[cc.path]}`;
       try { results.push(await runCase(page, cc)); }
-      catch (e) { results.push({ name: cc.name, pass: false, error: String(e).slice(0, 300) }); }
+      catch (e) {
+        await page.screenshot({ path: `/tmp/accept-${cc.name}.png` }).catch(() => {});
+        results.push({ name: cc.name, pass: false, error: String(e).slice(0, 300) });
+      }
     }
   } else {
     const [path, click, ...fills] = args;
@@ -157,7 +158,7 @@ async function main() {
   console.log("\n══ 验收结果 ══");
   for (const r of results) {
     if (r.error) { console.log(`  ✗ ${r.name}: ${r.error}`); continue; }
-    console.log(`  ${r.pass ? "✓" : "✗"} ${r.name.padEnd(10)} 期望=${(r.expect ?? "toast").padEnd(6)} toast=${JSON.stringify(r.state.toast)} 页面alert=${r.state.页面级alert} 输入=${JSON.stringify(r.state.输入).slice(0, 40)} ｜ ${r.shot}`);
+    console.log(`  ${r.pass ? "✓" : "✗"} ${r.name.padEnd(10)} 期望=${(r.expect ?? "toast").padEnd(6)} toast=${JSON.stringify(r.state.toast)} 表单错误=${JSON.stringify(r.state.formErrors)} 提交=${r.submitted ?? "—"} 输入保留=${r.retained ?? "—"} ｜ ${r.shot}`);
   }
   const ok = results.filter((r) => r.pass).length;
   console.log(`  ── ${ok}/${results.length} 通过`);

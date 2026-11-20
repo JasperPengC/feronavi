@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useCustomScrollbars } from "../src/client/lib/useCustomScrollbars.ts";
+import { Drawer } from "../src/client/components/ui/Drawer.tsx";
+import { Select } from "../src/client/components/Select.tsx";
 
 function HookHost() { useCustomScrollbars(); return null; }
 
@@ -38,6 +40,67 @@ function pointer(target: EventTarget, type: string, clientY: number) {
 afterEach(() => { cleanup(); document.body.replaceChildren(); });
 
 describe("自绘滚动条模态层级", () => {
+  it("真实抽屉中的下拉滚动条处于可交互模态层，仍可拖拽", async () => {
+    render(<><HookHost /><Drawer open onClose={() => {}} title="下拉测试">
+      <Select ariaLabel="测试列表" value="0" onChange={() => {}}
+        options={Array.from({ length: 30 }, (_, i) => ({ value: String(i), label: `选项 ${i}` }))} />
+    </Drawer></>);
+    fireEvent.click(screen.getByRole("button", { name: "测试列表" }));
+    const list = screen.getByRole("listbox");
+    Object.defineProperties(list, {
+      clientWidth: { value: 300 }, scrollWidth: { value: 300 },
+      clientHeight: { value: 400 }, scrollHeight: { value: 1200 },
+    });
+    list.getBoundingClientRect = () => ({ x: 800, y: 60, left: 800, top: 60, width: 300, height: 400, right: 1100, bottom: 460, toJSON() {} });
+    await waitFor(() => expect(verticalAt(800)).toBeTruthy());
+    const thumb = verticalAt(800);
+    expect(thumb.closest(".ui-drawer-scrim")).toBe(list.closest(".ui-drawer-scrim"));
+    expect(thumb.closest("[inert]")).toBeNull();
+    fireEvent.scroll(list);
+    thumb.getBoundingClientRect = () => ({ x: 1093, y: 60, left: 1093, top: 60, width: 4, height: 133, right: 1097, bottom: 193, toJSON() {} });
+    pointer(thumb, "pointerdown", 80); pointer(window, "pointermove", 180); pointer(window, "pointerup", 180);
+    expect(list.scrollTop).toBeGreaterThan(0);
+    expect(screen.getByRole("listbox")).toBe(list);
+  });
+
+  it("下拉选项仅在滚动时显示浮动滚动条，停止后淡出，移入移出不唤醒", async () => {
+    const list = scrollable("select-options", 0);
+    list.dataset.scrollbarScrollOnly = "";
+    document.body.append(list);
+    render(<HookHost />);
+    await waitFor(() => expect(verticalAt(0)).toBeTruthy(), { timeout: 1000 });
+    const thumb = verticalAt(0);
+    expect(thumb.classList.contains("is-visible")).toBe(false);
+    fireEvent.pointerOver(list);
+    expect(thumb.classList.contains("is-visible")).toBe(false);
+    fireEvent.scroll(list);
+    expect(thumb.classList.contains("is-visible")).toBe(true);
+    await waitFor(() => expect(thumb.classList.contains("is-visible")).toBe(false), { timeout: 1500 });
+    fireEvent.pointerOut(list);
+    fireEvent.pointerOver(list);
+    expect(thumb.classList.contains("is-visible")).toBe(false);
+    list.remove();
+    await waitFor(() => expect(thumb.isConnected).toBe(false));
+  });
+
+  it("抽屉内与内容同层的下拉浮层可滚动，背景下拉仍被遮挡", async () => {
+    const background = scrollable("select-options", 0);
+    document.body.append(background);
+    const { scrim } = addDialog(80, 400);
+    const popovers = document.createElement("div");
+    popovers.className = "ui-drawer-popovers";
+    const list = scrollable("select-options", 800);
+    popovers.append(list); scrim.append(popovers);
+    render(<HookHost />);
+    await waitFor(() => expect(verticalAt(800)).toBeTruthy(), { timeout: 1000 });
+    fireEvent.scroll(list);
+    expect(verticalAt(800).style.display).toBe("block");
+    expect(verticalAt(800).classList.contains("is-visible")).toBe(true);
+    fireEvent.scroll(background);
+    expect([...document.querySelectorAll<HTMLElement>(".custom-scrollbar-thumb-y")]
+      .filter(thumb => thumb.style.display === "block")).toHaveLength(2);
+  });
+
   it("常驻滚动提示无需悬停，仍服从模态遮挡与页签隐藏", async () => {
     const background = scrollable("shell-content", 0);
     background.dataset.scrollbarPersistent = "";

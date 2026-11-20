@@ -449,6 +449,90 @@
       "when": 1793806000000,
       "tag": "0063_collab_snapshot_sequence_key",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1795089600000,
+      "tag": "0064_plan_lifecycle_archive",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1795093200000,
+      "tag": "0065_approval_transition_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1795140000000,
+      "tag": "0066_system_backup_restore",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1795140100000,
+      "tag": "0067_system_backup_download_count",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1795140200000,
+      "tag": "0068_system_restore_owner",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1795140300000,
+      "tag": "0069_system_restore_commit_marker",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1795140400000,
+      "tag": "0070_system_restore_rebuild_job",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1795140500000,
+      "tag": "0071_automation_schedule_checkpoint",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1795140600000,
+      "tag": "0072_knowledge_page_activation",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1795140700000,
+      "tag": "0073_rag_conversations",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1795140800000,
+      "tag": "0074_assistant_artifacts",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1795140900000,
+      "tag": "0075_rag_request_references",
+      "breakpoints": true
     }
   ]
 }

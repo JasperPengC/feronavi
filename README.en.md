@@ -105,7 +105,7 @@ From what you need to do today to what your team needs to ship next, Feronavi ke
 
 ## Capabilities backed by real execution
 
-Both MCP and the built-in assistant have passed validation across **22 representative business workflows**, including delivery, planning, documents, workflows, collaboration, portfolios and organization management. Integration testing with a real Codex client completed **68 MCP calls and 18 business outcome checks**.
+The repository includes automated acceptance checks for delivery, planning, documents, workflows, collaboration, portfolios and organization management. They cover permission boundaries, action confirmation, idempotent execution and persisted results, with a real Codex client harness for validating agent workflows.
 
 Validation covers business execution, permissions and persisted results. Task planning and interaction in each client depend on its MCP support and the model it uses.
 

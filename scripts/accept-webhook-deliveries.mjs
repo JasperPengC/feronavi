@@ -33,7 +33,8 @@ try {
   check("真实接口创建 Webhook 端点", created.status === 201 && !!endpointId, JSON.stringify(created.status));
   await sql`insert into webhook_delivery (endpoint_id, event, payload, status, attempts, response_code, error)
     values (${endpointId}, 'work_item.created', ${sql.json({ workItemKey: `ACC-${stamp}` })}, 'DEAD', 5, 500, 'connection refused')`;
-  await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2600);
+  await page.goto(`${BASE}/settings/integrations`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2600);
+  await page.getByRole("tab", { name: "消息与 Webhook", exact: true }).click();
   const section = page.locator(".settings-section", { hasText: "集成（Webhook 出站）" });
   await section.scrollIntoViewIfNeeded();
   const row = section.locator(".settings-record-list > li", { hasText: NAME });

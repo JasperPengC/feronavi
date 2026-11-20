@@ -10,6 +10,12 @@ import { ensureInitialized } from "./_test-helpers.ts";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { eq } from "drizzle-orm";
+import { join } from "node:path";
+import { startIsolatedRedis } from "../tests/support/isolated-special.ts";
+import { encryptSecret } from "../src/server/services/crypto.service.ts";
+
+const cache = await startIsolatedRedis(process.env.FERONAVI_TEST_DIRECTORY!);
+process.env.REDIS_URL = cache.url;
 
 let pass = 0, fail = 0;
 const ok = (n: string, c: boolean, e = "") => { if (c) { pass++; console.log(`  OK   ${n}`); } else { fail++; console.log(`  FAIL ${n} ${e}`); } };
@@ -56,7 +62,8 @@ try {
   ok("锁释放后可再次获取（不会死锁）", ran === 2, String(ran));
 
   // ── 备份归档三件套（规范：数据库 + 附件 + 密钥，缺一不可）──
-  const outDir = "/tmp/feronavi-e2e-backups";
+  encryptSecret("backup-fixture-secret"); // 首次使用敏感设置时才会生成 master.key。
+  const outDir = join(process.env.FERONAVI_TEST_DIRECTORY!, "backups");
   execFileSync("bash", ["scripts/backup.sh", outDir], {
     env: { ...process.env, DATA_DIR: process.env.DATA_DIR ?? "/tmp/feronavi-data" },
     stdio: "pipe",
@@ -92,6 +99,7 @@ try {
   await db.delete(auditEntry); await db.delete(activityEntry);
   await db.delete(member).where(eq(member.username, U));
   await sql.end();
+  await cache.stop();
 }
 
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);

@@ -12,7 +12,8 @@ import { StateBlock } from "../components/ui/StateBlock.tsx";
 import { confirmDialog } from "../components/Dialog.tsx";
 import { Button } from "../components/ui/Button.tsx";
 import { Select } from "../components/Select.tsx";
-import { Drawer } from "../components/ui/Drawer.tsx";
+import { Modal } from "../components/ui/Modal.tsx";
+import { useSettingsDraft } from "../components/settings/SettingsDraft.tsx";
 import { TextInput } from "../components/ui/TextInput.tsx";
 import { apiDelete, apiGet, apiPost, ApiError } from "../lib/api.ts";
 import { PagePagination } from "../components/ui/PagePagination.tsx";
@@ -104,6 +105,8 @@ export function TableViewPage() {
   });
   const [selectedViewId, setSelectedViewId] = useState("");
   const [saveOpen, setSaveOpen] = useState(false);
+  const [savingView, setSavingView] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [saveName, setSaveName] = useState("");
   const [saveScope, setSaveScope] = useState<"PERSONAL" | "PROJECT_SHARED">("PERSONAL");
   const [viewMessage, setViewMessage] = useState<string | null>(null);
@@ -130,6 +133,8 @@ export function TableViewPage() {
     if (f.sortDir === "asc" || f.sortDir === "desc") setSortDir(f.sortDir);
   };
   const saveView = async () => {
+    if (savingView || !saveName.trim()) return;
+    setSavingView(true); setSaveError(null);
     try {
       await apiPost("/api/v1/saved-views", {
         name: saveName.trim(), viewType: "TABLE", scope: saveScope,
@@ -138,8 +143,10 @@ export function TableViewPage() {
       });
       setSaveOpen(false); setSaveName(""); setViewMessage(t("sv.saved"));
       await Promise.all([sharedViews.refetch(), personalViews.refetch()]);
-    } catch (e) { setViewMessage(e instanceof ApiError ? e.message : t("sv.failed")); }
+    } catch (e) { setSaveError(e instanceof ApiError ? e.message : t("sv.failed")); } finally { setSavingView(false); }
   };
+  const viewDraft = useSettingsDraft(saveOpen, { saveName, saveScope }, savingView);
+  const closeSaveView = () => void viewDraft.leave(() => { setSaveOpen(false); setSaveName(""); setSaveScope("PERSONAL"); setSaveError(null); });
   const selectedView = views.find((v) => v.id === selectedViewId);
   const moveView = async (dir: -1 | 1) => {
     if (!selectedView || selectedView.scope !== "PERSONAL") return;
@@ -216,18 +223,19 @@ export function TableViewPage() {
         </div>
       </div>
 
-      <Drawer open={saveOpen} title={t("sv.saveCurrent")} onClose={() => setSaveOpen(false)} width="sm">
-        <div style={{ display: "grid", gap: 12 }}>
+      {viewDraft.guard}
+      <Modal open={saveOpen} title={t("sv.saveCurrent")} onClose={closeSaveView} width="sm" footer={<>
+          <Button onClick={closeSaveView} disabled={savingView}>{t("sv.cancel")}</Button>
+          <Button variant="primary" loading={savingView} disabled={!saveName.trim() || savingView} onClick={() => void saveView()}>{t("sv.save")}</Button>
+        </>}>
+        {saveError && <p className="field-error" role="alert">{saveError}</p>}
+        <fieldset disabled={savingView} className="settings-form-fields" style={{ display: "grid", gap: 12 }}>
           <TextInput label={t("sv.name")} aria-label={t("sv.name")} value={saveName} onChange={(e) => setSaveName(e.target.value)} />
           <Select label={t("sv.scope")} ariaLabel={t("sv.scope")} value={saveScope}
             onChange={(v) => setSaveScope(v as "PERSONAL" | "PROJECT_SHARED")}
             options={[{ value: "PERSONAL", label: t("sv.personal") }, { value: "PROJECT_SHARED", label: t("sv.shared") }]} />
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <Button variant="ghost" onClick={() => setSaveOpen(false)}>{t("sv.cancel")}</Button>
-            <Button variant="primary" disabled={!saveName.trim()} onClick={() => void saveView()}>{t("sv.save")}</Button>
-          </div>
-        </div>
-      </Drawer>
+        </fieldset>
+      </Modal>
 
       {isLoading && <StateBlock kind="loading" title={t("common.loading")} />}
 

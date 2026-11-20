@@ -15,11 +15,15 @@ import { hashPassword, validatePasswordStrength } from "../auth/password.ts";
 import type { SetupCompleteInput } from "../../shared/schemas/setup.ts";
 import * as settingRepo from "../repos/setting.repo.ts";
 import { pgSqlProbe } from "../repos/health.repo.ts";
+import { assertNotRestoring, withSystemRestoreLock } from "./system-backup/restore-lock.ts";
+
+export { assertBusinessEmpty } from "./system-backup/validator.ts";
 
 export interface PrecheckItem {
   key: string;
   ok: boolean;
   message: string;
+  path?: string;
 }
 
 /** 第 1 步：环境自检。**任一项失败都不抛错** —— 界面要展示可读原因 */
@@ -38,9 +42,9 @@ export async function precheck(): Promise<{ items: PrecheckItem[]; ok: boolean }
   const dataDir = process.env.DATA_DIR ?? "/data";
   try {
     await access(dataDir, constants.W_OK);
-    items.push({ key: "dataDir", ok: true, message: `数据目录可写（${dataDir}）` });
+    items.push({ key: "dataDir", ok: true, message: `数据目录可写（${dataDir}）`, path: dataDir });
   } catch {
-    items.push({ key: "dataDir", ok: false, message: `数据目录不可写：${dataDir}` });
+    items.push({ key: "dataDir", ok: false, message: `数据目录不可写：${dataDir}`, path: dataDir });
   }
 
   // 时区：必须是 IANA 标识（禁止容器时区，第 6.1 节）
@@ -102,6 +106,13 @@ export async function getState() {
  *    那会让实例既无法登录、也无法重跑向导（`setup_state` 已落标记）。
  */
 export async function complete(input: SetupCompleteInput): Promise<void> {
+  return withSystemRestoreLock(async () => {
+    await assertNotRestoring();
+    await completeUnderRestoreLock(input);
+  });
+}
+
+async function completeUnderRestoreLock(input: SetupCompleteInput): Promise<void> {
   const state = await getState();
   if (state.initialized) {
     throw new DomainError("FORBIDDEN", "本实例已完成初始化", null);

@@ -11,11 +11,12 @@ import { Icon } from "./Icon.tsx";
 import { t } from "../i18n/index.ts";
 import { Field } from "./ui/Field.tsx";
 
-export interface SelectOption { value: string; label: string }
+export interface SelectOption { value: string; label: string; secondaryLabel?: string }
 
 export function Select({
   value, options, onChange, ariaLabel, size = "md", disabled, placeholder,
   label, hint, error, required, id, className = "", invalid = false, searchable = false,
+  description, minPanelWidth = 168, leadingIcon,
 }: {
   value: string;
   options: SelectOption[];
@@ -36,6 +37,11 @@ export function Select({
   invalid?: boolean;
   /** 可搜索：面板顶部带过滤输入框（选项很多时用，如时区全量 IANA 列表） */
   searchable?: boolean;
+  /** 仅在展开时呈现的上下文说明。 */
+  description?: string;
+  minPanelWidth?: number;
+  /** 与文字共用点击和聚焦区域的装饰图标。 */
+  leadingIcon?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(() => Math.max(0, options.findIndex((o) => o.value === value)));
@@ -49,11 +55,12 @@ export function Select({
   const listId = useId();
   /** 搜索模式下用于渲染与键盘导航的过滤结果 */
   const filtered = useMemo(() => {
-    if (!searchable) return options;
+    const choices = placeholder ? options.filter((option) => option.value !== "") : options;
+    if (!searchable) return choices;
     const q = query.trim().toLowerCase();
-    if (!q) return options;
-    return options.filter((o) => o.value.toLowerCase().includes(q) || o.label.toLowerCase().includes(q));
-  }, [options, query, searchable]);
+    if (!q) return choices;
+    return choices.filter((o) => `${o.value} ${o.label} ${o.secondaryLabel ?? ""}`.toLowerCase().includes(q));
+  }, [options, query, searchable, placeholder]);
 
   useEffect(() => {
     if (!open) return;
@@ -81,7 +88,7 @@ export function Select({
 
   function show() {
     setQuery("");
-    setActive(Math.max(0, options.findIndex(option => option.value === value)));
+    setActive(Math.max(0, filtered.findIndex(option => option.value === value)));
     setOpen(true);
   }
 
@@ -118,10 +125,11 @@ export function Select({
       const below = Math.max(0, height + y - rect.bottom - 14), above = Math.max(0, rect.top - y - 14);
       const searchHeight = panel.querySelector<HTMLElement>(".select-search-row")?.offsetHeight ?? 0;
       const emptyHeight = panel.querySelector<HTMLElement>(".select-empty")?.offsetHeight ?? 0;
-      const desired = Math.min(312, (listRef.current?.scrollHeight ?? 0) + searchHeight + emptyHeight + 14);
+      const descriptionHeight = panel.querySelector<HTMLElement>(".select-description")?.offsetHeight ?? 0;
+      const desired = Math.min(312, (listRef.current?.scrollHeight ?? 0) + searchHeight + emptyHeight + descriptionHeight + 14);
       const placeAbove = below < desired && above > below;
       const maxHeight = Math.min(312, placeAbove ? above : below);
-      const panelWidth = Math.min(Math.max(rect.width, 168), width - 16);
+      const panelWidth = Math.min(Math.max(rect.width, minPanelWidth), width - 16);
       const top = placeAbove ? Math.max(y + 8, rect.top - Math.min(desired, maxHeight) - 6) : rect.bottom + 6;
       const next = { top, left: Math.max(x + 8, Math.min(rect.left, x + width - panelWidth - 8)), width: panelWidth, maxHeight, above: placeAbove };
       setPosition(old => Object.keys(next).every(key => old[key as keyof typeof old] === next[key as keyof typeof next]) ? old : next);
@@ -130,18 +138,22 @@ export function Select({
     const observer = new ResizeObserver(update);
     if (triggerRef.current) observer.observe(triggerRef.current);
     if (panelRef.current) observer.observe(panelRef.current);
+    document.addEventListener("animationend", update, true);
+    document.addEventListener("transitionend", update, true);
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
     window.visualViewport?.addEventListener("resize", update);
     window.visualViewport?.addEventListener("scroll", update);
     return () => {
       observer.disconnect();
+      document.removeEventListener("animationend", update, true);
+      document.removeEventListener("transitionend", update, true);
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
       window.visualViewport?.removeEventListener("resize", update);
       window.visualViewport?.removeEventListener("scroll", update);
     };
-  }, [open, filtered, searchable]);
+  }, [open, filtered, searchable, description, minPanelWidth]);
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
@@ -176,6 +188,7 @@ export function Select({
         ref={triggerRef}
         type="button"
         className={`btn btn-ghost select-trigger${sizeClass}`}
+        title={current ? [current.label, current.secondaryLabel].filter(Boolean).join(" · ") : undefined}
         aria-label={label !== undefined ? undefined : ariaLabel}
         aria-labelledby={labelId}
         aria-describedby={descId}
@@ -188,12 +201,14 @@ export function Select({
         onClick={() => open ? close() : show()}
         onKeyDown={onKeyDown}
       >
-        <span className="select-value">{current?.label ?? placeholder ?? ""}</span>
+        {leadingIcon}
+        <span className="select-value" data-placeholder={!current || (placeholder && !value) ? "true" : undefined}>{(placeholder && !value) ? placeholder : current?.label ?? placeholder ?? ""}</span>
         <Icon name="chevron-down" />
       </button>
       {open && createPortal((
         <div ref={panelRef} className="menu-panel select-panel" data-side={position.above ? "top" : "bottom"}
           style={{ top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }} onKeyDown={onKeyDown}>
+          {description && <p className="select-description" id={`${controlId}-panel-description`}>{description}</p>}
           {searchable && (
             <div className="select-search-row">
               <input
@@ -207,7 +222,8 @@ export function Select({
               />
             </div>
           )}
-          <div ref={listRef} className="select-options" id={listId} role="listbox" aria-label={ariaLabel}
+          <div ref={listRef} className="select-options" id={listId} role="listbox" aria-label={ariaLabel} data-custom-scroll data-scrollbar-scroll-only
+            aria-describedby={description ? `${controlId}-panel-description` : undefined}
             tabIndex={searchable ? -1 : 0} aria-activedescendant={searchable ? undefined : activeId}>
           {filtered.map((o, i) => (
             <button
@@ -216,13 +232,17 @@ export function Select({
               role="option"
               id={`${listId}-option-${i}`} data-index={i} tabIndex={-1}
               aria-selected={o.value === value}
+              aria-label={o.secondaryLabel ? `${o.label} ${o.secondaryLabel}` : undefined}
               className="menu-item"
               data-active={i === activeIndex ? "true" : "false"}
               onMouseEnter={() => setActive(i)}
               onClick={() => commit(o)}
             >
-              <span className="menu-item-label">{o.label}</span>
-              {o.value === value && <Icon name="check" />}
+              <span className="select-option-copy" title={[o.label, o.secondaryLabel].filter(Boolean).join(" · ")}>
+                <span className="select-option-label">{o.label}</span>
+                {o.secondaryLabel && <span className="select-option-secondary">{o.secondaryLabel}</span>}
+              </span>
+              <span className="select-option-check" aria-hidden="true">{o.value === value && <Icon name="check" />}</span>
             </button>
           ))}
           </div>

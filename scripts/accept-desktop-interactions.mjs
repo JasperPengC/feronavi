@@ -21,12 +21,19 @@ try {
     const csrf = () => decodeURIComponent(document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] || "");
     const p = await (await fetch("/api/v1/projects", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-csrf-token": csrf() }, body: JSON.stringify({ key: `I${stamp.slice(-6).toUpperCase()}`, name: `桌面交互验收 ${stamp}` }) })).json();
     if (!p.id) throw new Error(JSON.stringify(p));
-    const item = await (await fetch(`/api/v1/projects/${p.id}/work-items`, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-csrf-token": csrf() }, body: JSON.stringify({ title: "拖拽验收工作项", type: "TASK" }) })).json();
-    return { project: p, item };
+    const items = [];
+    // 表格每页 20 条；建立 25 条独立数据，确保下一页确实存在。
+    for (let i = 0; i < 25; i++) {
+      const response = await fetch(`/api/v1/projects/${p.id}/work-items`, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-csrf-token": csrf() }, body: JSON.stringify({ title: i === 0 ? "拖拽验收工作项" : `分页验收工作项 ${i}`, type: i === 0 ? "DEFECT" : "TASK" }) });
+      const item = await response.json();
+      if (response.status !== 201 || !item.id) throw new Error(`工作项 fixture 创建失败：${response.status} ${JSON.stringify(item)}`);
+      items.push(item);
+    }
+    return { project: p, item: items[0], itemCount: items.length };
   }, stamp);
   projectId = created.project.id;
   const itemKey = created.item.key;
-  check("桌面交互 fixture 创建成功", true, itemKey);
+  check("桌面交互 fixture 创建成功（25 条覆盖分页）", created.itemCount === 25, itemKey);
 
   // 1) 侧栏收起/展开
   await page.goto(`${BASE}/workbench`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(900);
@@ -46,12 +53,13 @@ try {
   check("Esc 关闭命令面板", !(await page.locator(".palette-overlay [role='dialog']").isVisible().catch(() => false)));
 
   // 3) 工作项抽屉
-  await page.goto(`${BASE}/issues`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(900);
-  await page.locator(".data-table tbody tr, table tbody tr").first().click(); await page.waitForTimeout(600);
+  await page.goto(`${BASE}/issues`, { waitUntil: "domcontentloaded" });
+  await page.getByRole("searchbox", { name: "搜索标题或编号" }).fill(itemKey);
+  await page.locator(".issues-item-open").filter({ hasText: "拖拽验收工作项" }).click(); await page.waitForTimeout(600);
   const drawer = page.locator(".ui-drawer[role='dialog'], [role='dialog'].ui-drawer").first();
   const drawerVisible = await drawer.isVisible().catch(() => false);
   const drawerWidth = drawerVisible ? await drawer.evaluate((el) => Math.round(el.getBoundingClientRect().width)) : 0;
-  check("点击问题行打开工作项抽屉（宽度适合 PC）", drawerVisible && drawerWidth > 350 && drawerWidth <= 720, String(drawerWidth));
+  check("点击问题标题打开工作项抽屉（宽度适合 PC）", drawerVisible && drawerWidth > 350 && drawerWidth <= 720, String(drawerWidth));
   if (drawerVisible) { await page.keyboard.press("Escape"); await page.waitForTimeout(400); }
   check("Esc 关闭工作项抽屉", !(await drawer.isVisible().catch(() => false)));
 
@@ -78,18 +86,15 @@ try {
   check("看板每列带稳定 stateKey（PC 自动化/键盘可寻址）", stateCols >= 3, String(stateCols));
   check("看板独立拖拽手柄能启动拖拽（不依赖整卡 role=button）", dragActive, JSON.stringify({ hb, dragActive }));
 
-  // 5) 表格排序 + 分页（用演示项目的大数据表）
-  const demoPid = await page.evaluate(async () => {
-    const items = (await (await fetch("/api/v1/projects")).json()).items ?? [];
-    return (items.find((p) => p.key === "FINOK") ?? items.find((p) => !p.name.includes("验收")) ?? items[0])?.id;
-  });
-  await page.goto(`${BASE}/projects/${demoPid}/table`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(1400);
+  // 5) 表格排序 + 分页（独立 fixture 保证超过一页）
+  await page.goto(`${BASE}/projects/${projectId}/table`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(1400);
   const sortPill = page.locator('button[aria-label^="按"]').first();
   const beforeSort = { active: await sortPill.getAttribute("data-active"), text: (await sortPill.innerText()).trim() };
   await sortPill.click(); await page.waitForTimeout(900);
   const afterSort = { active: await sortPill.getAttribute("data-active"), text: (await sortPill.innerText()).trim() };
   check("表格排序按钮可切换方向且保持激活", (await sortPill.count()) > 0 && afterSort.active === "true" && afterSort.text !== beforeSort.text, JSON.stringify({ beforeSort, afterSort }));
   const firstPageFirst = (await page.locator(".table-view-table tbody tr").first().innerText().catch(() => "")).slice(0, 80);
+  check("表格首页按 20 条分页", await page.locator(".table-view-table tbody tr").count() === 20);
   const next = page.getByRole("button", { name: /下一页|下一頁/ }).first();
   if (await next.count()) {
     await page.waitForFunction(() => {
@@ -100,6 +105,7 @@ try {
     await next.click(); await page.waitForTimeout(1000);
     const secondPageFirst = (await page.locator(".table-view-table tbody tr").first().innerText().catch(() => "")).slice(0, 80);
     check("表格分页「下一页」刷新数据", secondPageFirst.length > 0 && secondPageFirst !== firstPageFirst, JSON.stringify({ firstPageFirst, secondPageFirst }));
+    check("表格第二页显示剩余 5 条", await page.locator(".table-view-table tbody tr").count() === 5);
   } else {
     check("表格分页控件存在", false, "未找到下一页按钮");
   }

@@ -32,11 +32,12 @@ try {
   await page.goto(`${BASE}/projects/${pid}/board`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(3000);
   const card = page.locator(".board-column-body .card").first();
   check("看板有工作项卡片", (await card.count()) === 1);
-  await card.getByRole("button", { name: "详情" }).click();
+  await card.locator(".board-card-title").click();
   await page.waitForTimeout(1200);
   const drawer = page.locator(".wi-drawer");
+  await drawer.locator("summary", { hasText: "关联与子项" }).click();
   check("详情抽屉打开（基本信息/关联/评论）", (await drawer.count()) === 1
-    && (await drawer.innerText()).includes("基本信息") && (await drawer.innerText()).includes("关联") && (await drawer.innerText()).includes("评论"));
+    && (await drawer.locator(".wi-detail-properties").count()) === 1 && (await drawer.innerText()).includes("关联") && (await drawer.innerText()).includes("评论"));
 
   await page.getByLabel("关联类型").click(); await page.waitForTimeout(300);
   await page.getByRole("option", { name: "想法" }).click(); await page.waitForTimeout(800);

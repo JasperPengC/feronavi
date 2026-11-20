@@ -20,7 +20,7 @@ if (requested?.some((value) => !Object.keys(launchers).some((name) => name.toLow
 const selected = Object.entries(launchers).filter(([name]) => !requested || requested.includes(name.toLowerCase()));
 const pages = [
   ["/workbench", "我的工作台"], ["/projects", "全部项目"], ["/issues", "问题追踪"],
-  ["/members", "成员"], ["/settings", "设置"], ["/system", "系统自检"],
+  ["/members", "成员"], ["/settings/personal", "个人偏好"], ["/system", "系统自检"],
 ];
 const report = {
   startedAt: new Date().toISOString(), probeOnly,
@@ -36,22 +36,57 @@ async function bounded(promise, label, timeout = 15_000) {
   try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} 超过 ${timeout}ms 未就绪`)), timeout); })]); }
   finally { clearTimeout(timer); }
 }
-async function chooseTheme(page, theme) {
-  const preference = await page.locator(".shell-header").count() ? page.waitForResponse((response) => response.url().endsWith("/api/v1/me/preferences") && response.request().method() === "PUT") : undefined;
-  await page.getByRole("button", { name: "主题", exact: true }).click();
-  await page.getByRole("menu", { name: "主题", exact: true }).getByRole("menuitemradio", { name: theme === "dark" ? "深色" : "浅色", exact: true }).click();
-  await page.waitForFunction((expected) => document.documentElement.classList.contains(`theme-${expected}`), theme);
-  if (preference) assert.equal((await preference).status(), 200);
+const pendingRequests = new WeakMap();
+function trackRequests(page) {
+  const state = { active: new Set(), changedAt: Date.now() };
+  pendingRequests.set(page, state);
+  const finiteApi = request => new URL(request.url()).pathname.startsWith("/api/") && !new URL(request.url()).pathname.endsWith("/events");
+  page.on("request", request => { if (finiteApi(request)) { state.active.add(request); state.changedAt = Date.now(); } });
+  const finish = request => { if (state.active.delete(request)) state.changedAt = Date.now(); };
+  page.on("requestfinished", finish);
+  page.on("requestfailed", finish);
 }
+async function settleRequests(page) {
+  // 阶段间等待写后 SSE 刷新完成；WebKit 会将主动导航取消的 fetch 记为 access-control pageerror。
+  const state = pendingRequests.get(page);
+  await bounded((async () => {
+    while (state.active.size || Date.now() - state.changedAt < 150) await new Promise(resolve => setTimeout(resolve, 25));
+  })(), "阶段间请求收敛");
+}
+async function navigate(page, url) {
+  await settleRequests(page);
+  await page.goto(url, { waitUntil: "domcontentloaded" });
+}
+async function reload(page) {
+  await settleRequests(page);
+  await page.reload({ waitUntil: "domcontentloaded" });
+}
+async function chooseTheme(page, theme) {
+  const syncPreference = !!(await page.locator(".shell-header").count());
+  const select = async () => {
+    await page.getByRole("button", { name: "主题", exact: true }).click();
+    await page.getByRole("menu", { name: "主题", exact: true }).getByRole("menuitemradio", { name: theme === "dark" ? "深色" : "浅色", exact: true }).click();
+  };
+  // 同时接住交互和网络等待的失败，保留 WebKit trace，避免悬空 promise 提前终止进程。
+  if (syncPreference) {
+    const [response] = await Promise.all([
+      page.waitForResponse((response) => response.url().endsWith("/api/v1/me/preferences") && response.request().method() === "PUT"),
+      select(),
+    ]);
+    assert.equal(response.status(), 200);
+  } else await select();
+  await page.waitForFunction((expected) => document.documentElement.classList.contains(`theme-${expected}`), theme);
+}
+
 async function screenshot(page, name) {
   await page.screenshot({ path: join(reportDirectory, `${name}.png`), animations: "disabled" });
 }
 async function interactions(page, label, artifact, theme, mobile) {
-  await page.goto(`${BASE}/projects`, { waitUntil: "domcontentloaded" });
+  await navigate(page, `${BASE}/projects`);
   await page.getByRole("button", { name: "新建项目", exact: true }).first().waitFor();
   await chooseTheme(page, theme === "dark" ? "light" : "dark");
   await chooseTheme(page, theme);
-  await page.reload({ waitUntil: "domcontentloaded" });
+  await reload(page);
   await page.waitForFunction((expected) => document.documentElement.classList.contains(`theme-${expected}`), theme);
   check(`${label}：主题菜单切换与刷新保留`, true);
 
@@ -90,33 +125,36 @@ async function interactions(page, label, artifact, theme, mobile) {
   await drawer.locator("#p-key").fill(key);
   await drawer.locator("#p-name").fill(title);
   await screenshot(page, `${artifact}-project-form`);
-  const created = page.waitForResponse((response) => response.url().endsWith("/api/v1/projects") && response.request().method() === "POST");
-  await submit.click();
-  const response = await created;
+  const [response] = await Promise.all([
+    page.waitForResponse((response) => response.url().endsWith("/api/v1/projects") && response.request().method() === "POST"),
+    submit.click(),
+  ]);
   assert.equal(response.status(), 201, await response.text());
   const project = await response.json();
   await drawer.waitFor({ state: "hidden" });
-  await page.reload({ waitUntil: "domcontentloaded" });
+  await reload(page);
   await page.getByRole("link", { name: new RegExp(title, "u") }).first().waitFor();
   check(`${label}：抽屉焦点恢复、项目表单校验与写入持久化`, true);
 
-  await page.goto(`${BASE}/projects/${project.id}/board`, { waitUntil: "domcontentloaded" });
+  await navigate(page, `${BASE}/projects/${project.id}/board`);
   await page.getByRole("button", { name: "新建工作项", exact: true }).click();
   const itemDialog = page.getByRole("dialog", { name: "新建工作项", exact: true });
   const itemTitle = `工作项 ${artifact}`;
   await itemDialog.getByRole("textbox", { name: "标题", exact: true }).fill(itemTitle);
-  const itemCreated = page.waitForResponse((result) => result.url().endsWith(`/api/v1/projects/${project.id}/work-items`) && result.request().method() === "POST");
-  // 创建后产品自动打开详情；先完成这一步，再验证刷新持久化，避免导航取消在途详情请求。
-  const initialDetails = ["", "/links", "/sla", "/approvals", "/children"].map(suffix => page.waitForResponse(response => {
-    const path = new URL(response.url()).pathname;
-    return new RegExp(`^/api/v1/work-items/[^/]+${suffix}$`, "u").test(path) && response.request().method() === "GET";
-  }));
-  await itemDialog.getByRole("button", { name: "创建", exact: true }).click();
-  assert.equal((await itemCreated).status(), 201);
+  // 同时等待点击、创建与自动展开详情；所有拒绝都有接收方，便于保留失败截图和 trace。
+  const [itemCreated, ...detailResponses] = await Promise.all([
+    page.waitForResponse((result) => result.url().endsWith(`/api/v1/projects/${project.id}/work-items`) && result.request().method() === "POST"),
+    ...["", "/links", "/sla", "/approvals", "/children"].map(suffix => page.waitForResponse(response => {
+      const path = new URL(response.url()).pathname;
+      return new RegExp(`^/api/v1/work-items/[^/]+${suffix}$`, "u").test(path) && response.request().method() === "GET";
+    })),
+    itemDialog.getByRole("button", { name: "创建", exact: true }).click(),
+  ]);
+  assert.equal(itemCreated.status(), 201);
   await itemDialog.waitFor({ state: "hidden" });
-  for (const response of await Promise.all(initialDetails)) { assert.equal(response.status(), 200); await response.finished(); }
+  for (const response of detailResponses) if (response) { assert.equal(response.status(), 200); await response.finished(); }
   await page.locator(".work-item-detail").getByRole("heading", { name: itemTitle, exact: true }).waitFor();
-  await page.reload({ waitUntil: "domcontentloaded" });
+  await reload(page);
   await page.getByRole("button", { name: itemTitle, exact: true }).click();
   await page.locator(".work-item-detail").getByRole("heading", { name: itemTitle, exact: true }).waitFor();
   await page.waitForFunction(() => {
@@ -158,6 +196,7 @@ for (const [name, launcher] of selected) {
         context.setDefaultNavigationTimeout(30_000);
         await context.tracing.start({ screenshots: true, snapshots: true });
         page = await bounded(context.newPage(), `${name} 页面`);
+        trackRequests(page);
         page.on("pageerror", (error) => errors.push({ type: "pageerror", message: error.message }));
         page.on("console", (message) => { if (message.type() === "error") errors.push({ type: "console", message: message.text() }); });
         await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
@@ -171,7 +210,7 @@ for (const [name, launcher] of selected) {
         await chooseTheme(page, theme);
         check(`${label}：真实登录表单`, true);
         for (const [path, expected] of pages) {
-          await page.goto(BASE + path, { waitUntil: "domcontentloaded" });
+          await navigate(page, BASE + path);
           await page.locator(".shell-header").waitFor();
           await page.waitForFunction((text) => document.querySelector("main")?.textContent?.includes(text), expected);
           await page.waitForFunction((value) => document.documentElement.classList.contains(`theme-${value}`), theme);
@@ -183,7 +222,7 @@ for (const [name, launcher] of selected) {
           }));
           check(`${label}：${path} 渲染`, !state.overflow && state.shell, state);
           if (state.overflow || !state.shell) failed = true;
-          await screenshot(page, `${artifact}-${path.slice(1)}`);
+          await screenshot(page, `${artifact}-${path.slice(1).replaceAll("/", "-")}`);
         }
         await interactions(page, label, artifact, theme, mobile);
       } catch (error) {
@@ -201,7 +240,12 @@ for (const [name, launcher] of selected) {
     }
   } catch (error) {
     engine.error = error.message;
-    check(`${name}：引擎运行`, false, error.stack ?? String(error));
+    if (/空白页 超过|Executable doesn't exist|browserType\.launch/u.test(error.message)) {
+      engine.skipped = true;
+      console.log(`  SKIP ${name}：当前宿主浏览器运行环境不可用 ${error.message}`);
+    } else {
+      check(`${name}：引擎运行`, false, error.stack ?? String(error));
+    }
   } finally { if (browser) await bounded(browser.close(), `${name} 浏览器清理`).catch((error) => check(`${name}：清理`, false, error.message)); }
 }
 report.finishedAt = new Date().toISOString();

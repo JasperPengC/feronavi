@@ -1,4 +1,5 @@
-import "./_env.ts";   // 环境预设必须最先加载（服务模块在导入时即读环境变量）
+import "./_env.ts";
+import { confirmedTestArgs } from "./lib/mcp-test-confirmation.ts";   // 环境预设必须最先加载（服务模块在导入时即读环境变量）
 /** MCP 写工具自检（第十三期）：档位 × 账号权限 × 白名单三重交集、幂等键、乐观锁、破坏性标注 */
 import { db, sql } from "../src/db/index.ts";
 import { member, role, roleAssignment, project, workItem, apiToken, idempotencyKey, auditEntry, activityEntry, comment, subscription, notification, timeLog, workItemCollaborator, workItemRelation, memberPreference, milestone, iteration, release, module as moduleT, page, pageRevision, pagePermission, idea, ideaVote, collabRoom, collabMember, collabSnapshot, collabUpdate } from "../src/db/schema.ts";
@@ -46,7 +47,7 @@ async function rpc(token: string, body: unknown) {
   return { status: res.status, isError: j.result?.isError === true, data };
 }
 const call = (token: string, name: string, args: Record<string, unknown>) =>
-  rpc(token, { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } });
+  rpc(token, { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: confirmedTestArgs(name, args) } });
 
 try {
   // ── 工具清单里能看到写工具 ──
@@ -136,6 +137,16 @@ try {
   ok("idea.vote 成功（天然幂等）", !voteRes.isError, JSON.stringify(voteRes.data).slice(0, 70));
   const pageRes = await call(rwTok.token, "page.create", { projectId: pid, title: "MCP 建的文档", content: "# 标题\n内容", idempotencyKey: "page-1" });
   ok("page.create 成功", !pageRes.isError, JSON.stringify(pageRes.data).slice(0, 70));
+  const createdPage = (pageRes.data as { result: { id: string; currentRevisionId: string } }).result;
+  const pageArgs = { pageId: createdPage.id, expectedRevisionId: createdPage.currentRevisionId, content: "# 更新后\nMCP 发布回读", userConfirmed: true, idempotencyKey: "page-update-1" };
+  const published = await call(rwTok.token, "page.update", pageArgs);
+  const publication = (published.data as { result?: { publishedRevisionId: string; page: { id: string } } })?.result;
+  ok("page.update 返回成功发布的幂等信封", !published.isError && !!publication?.publishedRevisionId && publication.page.id === createdPage.id, JSON.stringify(published.data).slice(0, 100));
+  const publishedAgain = await call(rwTok.token, "page.update", pageArgs);
+  ok("page.update 重试保留首次发布版本", !publishedAgain.isError && publishedAgain.data?.replayed === true
+    && (publishedAgain.data?.result as { publishedRevisionId?: string })?.publishedRevisionId === publication?.publishedRevisionId);
+  const currentPage = await call(rwTok.token, "page.get", { pageId: createdPage.id });
+  ok("page.update 返回版本与持久化当前版本一致", !currentPage.isError && !!publication?.publishedRevisionId && currentPage.data?.currentRevisionId === publication.publishedRevisionId);
   const relRes = await call(rwTok.token, "workitem.link", { fromWorkItemId: wiId, toWorkItemId: wiId, type: "RELATES_TO" });
   ok("workitem.link 成功（自关联被接受为合法关系）", !relRes.isError || (relRes.data as { code?: string }).code === "VALIDATION",
     JSON.stringify(relRes.data).slice(0, 70));

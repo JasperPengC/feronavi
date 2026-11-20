@@ -16,6 +16,7 @@ import { member, role, roleAssignment, team } from "../../db/schema.ts";
 import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
+import { publishWorkspaceInvalidation } from "./workspace-events.service.ts";
 
 function assertManage(actor: Actor): void {
   const ctx: PermissionContext = { memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId };
@@ -90,6 +91,7 @@ export async function createTeam(actor: Actor, input: { name: string; parentId?:
   const [row] = await db.insert(team).values({
     name, parentId: input.parentId ?? null, sortOrder: input.sortOrder ?? 0,
   }).returning();
+  await publishWorkspaceInvalidation({ domain: "directory", resourceType: "TEAM", resourceId: row!.id });
   return row!;
 }
 
@@ -128,6 +130,7 @@ export async function updateTeam(actor: Actor, id: string, patch: { name?: strin
       ...(patch.sortOrder !== undefined ? { sortOrder: patch.sortOrder } : {}),
     }).where(eq(team.id, id));
   }
+  await publishWorkspaceInvalidation({ domain: "directory", resourceType: "TEAM", resourceId: id });
   return (await db.select().from(team).where(eq(team.id, id)).limit(1))[0]!;
 }
 
@@ -141,6 +144,7 @@ export async function deleteTeam(actor: Actor, id: string): Promise<void> {
     .where(and(eq(roleAssignment.scopeType, "TEAM"), eq(roleAssignment.scopeId, id)));
   if (members.length > 0) throw new DomainError("CONFLICT", "该团队仍有成员，不能删除（请先移除团队角色指派）", { members: members.length });
   await db.delete(team).where(eq(team.id, id));
+  await publishWorkspaceInvalidation({ domain: "directory", resourceType: "TEAM", resourceId: id });
 }
 
 export async function listTeamMembers(actor: Actor, id: string) {

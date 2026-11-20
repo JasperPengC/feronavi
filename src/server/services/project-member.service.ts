@@ -20,6 +20,22 @@ function assertManage(actor: Actor, projectId: string): void {
   if (!can(actor, "project:manage_member", { projectId, teamId: null }, ctx)) throw forbidden();
 }
 
+/** 项目成员管理只需要可分配角色标识，不暴露组织角色权限配置。 */
+export async function listProjectMemberRoles(actor: Actor, projectId: string) {
+  assertManage(actor, projectId);
+  if (!(await projectRepo.isVisibleTo(actor.memberId, projectId, actor.grants.some(grant => grant.scopeType === "ORG")))) throw forbidden();
+  return db.select({ id: role.id, key: role.key, name: role.name }).from(role).orderBy(role.key);
+}
+
+export async function updateProjectMember(actor: Actor, projectId: string, input: { memberId: string; roleIds: string[] }) {
+  assertManage(actor, projectId);
+  if (!(await projectRepo.isVisibleTo(actor.memberId, projectId, actor.grants.some(grant => grant.scopeType === "ORG")))) throw forbidden();
+  const [existing] = await db.select({ id: projectMembership.id }).from(projectMembership)
+    .where(and(eq(projectMembership.projectId, projectId), eq(projectMembership.memberId, input.memberId))).limit(1);
+  if (!existing) throw new DomainError("NOT_FOUND", "项目成员不存在", null);
+  return addProjectMember(actor, projectId, input);
+}
+
 export async function addProjectMember(actor: Actor, projectId: string, input: { memberId: string; roleId?: string; roleIds?: string[] }) {
   assertManage(actor, projectId);
   const hasOrg = actor.grants.some((g) => g.scopeType === "ORG");

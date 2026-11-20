@@ -20,7 +20,8 @@ try {
   const page = await ctx.newPage();
   await page.goto(`${BASE}/login`); await page.waitForTimeout(600);
   await page.evaluate(async () => { await fetch("/api/v1/auth/login", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: "demo", password: "demo-password-12345" }) }); });
-  await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2600);
+  await page.goto(`${BASE}/settings/integrations`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2600);
+  await page.getByRole("tab", { name: "身份与访问", exact: true }).click();
   const section = page.locator(".settings-section", { hasText: "SSO / 身份源" });
   await section.scrollIntoViewIfNeeded();
   check("设置页出现「SSO / 身份源」区块", (await section.count()) === 1);

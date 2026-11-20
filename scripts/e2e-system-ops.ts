@@ -43,10 +43,10 @@ await mk(MEMBER, "运维成员", mr!.id);
 const admin = (await loadActor(adminId))!;
 
 // 夹具：集成 / 开关 / webhook 投递 / MCP 客户端 / 保留期
-await integrationService.createIntegration(admin, { kind: "GITHUB", name: "运维夹具集成", baseUrl: "https://api.github.com", token: "ghp_ops" });
+await integrationService.createIntegration(admin, { kind: "GITHUB", name: "运维夹具集成", baseUrl: "https://1.1.1.1", token: "ghp_ops" });
 await flagService.setFeatureFlag(admin, "ui.ops.enabled", { enabled: true });
 await flagService.setFeatureFlag(admin, "ui.ops.disabled", { enabled: false });
-const ep = await whService.createEndpoint(admin, { name: "运维夹具端点", url: "https://example.com/hook", events: ["work_item.created"] });
+const ep = await whService.createEndpoint(admin, { name: "运维夹具端点", url: "https://1.1.1.1/hook", events: ["work_item.created"] });
 await db.insert(webhookDelivery).values([
   { endpointId: ep.endpoint.id, event: "work_item.created", payload: {} as object, status: "PENDING" },
   { endpointId: ep.endpoint.id, event: "work_item.created", payload: {} as object, status: "RETRYING", attempts: 1, nextRetryAt: new Date() },
@@ -87,7 +87,7 @@ try {
   ok("集成计数（1/1）", body.integrations.total === 1 && body.integrations.active === 1, JSON.stringify(body.integrations));
   ok("功能开关计数（2/1）", body.featureFlags.total === 2 && body.featureFlags.enabled === 1, JSON.stringify(body.featureFlags));
   ok("MCP 客户端/调用数（1/5）", body.mcp.clients === 1 && body.mcp.calls === 5, JSON.stringify(body.mcp));
-  ok("调度器间隔已暴露", body.schedulers.webhookRetryIntervalMs === 30_000, String(body.schedulers.webhookRetryIntervalMs));
+  ok("调度器间隔与实例配置一致", body.schedulers.webhookRetryIntervalMs === Number(process.env.WEBHOOK_RETRY_INTERVAL_MS ?? 30_000), String(body.schedulers.webhookRetryIntervalMs));
 
   const memberCookie = await loginCookie(MEMBER);
   ok("普通成员读运维状态 → 403", (await fetch(`${BASE}/api/v1/system/operations`, { headers: { cookie: memberCookie } })).status === 403);

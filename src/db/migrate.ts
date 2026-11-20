@@ -4,11 +4,9 @@
  * 为什么需要：规范写的是「app 启动时自动执行，不依赖人工步骤」，但此前 `server.ts` 只是起 HTTP 服务，
  * 新库必须人工跑 `drizzle-kit migrate`；漏跑时表现为「登录/向导接口报 relation does not exist」。
  *
- * 锁：迁移协调属于数据库职责，但规范指定 Valkey 令牌锁 —— 两个都支持：
- *   · 配置了 `REDIS_URL` → Valkey `SET NX PX` 令牌锁（TTL 5 分钟、心跳续期、只删自己的锁）；
- *     取不到锁 = 另一个副本在迁移 → 每秒重试，最多等 5 分钟；
- *   · 未配置 Valkey 或 Valkey 不可用 → 退回 **PostgreSQL 会话级咨询锁**（`pg_advisory_lock`），
- *     多副本共享同一数据库时同样不会并发迁移，且不依赖外部组件。
+ * 锁：所有副本始终使用 PostgreSQL 会话级咨询锁，缓存可用性不改变互斥域。
+ * 等待默认最多 5 分钟；连接被进程终止时 PG 自动释放锁。
+ * 迁移与锁使用同一保留连接，DB_POOL_MAX=1 也不会自锁。
  *
  * 失败语义：抛错 → `server.ts` 记录后 `process.exit(1)`，**不启动 HTTP 服务**（避免半迁移对外服务）。
  * 可用 `MIGRATE_ON_START=0` 关闭（测试/特殊部署），`MIGRATIONS_DIR` 指定迁移目录。
@@ -16,17 +14,20 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { migrate } from "drizzle-orm/postgres-js/migrator";
-import { db, sql, onReservedConnection } from "./index.ts";
+import { sql, inTransaction, onReservedConnection } from "./index.ts";
+import { pendingMigrations } from "./migration-history.ts";
+import { loadMigrations } from "./migration-files.ts";
 
 const LOCK_KEY = "feronavi:migrate";
-const LOCK_TTL_MS = 5 * 60 * 1000;
-const TTL_HEARTBEAT_MS = Math.floor(LOCK_TTL_MS / 5);
+const DEFAULT_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 
 /** 迁移目录：环境变量优先，其次 cwd/drizzle，最后按源码与编译产物的相对位置各试一次 */
-export function resolveMigrationsFolder(): string | null {
+export function resolveMigrationsFolder(): string {
+  if (process.env.MIGRATIONS_DIR) {
+    if (!existsSync(join(process.env.MIGRATIONS_DIR, "meta", "_journal.json"))) throw new Error("指定的迁移目录缺少 meta/_journal.json");
+    return process.env.MIGRATIONS_DIR;
+  }
   const candidates = [
-    process.env.MIGRATIONS_DIR,
     join(process.cwd(), "drizzle"),
     fileURLToPath(new URL("../../drizzle/", import.meta.url)),
     fileURLToPath(new URL("../../../drizzle/", import.meta.url)),
@@ -34,7 +35,7 @@ export function resolveMigrationsFolder(): string | null {
   for (const dir of candidates) {
     if (existsSync(join(dir, "meta", "_journal.json"))) return dir;
   }
-  return null;
+  throw new Error("未找到迁移目录（meta/_journal.json），已停止启动");
 }
 
 async function appliedCount(): Promise<number> {
@@ -46,102 +47,64 @@ async function appliedCount(): Promise<number> {
   }
 }
 
-type Lock = { kind: "valkey"; release: () => Promise<void> }
-  | { kind: "pg"; release: () => Promise<void>; run: (fn: () => Promise<void>) => Promise<void> };
-
-/** Valkey 令牌锁（规范方案）；未配置 REDIS_URL 或连不上则返回 null 由调用方退回 PG 锁 */
-async function acquireValkeyLock(): Promise<Lock | null> {
-  const url = process.env.REDIS_URL;
-  if (!url) return null;
-  const { default: Redis } = await import("ioredis");
-  const redis = new Redis(url, {
-    lazyConnect: true,
-    maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
-    connectTimeout: 1500,
-    retryStrategy: () => null,   // 连不上就立刻失败，交给 PG 锁兜底
-  });
-  redis.on("error", () => {});   // 连接错误不影响可用性（失败会走兜底）
-  try {
-    await redis.connect();
-    const token = `${process.pid}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
-    const deadline = Date.now() + LOCK_TTL_MS;
-    let acquired = false;
-    while (Date.now() < deadline) {
-      const ok = await redis.set(LOCK_KEY, token, "PX", LOCK_TTL_MS, "NX");
-      if (ok === "OK") { acquired = true; break; }
-      await new Promise((r) => setTimeout(r, 1000));   // 另一个副本在迁移 → 等锁
-    }
-    if (!acquired) { await redis.quit().catch(() => {}); throw new Error("等待迁移锁超时（5 分钟）"); }
-
-    const heartbeat = setInterval(() => {
-      void redis.pexpire(LOCK_KEY, LOCK_TTL_MS).catch(() => {});
-    }, TTL_HEARTBEAT_MS);
-    heartbeat.unref();
-
-    return {
-      kind: "valkey",
-      release: async () => {
-        clearInterval(heartbeat);
-        // 只删自己的锁：Lua compare-and-del（避免误删别人的锁）
-        await redis.eval(
-          'if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end',
-          1, LOCK_KEY, token,
-        ).catch(() => {});
-        await redis.quit().catch(() => {});
-      },
-    };
-  } catch (e) {
-    await redis.quit().catch(() => {});
-    console.warn(`[migrate] Valkey 锁不可用（${(e as Error).message.slice(0, 80)}），退回 PostgreSQL 咨询锁`);
-    return null;
-  }
-}
-
-/** PostgreSQL 会话级咨询锁（无 Valkey 时的兜底；多副本共享同一个库依然互斥） */
-async function acquirePgLock(): Promise<Lock> {
+/** 同一个数据库始终是最终互斥域，不再使用会因缓存分区而分叉的锁。 */
+async function acquirePgLock() {
+  const timeoutMs = Number(process.env.MIGRATION_LOCK_TIMEOUT_MS ?? DEFAULT_LOCK_TIMEOUT_MS);
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) throw new Error("MIGRATION_LOCK_TIMEOUT_MS 必须为正整数");
   const reserved = await sql.reserve();
+  const deadline = Date.now() + timeoutMs;
   try {
-    await reserved`select pg_advisory_lock(hashtext(${LOCK_KEY}))`;
-  } catch (e) {
+    for (;;) {
+      const [row] = await reserved`select pg_try_advisory_lock(hashtext(${LOCK_KEY})) as acquired`;
+      if (row?.acquired) break;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new Error(`等待 PostgreSQL 迁移锁超时（${timeoutMs}ms）`);
+      await new Promise(resolve => setTimeout(resolve, Math.min(100, remaining)));
+    }
+  } catch (error) {
     reserved.release();
-    throw e;
+    throw error;
   }
   return {
-    kind: "pg",
-    run: (fn) => onReservedConnection(reserved, fn),
+    run: (fn: () => Promise<void>) => onReservedConnection(reserved, fn),
     release: async () => {
-      try {
-        await reserved`select pg_advisory_unlock(hashtext(${LOCK_KEY}))`;
-      } finally {
-        reserved.release();
-      }
+      try { await reserved`select pg_advisory_unlock(hashtext(${LOCK_KEY}))`; }
+      finally { reserved.release(); }
     },
   };
 }
 
-/** 执行迁移（幂等；已是最新时只做一次计数查询）。失败直接抛错，由调用方决定退出 */
+/** 执行迁移；保留历史账本，按已验证的内容身份兼容两条既有升级路径。 */
 export async function runMigrations(): Promise<void> {
   if (process.env.MIGRATE_ON_START === "0") {
     console.info("[migrate] MIGRATE_ON_START=0，跳过自动迁移");
     return;
   }
   const folder = resolveMigrationsFolder();
-  if (!folder) {
-    console.warn("[migrate] 未找到 drizzle 迁移目录（meta/_journal.json），跳过自动迁移");
-    return;
-  }
+  const { migrations } = loadMigrations(folder);
 
-  const before = await appliedCount();
-  let lock: Lock | null = null;
+  let before = 0, after = 0;
+  let lock: Awaited<ReturnType<typeof acquirePgLock>> | undefined;
   try {
-    lock = await acquireValkeyLock();
-    if (!lock) lock = await acquirePgLock();
-    if (lock.kind === "pg") await lock.run(() => migrate(db, { migrationsFolder: folder }));
-    else await migrate(db, { migrationsFolder: folder });
+    lock = await acquirePgLock();
+    await lock.run(async () => {
+      before = await appliedCount();
+      await inTransaction(async () => {
+        await sql`create schema if not exists drizzle`;
+        await sql`create table if not exists drizzle.__drizzle_migrations (
+          id serial primary key, hash text not null, created_at bigint
+        )`;
+        const applied = await sql<{ hash: string; created_at: string | null }[]>`
+          select hash, created_at from drizzle.__drizzle_migrations order by id`;
+        for (const migration of pendingMigrations(migrations, applied)) {
+          for (const statement of migration.sql) await sql.unsafe(statement);
+          await sql`insert into drizzle.__drizzle_migrations(hash, created_at) values(${migration.hash}, ${migration.folderMillis})`;
+        }
+      });
+      after = await appliedCount();
+    });
   } finally {
     if (lock) await lock.release().catch(() => {});
   }
-  const after = await appliedCount();
-  console.info(`[migrate] 自动迁移完成：新应用 ${after - before} 个，累计 ${after}（锁=${lock?.kind ?? "none"}）`);
+  console.info(`[migrate] 自动迁移完成：新应用 ${after - before} 个，累计 ${after}（锁=pg）`);
 }

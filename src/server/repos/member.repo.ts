@@ -29,6 +29,16 @@ export async function findById(id: string) {
   return rows[0] ?? null;
 }
 
+/** 重新验证只读取当前密码哈希，不加载成员资料。 */
+export async function findByIdForReauth(id: string): Promise<Pick<MemberAuthRow, "id" | "passwordHash"> | null> {
+  const rows = await db
+    .select({ id: member.id, passwordHash: member.passwordHash })
+    .from(member)
+    .where(eq(member.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function usernameExists(username: string): Promise<boolean> {
   const rows = await db
     .select({ id: member.id })

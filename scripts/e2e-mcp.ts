@@ -1,4 +1,5 @@
-import "./_env.ts";   // 环境预设必须最先加载（服务模块在导入时即读环境变量）
+import "./_env.ts";
+import { confirmedTestArgs } from "./lib/mcp-test-confirmation.ts";   // 环境预设必须最先加载（服务模块在导入时即读环境变量）
 /** MCP 只读最小集 + API 令牌自检（第六期，判据 M1–M10） */
 import { db, sql } from "../src/db/index.ts";
 import { member, role, roleAssignment, project, workItem, apiToken, milestone, auditEntry, activityEntry, notification, subscription, timeLog, workItemCollaborator, workItemRelation, memberPreference } from "../src/db/schema.ts";
@@ -11,6 +12,7 @@ import { buildApp } from "../src/server/app.ts";
 import { ensureInitialized } from "./_test-helpers.ts";
 import { spawn } from "node:child_process";
 import { eq } from "drizzle-orm";
+import { TOOL_NAMES } from "../src/server/mcp/tools.ts";
 
 let pass = 0, fail = 0;
 const ok = (n: string, c: boolean, e = "") => { if (c) { pass++; console.log(`  OK   ${n}`); } else { fail++; console.log(`  FAIL ${n} ${e}`); } };
@@ -64,7 +66,7 @@ async function rpc(token: string | null, body: unknown) {
   return { status: res.status, json, text };
 }
 const call = (token: string, name: string, args: Record<string, unknown> = {}) =>
-  rpc(token, { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } });
+  rpc(token, { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: confirmedTestArgs(name, args) } });
 
 try {
   // ── M9：令牌明文只在创建时返回一次，库里只有 hash ──
@@ -87,9 +89,10 @@ try {
   const init = await rpc(TOKEN, { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "1" } } });
   ok("initialize 成功", init.status === 200 && init.json?.result?.serverInfo?.name === "feronavi", JSON.stringify(init.json?.result?.serverInfo));
   const list = await rpc(TOKEN, { jsonrpc: "2.0", id: 2, method: "tools/list" });
-  const tools = (list.json?.result?.tools ?? []) as { name: string; inputSchema: unknown }[];
-  // 当前协议清单：读 24 + 写 30，含协作、SLA、审批、自动化和通知工具。
-  ok("tools/list 返回 54 个工具", tools.length === 54, `${tools.length}: ${tools.map((t) => t.name).join(",")}`);
+  const tools = (list.json?.result?.tools ?? []) as { name: string; inputSchema: unknown; outputSchema: unknown }[];
+  ok("tools/list 完整返回当前协议目录且没有重复", tools.length === new Set(tools.map(t => t.name)).size
+    && JSON.stringify(tools.map(t => t.name).sort()) === JSON.stringify([...TOOL_NAMES].sort()), String(tools.length));
+  ok("每个工具声明结构化输出 schema", tools.every(t => t.outputSchema && (t.outputSchema as { type?: string }).type === "object"));
   ok("写工具出现在清单里", tools.some((t) => t.name === "workitem.create") && tools.some((t) => t.name === "page.update"));
   ok("每个工具都带 inputSchema", tools.every((t) => t.inputSchema && (t.inputSchema as { type?: string }).type === "object"));
   for (const n of ["ping", "whoami", "meta.workflow", "meta.fields", "project.members", "plan.getMilestone"]) {

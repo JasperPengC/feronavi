@@ -16,6 +16,7 @@ import { can, type PermissionContext } from "../permission/engine.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 import * as ideaService from "./idea.service.ts";
 import { recordBusinessEvent } from "./event-log.ts";
+import { businessEffects } from "./business-effects.ts";
 
 export type IntakeField = { key: string; label: string; type?: "TEXT" | "TEXTAREA" | "SELECT"; required?: boolean; options?: string[] };
 
@@ -164,6 +165,9 @@ export async function publicSubmit(submitToken: string, payload: Record<string, 
       summary: `收到一条外部提交（表单「${f.name}」）`,
     });
   }
+  await businessEffects().deliverWebhook("intake.submitted", {
+    id: row!.id, formId: f.id, projectId: f.projectId, status: row!.status,
+  }, f.projectId);
   return { id: row!.id, status: row!.status };
 }
 

@@ -9,6 +9,7 @@ import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor, ScopeType } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
 import { recordBusinessEvent } from "./event-log.ts";
+import { publishWorkspaceInvalidation } from "./workspace-events.service.ts";
 
 export interface RoleView {
   id: string;
@@ -44,6 +45,20 @@ const emptyContext = (actor: Actor): PermissionContext => ({
   memberId: actor.memberId,
 });
 type RoleReadExecutor = Pick<typeof db, "select">;
+
+async function publishRoleChange(resourceType: "ROLE" | "ROLE_ASSIGNMENT", resourceId: string, memberIds: string[] = []) {
+  await publishWorkspaceInvalidation({ domain: "role", resourceType, resourceId });
+  if (resourceType === "ROLE") {
+    await publishWorkspaceInvalidation({ domain: "directory", resourceType, resourceId });
+    for (const memberId of new Set(memberIds)) {
+      await publishWorkspaceInvalidation({ domain: "directory", resourceType: "MEMBER", resourceId: memberId, memberId });
+    }
+  } else {
+    for (const memberId of new Set(memberIds)) {
+      await publishWorkspaceInvalidation({ domain: "directory", resourceType: "MEMBER", resourceId: memberId });
+    }
+  }
+}
 
 /** 角色管理属于组织级操作，必须同时拥有权限和 ORG 指派。 */
 export function assertRoleManagement(actor: Actor): void {
@@ -144,6 +159,7 @@ export async function createRole(actor: Actor, input: { slug: string; name: stri
       actor, action: "role.created", targetType: "ROLE", targetId: created.id,
       changes: { roleId: created.id }, severity: "SECURITY",
     });
+    await publishRoleChange("ROLE", created.id);
     return { ...created, permissionKeys };
   } catch (error) {
     translateUniqueViolation(error);
@@ -173,7 +189,7 @@ export async function updateRole(actor: Actor, id: string, patch: { name?: strin
         await tx.insert(rolePermission).values(permissionKeys.map((permissionKey) => ({ roleId: id, permissionKey })));
       }
     }
-    const assignments = permissionKeys === undefined ? [] : await tx.select({ memberId: roleAssignment.memberId })
+    const assignments = await tx.select({ memberId: roleAssignment.memberId })
       .from(roleAssignment).where(eq(roleAssignment.roleId, id));
     return { role: updated!, memberIds: assignments.map((row) => row.memberId), permissionKeys };
   });
@@ -187,6 +203,7 @@ export async function updateRole(actor: Actor, id: string, patch: { name?: strin
     actor, action: "role.updated", targetType: "ROLE", targetId: id,
     changes: { roleId: id }, severity: "SECURITY",
   });
+  await publishRoleChange("ROLE", id, result.memberIds);
   return { ...result.role, permissionKeys: result.permissionKeys };
 }
 
@@ -209,6 +226,7 @@ export async function deleteRole(actor: Actor, id: string): Promise<void> {
   await recordBusinessEvent({
     actor, action: "role.deleted", targetType: "ROLE", targetId: id, severity: "SECURITY",
   });
+  await publishRoleChange("ROLE", id, memberIds);
 }
 
 export async function listScopeOptions(actor: Actor, scopeType: "TEAM" | "PROJECT" | "DEPARTMENT") {
@@ -289,6 +307,20 @@ export async function listRoleAssignments(actor: Actor, memberId: string): Promi
   return Promise.all(rows.map(assignmentView));
 }
 
+/** 通过真实指派 ID 读取其成员与范围，沿用组织级角色管理权限。 */
+export async function getRoleAssignment(actor: Actor, id: string): Promise<RoleAssignmentView> {
+  assertRoleManagement(actor);
+  const [row] = await db.select({
+    id: roleAssignment.id, memberId: roleAssignment.memberId, roleId: role.id,
+    roleKey: role.key, roleName: role.name, roleIsBuiltin: role.isBuiltin,
+    scopeType: roleAssignment.scopeType, scopeId: roleAssignment.scopeId,
+  }).from(roleAssignment).innerJoin(role, eq(role.id, roleAssignment.roleId))
+    .innerJoin(member, eq(member.id, roleAssignment.memberId))
+    .where(and(eq(roleAssignment.id, id), isNull(member.anonymizedAt))).limit(1);
+  if (!row) throw forbidden();
+  return assignmentView(row);
+}
+
 async function ensureNoDuplicateAssignment(input: AssignmentInput, excludeId?: string, transaction: RoleReadExecutor = db) {
   const where = and(
     eq(roleAssignment.memberId, input.memberId), eq(roleAssignment.roleId, input.roleId),
@@ -323,6 +355,7 @@ export async function createRoleAssignment(actor: Actor, input: AssignmentInput)
       actor, action: "role.granted", targetType: "ROLE_ASSIGNMENT", targetId: viewOut.id,
       changes: { roleId: viewOut.roleId }, severity: "SECURITY",
     });
+    await publishRoleChange("ROLE_ASSIGNMENT", viewOut.id, [viewOut.memberId]);
     return viewOut;
   } catch (error) {
     translateUniqueViolation(error);
@@ -357,6 +390,7 @@ export async function updateRoleAssignment(actor: Actor, id: string, patch: {
       actor, action: "role.assignment_updated", targetType: "ROLE_ASSIGNMENT", targetId: id,
       changes: { roleId: viewOut.roleId }, severity: "SECURITY",
     });
+    await publishRoleChange("ROLE_ASSIGNMENT", id, [viewOut.memberId]);
     return viewOut;
   } catch (error) {
     translateUniqueViolation(error);
@@ -372,10 +406,12 @@ export async function deleteRoleAssignment(actor: Actor, id: string): Promise<vo
   await recordBusinessEvent({
     actor, action: "role.revoked", targetType: "ROLE_ASSIGNMENT", targetId: id, severity: "SECURITY",
   });
+  await publishRoleChange("ROLE_ASSIGNMENT", id, [removed.memberId]);
 }
 
 /** 清理服务端 actor-loader 使用的成员数据范围热缓存；缓存异常不阻塞权限变更。 */
 async function clearPermissionContextCache(memberIds: string[]): Promise<void> {
+  if (!process.env.REDIS_URL) return;
   const ids = [...new Set(memberIds)];
   if (ids.length === 0) return;
   try {

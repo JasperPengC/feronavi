@@ -12,6 +12,8 @@ import { toast } from "./ui/Toast.tsx";
 import { t } from "../i18n/index.ts";
 import { useCan } from "../lib/actor.ts";
 import { Button } from "./ui/Button.tsx";
+import { Modal } from "./ui/Modal.tsx";
+import { confirmDialog } from "./Dialog.tsx";
 import { Drawer } from "./ui/Drawer.tsx";
 import { Select } from "./Select.tsx";
 import { TextInput } from "./ui/TextInput.tsx";
@@ -41,7 +43,6 @@ export function TeamPanel() {
   const [editing, setEditing] = useState<TeamNode | null>(null);
   const [name, setName] = useState("");
   const [parentId, setParentId] = useState("");
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [membersOf, setMembersOf] = useState<TeamNode | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const members = useQuery({
@@ -72,8 +73,8 @@ export function TeamPanel() {
   });
   const remove = useMutation({
     mutationFn: (id: string) => apiDelete(`/api/v1/teams/${id}`),
-    onSuccess: () => { setDeletingId(null); void done(t("team.deleted")); },
-    onError: (e) => { setDeletingId(null); fail(e); },
+    onSuccess: () => { void done(t("team.deleted")); },
+    onError: (e) => { fail(e); },
   });
 
   const startCreate = (parent?: TeamNode) => {
@@ -100,11 +101,7 @@ export function TeamPanel() {
           <>
             <Button size="sm" variant="ghost" onClick={() => startCreate(n)}>{t("team.addChild")}</Button>
             <Button size="sm" variant="ghost" onClick={() => startEdit(n)}>{t("team.edit")}</Button>
-            {deletingId === n.id ? (
-              <Button size="sm" variant="danger" onClick={() => remove.mutate(n.id)}>{t("team.deleteConfirm")}</Button>
-            ) : (
-              <Button size="sm" variant="ghost" onClick={() => setDeletingId(n.id)}>{t("team.delete")}</Button>
-            )}
+            <Button size="sm" variant="danger" disabled={remove.isPending} onClick={async () => { if (await confirmDialog(`${t("common.confirmDelete")} ${n.name}`, { danger: true })) remove.mutate(n.id); }}>{t("team.delete")}</Button>
           </>
         )}
       </div>
@@ -128,17 +125,18 @@ export function TeamPanel() {
       </Panel>
 
       {draft.guard}
-      <Drawer open={formOpen} title={editing ? t("team.edit") : t("team.new")} onClose={requestClose} width="sm">
+      <Modal open={formOpen} title={editing ? t("team.edit") : t("team.new")} onClose={requestClose} width="sm" footer={<>
+          <Button variant="ghost" onClick={requestClose} disabled={save.isPending}>{t("common.cancel")}</Button>
+          <Button variant="primary" loading={save.isPending} disabled={!name.trim() || save.isPending} onClick={() => save.mutate()}>{t("common.save")}</Button>
+        </>}>
         {formError && <p className="field-error" role="alert">{formError}</p>}
+        <fieldset disabled={save.isPending} className="settings-form-fields">
         <TextInput label={t("team.name")} aria-label={t("team.name")} value={name} onChange={(e) => setName(e.target.value)} />
         <div style={{ marginTop: 12 }}>
           <Select label={t("team.parent")} ariaLabel={t("team.parent")} value={parentId} onChange={setParentId} options={parentOptions} searchable />
         </div>
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
-          <Button variant="ghost" onClick={requestClose} disabled={save.isPending}>{t("common.cancel")}</Button>
-          <Button variant="primary" disabled={!name.trim() || save.isPending} onClick={() => save.mutate()}>{t("common.save")}</Button>
-        </div>
-      </Drawer>
+        </fieldset>
+      </Modal>
 
       <Drawer open={!!membersOf} title={membersOf ? `${membersOf.name} · ${t("team.viewMembers")}` : ""} onClose={() => setMembersOf(null)} width="sm">
         {members.isLoading && <p className="muted">{t("common.loading")}</p>}

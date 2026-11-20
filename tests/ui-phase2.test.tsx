@@ -182,6 +182,18 @@ describe("时间线页", () => {
 });
 
 describe("工作台页", () => {
+  it.each([true, false])("无项目时提供与创建权限相符的下一步（可创建=%s）", async (canCreate) => {
+    renderAt("/workbench", {
+      "/api/v1/auth/me": { ...ACTOR, permissions: canCreate ? ACTOR.permissions : [] },
+      "/api/v1/workbench": { groups: [], total: 0 },
+      "/api/v1/todos": [],
+      "/api/v1/projects": { items: [] },
+    });
+    const next = await screen.findByRole("link", { name: canCreate ? "前往创建项目" : "查看项目列表" });
+    expect(next.getAttribute("href")).toBe("/projects");
+    if (!canCreate) expect(screen.getByText("请联系组织管理员创建项目或将你加入项目，然后刷新项目列表。")).toBeTruthy();
+  });
+
   it("渲染四个分组", async () => {
     renderAt("/workbench", {
       "/api/v1/auth/me": ACTOR,

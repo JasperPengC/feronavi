@@ -38,7 +38,7 @@ const initialPassword = randomBytes(24).toString("hex");
 const env = { ...process.env, DB_PASSWORD: randomBytes(24).toString("hex"), APP_PORT: "0" };
 const override = join(temp, "override.json");
 await writeFile(override, JSON.stringify({ services: {
-  app: { image, environment: { IPGEO_UPDATE_INTERVAL_MS: "0", UPDATE_CHECK_INTERVAL_MS: "0" }, healthcheck: { interval: "2s", start_period: "10s" } },
+  app: { image, environment: { IPGEO_UPDATE_INTERVAL_MS: "0", UPDATE_CHECK_INTERVAL_MS: "0" }, healthcheck: { interval: "2s" } },
   worker: { image, environment: { JOB_WORKER_INTERVAL_MS: "1000" } },
   db: { image: dbImage, healthcheck: { interval: "2s" } },
   cache: { healthcheck: { interval: "2s" } },
@@ -90,8 +90,12 @@ try {
     const client = new Client({ name: "published-npx-docker-acceptance", version: "1.0.0" });
     clients.push(client); await client.connect(transport, { timeout: 60000 }); return client;
   }
+  const declarations = new WeakMap();
   async function call(client, name, args, allowError = false) {
-    const result = await client.callTool({ name, arguments: args });
+    if (!declarations.has(client)) declarations.set(client, (await client.listTools()).tools);
+    const tool = declarations.get(client).find(tool => tool.name === name);
+    const confirmed = tool?.inputSchema.required?.includes("userConfirmed") ? { userConfirmed: true, ...args } : args;
+    const result = await client.callTool({ name, arguments: confirmed });
     if (!allowError) assert.ok(!result.isError, `MCP ${name}`);
     const text = result.content.find(part => part.type === "text")?.text ?? "null";
     return { result, data: JSON.parse(text) };
@@ -99,9 +103,12 @@ try {
   const client = await connect(credentials[0].token);
   check("发布后的 npx 包启动并完成 MCP 初始化", client.getServerVersion()?.name === "feronavi");
   const tools = (await client.listTools()).tools;
-  const requiredTools = ["ping", "whoami", "project.list", "workitem.get", "workitem.create", "workitem.transition", "page.update"];
+  const requiredTools = ["ping", "whoami", "project.list", "workitem.get", "workitem.create", "workitem.transition", "page.update", "meta.capabilities", "meta.tool", "project.context", "idea.update", "plan.completeIteration", "plan.archiveRelease"];
+  const capabilities = (await call(client, "meta.capabilities", {})).data;
   check("发布后的 npx 包发现完整 MCP 工具契约",
-    tools.length === 54 && tools.every(tool => tool.inputSchema?.type === "object") && requiredTools.every(name => tools.some(tool => tool.name === name)),
+    tools.length === new Set(tools.map(tool => tool.name)).size
+      && JSON.stringify(tools.map(tool => tool.name).sort()) === JSON.stringify(capabilities.tools.map(tool => tool.name).sort())
+      && tools.every(tool => tool.inputSchema?.type === "object" && tool.outputSchema?.type === "object") && requiredTools.every(name => tools.some(tool => tool.name === name)),
     `${tools.length} 个工具；关键工具与 inputSchema 齐全`);
   const identity = await call(client, "whoami", {});
   check("发布后的 npx 包使用 Docker API Key 鉴权", identity.data.member?.username === "npx-admin");

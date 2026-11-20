@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { MarkdownEditor } from "../src/client/components/ui/MarkdownEditor.tsx";
 import { draftImageTokens, useMarkdownImages, withoutDraftImages } from "../src/client/lib/useMarkdownImages.ts";
 import { ActorContext } from "../src/client/lib/actor.ts";
@@ -63,6 +63,58 @@ it("截图粘贴到光标处，保留前后文和随后输入，预览使用本�
   expect(screen.getByRole("region", { name: "正文预览" }).textContent).toContain("继续补充");
   expect(screen.getByRole("img", { name: "截图.png" }).getAttribute("src")).toMatch(/^blob:/u);
   expect(screen.getByText("保存时上传")).toBeTruthy();
+});
+
+it("协作文档上传完成后才插入可共享地址，并保留上传期间收到的远端正文", async () => {
+  let finish: (response: Response) => void = () => {};
+  vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(resolve => { finish = resolve; })));
+  function SharedEditor() {
+    const [value, setValue] = useState("正文");
+    const images = useMarkdownImages();
+    return <><button onClick={() => setValue("正文，远端新增")}>远端更新</button><MarkdownEditor label="协作正文" value={value} onChange={setValue} images={images} imageTarget={{ type: "PAGE", id: "page-1" }} /></>;
+  }
+  render(<SharedEditor />);
+  const input = screen.getByRole("textbox", { name: "协作正文" }) as HTMLTextAreaElement;
+  fireEvent.change(screen.getByLabelText("选择正文图片"), { target: { files: [png()] } });
+  expect(input.value).toBe("正文");
+  expect(input.value).not.toContain("draft-image:");
+  fireEvent.click(screen.getByRole("button", { name: "远端更新" }));
+  await act(async () => finish(new Response(JSON.stringify({ id: "image-1" }), { status: 200 })));
+  await waitFor(() => expect(input.value).toContain("/api/v1/attachments/image-1/preview"));
+  expect(input.value).toContain("远端新增");
+  expect(input.value).not.toContain("draft-image:");
+});
+
+it("协作图片上传结束时不会把图片地址插入仍有焦点的标题框", async () => {
+  let finish: (response: Response) => void = () => {};
+  vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(resolve => { finish = resolve; })));
+  const previous = Object.getOwnPropertyDescriptor(document, "execCommand");
+  const nativeInsert = vi.fn((_command: string, _ui: boolean, text: string) => {
+    const focused = document.activeElement as HTMLInputElement | HTMLTextAreaElement;
+    focused.value += text;
+    return true;
+  });
+  Object.defineProperty(document, "execCommand", { configurable: true, value: nativeInsert });
+  function SharedEditor() {
+    const [value, setValue] = useState("正文");
+    const images = useMarkdownImages();
+    return <><input aria-label="文档标题" defaultValue="原始标题" /><MarkdownEditor label="协作正文" value={value} onChange={setValue} images={images} imageTarget={{ type: "PAGE", id: "page-1" }} /></>;
+  }
+  try {
+    render(<SharedEditor />);
+    const title = screen.getByRole("textbox", { name: "文档标题" }) as HTMLInputElement;
+    const input = screen.getByRole("textbox", { name: "协作正文" }) as HTMLTextAreaElement;
+    title.focus();
+    fireEvent.change(screen.getByLabelText("选择正文图片"), { target: { files: [png()] } });
+    expect(input.disabled).toBe(true);
+    await act(async () => finish(new Response(JSON.stringify({ id: "image-1" }), { status: 200 })));
+    expect(title.value).toBe("原始标题");
+    await waitFor(() => expect(input.value).toContain("/api/v1/attachments/image-1/preview"));
+    expect(input.value).toContain("正文");
+  } finally {
+    if (previous) Object.defineProperty(document, "execCommand", previous);
+    else Reflect.deleteProperty(document, "execCommand");
+  }
 });
 
 it("普通文字粘贴不被拦截，文件拖放逐项校验并保留有效图片", () => {

@@ -73,6 +73,51 @@ export interface UrlCheckOptions {
   signal?: AbortSignal;
 }
 
+/** 部署方可显式避开Fake-IP DNS；解析器固定为公网HTTPS端点，不接受用户提供的解析器URL。 */
+async function resolveOutboundHost(host: string, signal: AbortSignal): Promise<{ address: string }[]> {
+  const mode = process.env.OUTBOUND_DNS_MODE || "system";
+  if (mode === "system") return lookup(host, { all: true });
+  if (mode !== "cloudflare") throw new DomainError("VALIDATION", "OUTBOUND_DNS_MODE 只支持 system 或 cloudflare", null);
+  const records = await Promise.all((["A", "AAAA"] as const).map(async type => {
+    const endpoint = new URL("https://1.1.1.1/dns-query");
+    endpoint.searchParams.set("name", host);
+    endpoint.searchParams.set("type", type);
+    const response = await fetch(endpoint, { headers: { accept: "application/dns-json" }, redirect: "error", signal });
+    if (!response.ok || !response.body) {
+      await response.body?.cancel();
+      throw new Error("HTTPS DNS 查询失败");
+    }
+    const reader = response.body.getReader();
+    let raw = "";
+    let bytes = 0;
+    const decoder = new TextDecoder();
+    try {
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        bytes += chunk.value.byteLength;
+        if (bytes > 16_384) { await reader.cancel(); throw new Error("DNS响应过大"); }
+        raw += decoder.decode(chunk.value, { stream: true });
+      }
+      raw += decoder.decode();
+    } finally { reader.releaseLock(); }
+    const body: unknown = JSON.parse(raw);
+    if (!body || typeof body !== "object" || !("Status" in body) || body.Status !== 0) throw new Error("DNS查询未成功");
+    const answers = "Answer" in body ? body.Answer : [];
+    if (!Array.isArray(answers) || answers.length > 128) throw new Error("DNS响应不合法");
+    const addresses: { address: string }[] = [];
+    for (const record of answers) {
+      if (!record || typeof record !== "object") throw new Error("DNS记录不合法");
+      if (record.type !== 1 && record.type !== 28) continue;
+      if (typeof record.data !== "string" || isIP(record.data) !== (record.type === 1 ? 4 : 6)) throw new Error("DNS地址不合法");
+      addresses.push({ address: record.data });
+    }
+    return addresses;
+  }));
+  // 后续仍逐一拒绝非公网地址；safe-fetch使用这些地址固定实际连接，保留重绑定防护。
+  return records.flat();
+}
+
 /** 不通过则抛 VALIDATION。返回解析地址供 safe-fetch 固定实际连接。 */
 export async function assertSafeOutboundUrl(rawUrl: string, opts: UrlCheckOptions = {}): Promise<{ url: URL; addresses: string[] }> {
   let url: URL;
@@ -101,9 +146,10 @@ export async function assertSafeOutboundUrl(rawUrl: string, opts: UrlCheckOption
     signal.addEventListener("abort", abortLookup, { once: true });
   });
   let addrs: { address: string }[];
-  try { addrs = await Promise.race([lookup(host, { all: true }), cancelled]); }
-  catch {
+  try { addrs = await Promise.race([resolveOutboundHost(host, signal), cancelled]); }
+  catch (error) {
     signal.throwIfAborted();
+    if (error instanceof DomainError) throw error;
     throw new DomainError("VALIDATION", "域名无法解析", { host });
   } finally { signal.removeEventListener("abort", abortLookup); }
   if (addrs.length === 0) throw new DomainError("VALIDATION", "域名无法解析", { host });

@@ -1,3 +1,4 @@
+import { businessEffects } from "./business-effects.ts";
 import { deferAfterCommit } from "../../db/context.ts";
 /**
  * SLA（P1-2）：策略匹配、响应/解决时钟、违约扫描与升级通知。
@@ -13,6 +14,7 @@ import { can, type PermissionContext } from "../permission/engine.ts";
 import * as wiRepo from "../repos/work-item.repo.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 import { addSlaMinutes, type BusinessCalendar } from "../lib/sla-calendar.ts";
+import { recordBusinessEvent } from "./event-log.ts";
 
 function assertManage(actor: Actor, projectId: string): void {
   const ctx: PermissionContext = { memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId };
@@ -44,6 +46,7 @@ export async function createPolicy(actor: Actor, projectId: string, input: {
     calendar: (input.calendar ?? null) as object,
     enabled: input.enabled ?? true,
   }).returning();
+  await recordBusinessEvent({ actor, action: "sla.created", targetType: "SLA_POLICY", targetId: row!.id, projectId });
   return row!;
 }
 export async function updatePolicy(actor: Actor, projectId: string, id: string, patch: Partial<{
@@ -51,6 +54,12 @@ export async function updatePolicy(actor: Actor, projectId: string, id: string, 
   responseMinutes: number; resolveMinutes: number; escalateAfterMinutes: number; escalateRoles: string[]; calendar: BusinessCalendar | null; enabled: boolean;
 }>) {
   assertManage(actor, projectId);
+  await visible(actor, projectId);
+  const current = (await db.select().from(slaPolicy).where(and(eq(slaPolicy.id, id), eq(slaPolicy.projectId, projectId))).limit(1))[0];
+  if (!current) throw new DomainError("NOT_FOUND", "策略不存在", null);
+  if (minutes(patch.resolveMinutes ?? current.resolveMinutes) < minutes(patch.responseMinutes ?? current.responseMinutes)) {
+    throw new DomainError("VALIDATION", "解决时限不能小于响应时限", null);
+  }
   const [row] = await db.update(slaPolicy).set({
     ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
     ...(patch.priority !== undefined ? { priority: patch.priority || null } : {}),
@@ -65,11 +74,13 @@ export async function updatePolicy(actor: Actor, projectId: string, id: string, 
     updatedAt: new Date(),
   }).where(and(eq(slaPolicy.id, id), eq(slaPolicy.projectId, projectId))).returning();
   if (!row) throw new DomainError("NOT_FOUND", "策略不存在", null);
+  await recordBusinessEvent({ actor, action: "sla.updated", targetType: "SLA_POLICY", targetId: id, projectId });
   return row;
 }
 export async function deletePolicy(actor: Actor, projectId: string, id: string) {
   assertManage(actor, projectId);
   await db.delete(slaPolicy).where(and(eq(slaPolicy.id, id), eq(slaPolicy.projectId, projectId)));
+  await recordBusinessEvent({ actor, action: "sla.deleted", targetType: "SLA_POLICY", targetId: id, projectId });
   return { ok: true };
 }
 
@@ -198,6 +209,7 @@ async function roleMembers(roleKeys: string[]): Promise<string[]> {
 
 /** 定时扫描：响应超时或解决超时 → BREACHED + 升级通知 + 自动化触发 */
 export async function scanSlaBreaches(limit = 100): Promise<{ breached: number; notified: number }> {
+  businessEffects(); // Fail before writes if an entry point omitted application composition.
   const now = new Date();
   const due = await db.select().from(workItemSla)
     .where(and(eq(workItemSla.state, "ACTIVE"), isNull(workItemSla.pausedAt), or(
@@ -228,7 +240,7 @@ export async function scanSlaBreaches(limit = 100): Promise<{ breached: number; 
       notified += 1;
     }
     await db.update(workItemSla).set({ lastEscalatedAt: now }).where(eq(workItemSla.id, row.id));
-    const { runAutomation } = await import("./automation.service.ts");
+    const { runAutomation } = businessEffects();
     await runAutomation("SLA_BREACHED", item.id);
   }
   return { breached, notified };

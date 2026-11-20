@@ -32,14 +32,15 @@ try {
     const p = await (await fetch("/api/v1/positions", { method: "POST", headers, body: JSON.stringify({ name: pos, departmentId: c.id }) })).json();
     const me = await (await fetch("/api/v1/auth/me")).json();
     await fetch(`/api/v1/members/${me.memberId}/organization`, { method: "PATCH", headers, body: JSON.stringify({ departmentId: c.id, positionId: p.id }) });
-    return { ids: [r.id, c.id, g.id], me: me.memberId, posId: p.id };
+    return { ids: [r.id, c.id, g.id], me: me.memberId, memberName: me.name, posId: p.id };
   }, { root: ROOT, child: CHILD, grand: GRAND, pos: POS });
   deptIds = prep.ids;
   check("真实创建三级部门 + 职位 + demo 归属", deptIds.length === 3 && deptIds.every(Boolean));
 
   await page.goto(`${BASE}/admin/organization`, { waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "架构图", exact: true }).click();
   await page.locator(".org-chart-tree").waitFor({ timeout: 15_000 });
-  check("默认展示架构图视图", (await page.locator(".org-chart-tree").count()) === 1);
+  check("切换后展示架构图视图", (await page.locator(".org-chart-tree").count()) === 1);
   const treeText = await page.locator(".org-chart").innerText();
   check("三级部门都出现在树中", treeText.includes(ROOT) && treeText.includes(CHILD) && treeText.includes(GRAND));
   check("统计显示部门/成员/职位/层级", treeText.includes("部门") && treeText.includes("成员") && treeText.includes("职位") && treeText.includes("层级"));
@@ -53,7 +54,7 @@ try {
   check("展开后子部门恢复", (await page.locator(".org-chart").innerText()).includes(CHILD));
 
   // 搜索成员名（demo 管理员）→ 祖先链保留
-  await page.getByLabel("搜索部门或成员").fill("演示管理员");
+  await page.getByLabel("搜索部门或成员").fill(prep.memberName);
   await page.waitForTimeout(500);
   const searchText = await page.locator(".org-chart").innerText();
   check("搜索成员保留祖先链（不含无关子部门）", searchText.includes(ROOT) && searchText.includes(CHILD) && !searchText.includes(GRAND), searchText.slice(0, 80));
@@ -67,7 +68,7 @@ try {
   await page.locator(".org-chart-node", { hasText: CHILD }).click();
   await page.waitForTimeout(500);
   const detail = await page.locator(".org-chart-detail").innerText();
-  check("点击节点显示直属成员与职位", detail.includes("演示管理员") && detail.includes(POS));
+  check("点击节点显示直属成员与职位", detail.includes(prep.memberName) && detail.includes(POS));
   await page.screenshot({ path: "/tmp/org-chart.png" });
 } finally {
   try {

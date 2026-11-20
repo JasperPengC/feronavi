@@ -341,7 +341,7 @@ export function IssuesPage() {
               <Select label={t("common.priority")} ariaLabel={t("common.priority")} value={createPriority} onChange={setCreatePriority}
                 options={PRIORITIES.map((p) => ({ value: p, label: t(`prio.${p}`) }))} />
               <Select label={t("common.assignee")} ariaLabel={t("common.assignee")} value={createAssignee} onChange={setCreateAssignee} searchable
-                options={[{ value: "", label: t("wie.unassigned") }, ...(members.data ?? []).map((m) => ({ value: m.id, label: `${m.name} (${m.username})` }))]} />
+                options={[{ value: "", label: t("wie.unassigned") }, ...(members.data ?? []).map((m) => ({ value: m.id, label: m.name || m.username, secondaryLabel: `@${m.username}` }))]} />
               <label className="issue-create-date">
                 <span className="issue-create-label">{t("common.dueDate")}</span>
                 <DatePicker value={createDueDate} onChange={setCreateDueDate} ariaLabel={t("common.dueDate")} placeholder={t("common.pickDate")} />

@@ -74,20 +74,43 @@ try {
 
   // 真实连接测试（fetch 打桩：成功/失败路径都要覆盖；真实出站受 SSRF 限制，本地无法用内网 mock）
   const realFetch = globalThis.fetch;
-  let capturedUrl = "";
+  let capturedUrls: string[] = [];
   globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
-    capturedUrl = String(url);
+    capturedUrls.push(String(url));
     void init;
-    return new Response(JSON.stringify({ data: [{ id: "mock-model" }] }), { status: 200, headers: { "content-type": "application/json" } });
+    // 真实推理模型会把过低预算全耗在reasoning，HTTP200但content为空。
+    const requestBody = init?.body ? JSON.parse(String(init.body)) as { max_tokens?: number } : {};
+    const body = String(url).endsWith("/chat/completions") ? { choices: [{ message: { content: (requestBody.max_tokens ?? 0) >= 128 ? "OK" : "" } }] }
+      : String(url).endsWith("/embeddings") ? { data: [{ embedding: Array(1024).fill(0.25) }] }
+      : { data: [{ id: "mock-model" }] };
+    return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
   }) as typeof fetch;
   const testOk = await ai.testProvider(admin, p1);
-  ok("连接测试成功并命中 /models", testOk.ok === true && capturedUrl === "https://1.1.1.1/v1/models", JSON.stringify({ testOk, capturedUrl }));
+  ok("BOTH测试实际对话与1024维向量，不能用模型列表代替", testOk.ok === true
+    && capturedUrls.includes("https://1.1.1.1/v1/chat/completions") && capturedUrls.includes("https://1.1.1.1/v1/embeddings"), JSON.stringify({ testOk, capturedUrls }));
+  await ai.updateProvider(admin, p1, { purpose: "EMBEDDING" });
+  globalThis.fetch = (async (url) => new Response(JSON.stringify(String(url).endsWith("/models")
+    ? { data: [{ id: "mock-model" }] } : { message: "Sorry, your account balance is insufficient sk-secret-key" }), { status: String(url).endsWith("/models") ? 200 : 402 })) as typeof fetch;
+  const balance = await ai.testProvider(admin, p1);
+  ok("列模型成功但向量402不得误报通过，提示余额不足且不回显密钥", balance.ok === false && /402/.test(balance.error ?? "")
+    && /余额/.test(balance.error ?? "") && !JSON.stringify(balance).includes("sk-secret-key"));
+  globalThis.fetch = (async () => new Response(JSON.stringify({ data: [{ embedding: Array(768).fill(0.2) }] }))) as typeof fetch;
+  const wrongDimension = await ai.testProvider(admin, p1);
+  ok("非1024维模型测试失败，明确实际维度", wrongDimension.ok === false && /768/.test(wrongDimension.error ?? "") && /1024/.test(wrongDimension.error ?? ""));
+  await ai.updateProvider(admin, p1, { purpose: "LLM" });
+  globalThis.fetch = (async () => new Response(JSON.stringify({ choices: [] }))) as typeof fetch;
+  const emptyChat = await ai.testProvider(admin, p1);
+  ok("对话200但无实际回答不得误报通过", emptyChat.ok === false);
+  capturedUrls = [];
+  globalThis.fetch = (async (url) => { capturedUrls.push(String(url)); return new Response(JSON.stringify({ choices: [{ message: { content: "OK" } }] })); }) as typeof fetch;
+  ok("LLM用途只测试对话，不要求支持向量接口", (await ai.testProvider(admin, p1)).ok === true && capturedUrls.length === 1 && capturedUrls[0]!.endsWith("/chat/completions"));
   globalThis.fetch = (async () => new Response("boom", { status: 500 })) as typeof fetch;
   const testFail = await ai.testProvider(admin, p1);
   ok("连接测试失败记录 HTTP 错误", testFail.ok === false && (testFail.error ?? "").includes("HTTP 500"), JSON.stringify(testFail));
   globalThis.fetch = realFetch;
   const [row] = await db.select().from(aiProviderConfig).where(eq(aiProviderConfig.id, p1));
   ok("最近测试状态落库（失败）", row?.lastTestOk === false && !!row?.lastTestError);
+  await ai.updateProvider(admin, p1, { purpose: "BOTH" });
 
   // 删除默认供应商 → 自动回退到另一个启用的供应商；若都停用则关闭 AI
   await fetch(`${BASE}/api/v1/ai/providers/${p2}`, { method: "DELETE", headers: { cookie: H.cookie, "x-csrf-token": H["x-csrf-token"] } });

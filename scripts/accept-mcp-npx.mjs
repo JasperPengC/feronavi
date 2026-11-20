@@ -22,7 +22,7 @@ try {
   tokenId = created.body?.row?.id ?? null;
   check("创建只读 MCP 令牌", created.status === 201 && !!created.body.token, String(created.status));
 
-  const child = spawn(process.execPath, ["packages/feronavi-mcp/bin/feronavi-mcp.mjs", "--url", BASE, "--token", created.body.token], { stdio: ["pipe", "pipe", "pipe"] });
+  const child = spawn(process.execPath, ["packages/feronavi-mcp/bin/feronavi-mcp.mjs"], { stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, FERONAVI_URL: BASE, FERONAVI_TOKEN: created.body.token } });
   let out = ""; let err = "";
   child.stdout.on("data", (d) => { out += d; }); child.stderr.on("data", (d) => { err += d; });
   const send = (o) => child.stdin.write(JSON.stringify(o) + "\n");

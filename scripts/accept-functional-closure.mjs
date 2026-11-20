@@ -44,7 +44,7 @@ try {
   check("附件下载端点可读", dl === 200, String(dl));
 
   // 3) 工作项评论
-  const box = p.locator('input[placeholder*="写评论"]').first();
+  const box = p.getByRole("textbox", { name: /写评论/ }).first();
   await box.fill(`评论-${STAMP}`); await p.getByRole("button", { name: "发送", exact: true }).click(); await p.waitForTimeout(700);
   check("工作项评论提交", await p.getByText(`评论-${STAMP}`).count() >= 1);
 
@@ -57,12 +57,20 @@ try {
   }
 
   // 5) 全局搜索多类型
-  const types = await p.evaluate(async () => (await (await fetch("/api/v1/search?q=项目")).json()).items.map((x) => x.type));
+  const types = await p.evaluate(async ({token, stamp}) => {
+    const title = `搜索闭环${stamp}`;
+    const headers = { "content-type": "application/json", "x-csrf-token": token };
+    const project = await fetch("/api/v1/projects", { method: "POST", headers, body: JSON.stringify({ key: `S${String(stamp).slice(-7)}`, name: title }) }).then(r => r.json());
+    if (!project.id) throw new Error(`搜索夹具项目创建失败 ${JSON.stringify(project)}`);
+    const page = await fetch(`/api/v1/projects/${project.id}/pages`, { method: "POST", headers, body: JSON.stringify({ title, content: "搜索验收文档" }) });
+    if (!page.ok) throw new Error(`搜索夹具文档创建失败 ${page.status}`);
+    return (await fetch(`/api/v1/search?q=${encodeURIComponent(title)}`).then(r => r.json())).items.map(x => x.type);
+  }, {token: await csrf(), stamp: STAMP});
   check("全局搜索覆盖项目/文档", types.includes("project") && types.includes("page"), JSON.stringify([...new Set(types)]));
 
   // 6) 项目设置抽屉
   await p.goto(`${HOST}/projects/${pid}`, { waitUntil: "domcontentloaded" }); await p.waitForTimeout(700);
-  await p.getByRole("button", { name: "项目设置" }).click(); await p.waitForTimeout(250);
+  await p.getByRole("main").getByRole("button", { name: "项目设置", exact: true }).click(); await p.waitForTimeout(250);
   check("项目设置可打开", await p.getByLabel("名称").count() >= 1);
   await p.keyboard.press("Escape");
 
@@ -72,13 +80,13 @@ try {
 
   // 8) 表格批量操作条
   await p.goto(`${HOST}/projects/${pid}/table`, { waitUntil: "domcontentloaded" }); await p.waitForTimeout(700);
-  const cb = p.locator("tbody input[type=checkbox]").first();
+  const cb = p.locator("tbody").getByRole("checkbox").first();
   if (await cb.count()) { await cb.check(); await p.waitForTimeout(150); check("表格批量操作条出现", await p.locator(".table-batch-bar").count() === 1); }
   else check("表格批量操作条出现", false, "无行");
 
   // 9) 日历点击新建
   await p.goto(`${HOST}/projects/${pid}/calendar`, { waitUntil: "domcontentloaded" }); await p.waitForTimeout(700);
-  const cell = p.locator(".calendar-cell").filter({ hasText: new Date().getDate().toString() }).first();
+  const cell = p.locator(".calendar-cell.is-today .calendar-date-action");
   await cell.click(); await p.waitForTimeout(300);
   check("日历单元格可打开新建工作项", await p.locator(".ui-drawer").count() === 1);
   await p.keyboard.press("Escape");

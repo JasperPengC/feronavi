@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
 
 test("登录改密、项目工作项、缺陷、Wiki 与 CSV 导入持久化", async ({ page }, testInfo) => {
   test.setTimeout(180_000);
@@ -76,7 +77,11 @@ test("登录改密、项目工作项、缺陷、Wiki 与 CSV 导入持久化", a
   });
   await page.locator("#username").fill("browser-admin");
   await page.locator("#password").fill("browser-initial-password");
-  await page.locator('form button[type="submit"]').click();
+  const [initialLogin] = await Promise.all([
+    page.waitForResponse(response => response.url().endsWith("/api/v1/auth/login") && response.request().method() === "POST"),
+    page.locator('form button[type="submit"]').click(),
+  ]);
+  expect(initialLogin.status()).toBe(200);
   await expect(page).toHaveURL(/\/change-password\?returnTo=%2Fprojects$/u);
 
   await page.locator("#cur").fill("browser-initial-password");
@@ -86,32 +91,27 @@ test("登录改密、项目工作项、缺陷、Wiki 与 CSV 导入持久化", a
   await expect(page).toHaveURL(/\/login(?:\?.*)?$/u);
   await page.locator("#username").fill("browser-admin");
   await page.locator("#password").fill("browser-changed-password");
-  await page.locator('form button[type="submit"]').click();
+  const [changedPasswordLogin] = await Promise.all([
+    page.waitForResponse(response => response.url().endsWith("/api/v1/auth/login") && response.request().method() === "POST"),
+    page.locator('form button[type="submit"]').click(),
+  ]);
+  expect(changedPasswordLogin.status()).toBe(200);
   await expect(page).toHaveURL(/\/projects$/u);
 
-  await test.step("抽屉从右侧滑入，退场结束后才恢复背景操作", async () => {
+  await test.step("创建弹窗居中显示并隔离背景，关闭后恢复焦点", async () => {
     const trigger = page.getByRole("button", { name: "新建项目", exact: true }).first();
     await trigger.click();
-    const drawer = page.locator(".ui-drawer");
-    await expect(drawer).toBeVisible();
+    const modal = page.getByRole("dialog", { name: "新建项目", exact: true });
+    await expect(modal).toBeVisible();
     await expect(page.locator("#root")).toHaveAttribute("inert", "");
-    const entrance = await drawer.evaluate((element) => {
-      const animation = element.getAnimations().find((item) => item instanceof CSSAnimation && item.animationName === "ui-drawer-in-right");
-      if (!animation?.effect) throw new Error("抽屉未播放右侧入场动画");
-      animation.pause();
-      animation.currentTime = 0;
-      const start = element.getBoundingClientRect();
-      animation.finish();
-      const end = element.getBoundingClientRect();
-      return { startsAtRightEdge: Math.abs(start.left - innerWidth) < 1, endsAtRightEdge: Math.abs(end.right - innerWidth) < 1, keepsWidth: Math.abs(start.width - end.width) < 1 };
-    });
-    expect(entrance).toEqual({ startsAtRightEdge: true, endsAtRightEdge: true, keepsWidth: true });
+    await expect.poll(() => modal.evaluate(element => {
+      const box=element.getBoundingClientRect();
+      return Math.abs(box.left - (innerWidth - box.right)) < 2 && box.top >= 0 && box.bottom <= innerHeight;
+    })).toBe(true);
     await page.keyboard.press("Control+k");
     await expect(page.locator(".palette")).toHaveCount(0);
     await page.keyboard.press("Escape");
-    await expect(drawer).toHaveClass(/is-closing/);
-    await expect(page.locator("#root")).toHaveAttribute("inert", "");
-    await expect(drawer).toHaveCount(0);
+    await expect(modal).toHaveCount(0);
     await expect(page.locator("#root")).not.toHaveAttribute("inert");
     await expect(trigger).toBeFocused();
   });
@@ -126,7 +126,7 @@ test("登录改密、项目工作项、缺陷、Wiki 与 CSV 导入持久化", a
   await expect(page.getByRole("link", { name: /浏览器关键路径项目/u }).first()).toBeVisible();
 
   await page.goto(`${baseURL}/projects/${project.id}/board`);
-  await page.getByRole("button", { name: "新建工作项", exact: true }).click();
+  await page.locator(".page-header").getByRole("button", { name: "新建工作项", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("textbox", { name: "标题", exact: true }).fill("验证真实浏览器写入");
   const createdItem = page.waitForResponse((response) => response.url().endsWith(`/api/v1/projects/${project.id}/work-items`) && response.request().method() === "POST");
@@ -143,12 +143,20 @@ test("登录改密、项目工作项、缺陷、Wiki 与 CSV 导入持久化", a
     await expect(handle).toBeVisible();
     await target.scrollIntoViewIfNeeded();
     const from = (await handle.boundingBox())!;
-    const to = (await target.locator(".board-column-body").boundingBox())!;
     const transition = page.waitForResponse((response) => response.url().endsWith("/transition") && response.request().method() === "POST");
     await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
     await page.mouse.down();
     await page.mouse.move(from.x + from.width / 2 + 12, from.y + from.height / 2, { steps: 3 });
-    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 18 });
+    // 拖拽期间自动滚动会改变列的位置。每次校准真实指针，并在渲染后检查该指针下的列。
+    await expect.poll(async () => {
+      const to = (await target.locator(".board-column-body").boundingBox())!;
+      const point = { x: to.x + to.width / 2, y: to.y + 70 };
+      await page.mouse.move(point.x, point.y);
+      return page.evaluate(async ({ x, y }) => {
+        await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+        return document.elementsFromPoint(x, y).find(node => node.matches(".board-column"))?.getAttribute("data-state-key");
+      }, point);
+    }).toBe("IN_PROGRESS");
     await page.mouse.up();
     const transitionResponse = await transition;
     expect(transitionResponse.request().postDataJSON().toStateKey).toBe("IN_PROGRESS");
@@ -368,6 +376,7 @@ test("登录改密、项目工作项、缺陷、Wiki 与 CSV 导入持久化", a
     await page.goto(`${baseURL}/projects/${project.id}/wiki`);
     await page.getByRole("treeitem", { name: "浏览器验收文档", exact: true }).click();
     await page.getByRole("button", { name: "编辑", exact: true }).click();
+    await expect(page.getByLabel("选择正文图片")).toBeEnabled();
     await page.getByLabel("选择正文图片").setInputFiles({ name: "文档截图.png", mimeType: "image/png", buffer: picture });
     await page.getByRole("button", { name: "预览", exact: true }).click();
     await expect(page.getByRole("button", { name: "插入图片", exact: true })).toHaveCount(0);
@@ -511,7 +520,7 @@ test("登录改密、项目工作项、缺陷、Wiki 与 CSV 导入持久化", a
     const confirmation = await confirmed;
     expect(confirmation.status()).toBe(200);
     expect(await confirmation.json()).toMatchObject({ created: 1, failed: 0 });
-    await expect(page.getByText("新建 1 · 跳过 0 · 失败 0", { exact: true })).toBeVisible();
+    await expect(page.getByText("新建 1 · 失败 0 / 共 1", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "导入 1 条工作项", exact: true })).toHaveCount(0);
     await checkImportLayout("result");
     await page.screenshot({ path: testInfo.outputPath("import-confirmed.png"), fullPage: true });
@@ -600,14 +609,20 @@ test("登录改密、项目工作项、缺陷、Wiki 与 CSV 导入持久化", a
     expect(initialize.status()).toBe(200);
     expect((await initialize.json()).result.serverInfo.name).toBe("feronavi");
     const listing = await rpc("tools/list", {});
-    expect((await listing.json()).result.tools).toHaveLength(54);
+    const tools = (await listing.json()).result.tools as { name: string; inputSchema: { type: string } }[];
+    const baseline = JSON.parse(readFileSync(new URL("../fixtures/mcp-capability-baseline.json", import.meta.url), "utf8")) as { names: string[] };
+    const names = tools.map(tool => tool.name);
+    expect(names).toEqual(expect.arrayContaining([...baseline.names, "collab.inspect", "collab.publishPage", "project.context"]));
+    expect(new Set(names).size).toBe(names.length);
+    expect(tools.every(tool => tool.inputSchema.type === "object")).toBe(true);
+    expect(names.some(name => /^(im|webhook|integration)\./u.test(name))).toBe(false);
     const ping = await rpc("tools/call", { name: "ping", arguments: {} });
     expect(JSON.parse((await ping.json()).result.content[0].text).ok).toBe(true);
     await page.getByRole("button", { name: "我已保存", exact: true }).click();
     await expect(page.getByRole("main").locator("pre")).toHaveCount(0);
     const tokenRow = page.getByRole("row").filter({ hasText: "浏览器 MCP 链路验收" });
     await tokenRow.getByRole("button", { name: "吊销", exact: true }).click();
-    await tokenRow.getByRole("button", { name: "确认撤销？", exact: true }).click();
+    await page.getByRole("dialog", { name: "确认撤销？", exact: true }).getByRole("button", { name: "确认", exact: true }).click();
     await expect(tokenRow).toHaveCount(0);
     expect((await rpc("tools/call", { name: "ping", arguments: {} })).status()).toBe(401);
     await page.getByRole("tab", { name: "MCP 客户端", exact: true }).click();

@@ -26,6 +26,7 @@ try {
   await pageA.goto(`${BASE}/login`); await pageA.waitForTimeout(600);
   await pageA.evaluate(async () => { await fetch("/api/v1/auth/login", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: "demo", password: "demo-password-12345" }) }); });
   await pageA.goto(`${BASE}/members`, { waitUntil: "domcontentloaded" }); await pageA.waitForTimeout(2500);
+  await pageA.getByRole("tab", { name: "邀请", exact: true }).click();
   await pageA.getByRole("button", { name: "邀请成员", exact: true }).click();
   await pageA.getByLabel("受邀人邮箱").fill(EMAIL);
   await pageA.getByRole("button", { name: "项目（可选）", exact: true }).click();
@@ -55,9 +56,16 @@ try {
   await pageB.getByLabel("用户名").fill(U);
   await pageB.getByLabel("密码").fill(PW);
   await pageB.getByRole("button", { name: "登录", exact: true }).click();
-  await pageB.waitForTimeout(2600);
-  const listText = await pageB.locator("body").innerText();
-  check("新账号项目列表包含该项目", listText.includes(proj.name) && listText.includes(proj.key), pageB.url());
+  await pageB.locator(".shell-header").waitFor();
+  await pageB.goto(`${BASE}/projects`, { waitUntil: "domcontentloaded" });
+  const projectLink = pageB.getByRole("main").locator(`a[href="/projects/${pid}"]`).filter({ hasText: proj.name }).first();
+  await projectLink.waitFor();
+  const signedIn = await pageB.evaluate(async () => (await fetch("/api/v1/auth/me")).json());
+  const listText = await pageB.getByRole("main").innerText();
+  check("新账号项目列表包含该项目", signedIn.memberId === memberId && listText.includes(proj.name) && listText.includes(proj.key), pageB.url());
+  await projectLink.click();
+  await pageB.getByRole("heading", { name: proj.name, exact: true }).waitFor();
+  check("受邀项目成员可进入对应项目概览", new URL(pageB.url()).pathname === `/projects/${pid}`);
   await ctxB.close();
   await pageA.screenshot({ path: "/tmp/project-invite.png" });
 } finally {

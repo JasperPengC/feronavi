@@ -1,3 +1,4 @@
+import { businessEffects } from "./business-effects.ts";
 /**
  * 评论 + @提及（T2）
  *
@@ -79,6 +80,7 @@ export async function createComment(
   actor: Actor,
   input: { targetType: string; targetId: string; body: string; parentId?: string | null },
 ) {
+  businessEffects(); // Fail before writes if an entry point omitted application composition.
   const projectId = await assertTargetVisible(actor, input.targetType, input.targetId);
   const ctx: PermissionContext = {
     memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId,
@@ -171,9 +173,14 @@ export async function createComment(
       summary: `${actor.name} 评论了${label}`,
     });
   }
+  // 事件只带身份，不把评论正文或提及内容发送给订阅方。
+  await businessEffects().deliverWebhook("comment.created", {
+    id: row!.id, targetType: input.targetType, targetId: input.targetId,
+    actorId: actor.memberId, projectId,
+  }, projectId);
   if (input.targetType === "WORK_ITEM") {
-    void (await import("./automation.service.ts")).runAutomation("COMMENT_ADDED", input.targetId);
-    void (await import("./sla.service.ts")).markFirstResponse(input.targetId, actor.memberId);
+    void businessEffects().runAutomation("COMMENT_ADDED", input.targetId);
+    void businessEffects().markFirstResponse(input.targetId, actor.memberId);
   }
   return row;
 }

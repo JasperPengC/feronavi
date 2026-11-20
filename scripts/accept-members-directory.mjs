@@ -26,29 +26,31 @@ try {
     const csrf = decodeURIComponent(document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] || "");
     const headers = { "content-type": "application/json", "x-csrf-token": csrf };
     const d = await (await fetch("/api/v1/departments", { method: "POST", headers, body: JSON.stringify({ name: dept }) })).json();
-    const roles = await (await fetch("/api/v1/roles")).json();
-    const memberRole = (roles.roles ?? roles.items ?? []).find((r) => r.key === "MEMBER");
-    const m = await (await fetch("/api/v1/members", { method: "POST", headers, body: JSON.stringify({ username: u, name, email: `${u}@x.test`, password: pw, roleIds: memberRole ? [memberRole.id] : [] }) })).json();
+    // 创建成员接口会自动授予内置 MEMBER / ORG 角色；roleIds 已不属于创建 schema。
+    const m = await (await fetch("/api/v1/members", { method: "POST", headers, body: JSON.stringify({ username: u, name, email: `${u}@x.test`, password: pw }) })).json();
     await fetch(`/api/v1/members/${m.id}/organization`, { method: "PATCH", headers, body: JSON.stringify({ departmentId: d.id, positionId: null }) });
     return { deptId: d.id, memberId: m.id };
   }, { name: NAME, dept: DEPT, u: U, pw: PW });
   deptId = prep.deptId; memberId = prep.memberId;
   check("真实创建验收部门与成员", !!deptId && !!memberId);
+  if (!deptId || !memberId) throw new Error("验收部门或成员创建失败");
 
   await page.goto(`${BASE}/members`, { waitUntil: "domcontentloaded" });
   const dir = page.locator(".members-directory");
   await dir.waitFor({ timeout: 15_000 });
   check("页面显示成员目录面板", (await dir.count()) === 1);
   const head = await dir.innerText();
-  check("表格含用户/部门/岗位/角色/状态/加入时间", ["用户", "部门", "岗位", "角色", "状态", "加入时间"].every((k) => head.includes(k)), head.slice(0, 100));
+  check("表格含用户/部门/角色/当前工作项/状态", ["用户", "部门", "角色", "当前工作项", "状态"].every((k) => head.includes(k)), head.slice(0, 100));
   check("部门侧栏含全部成员与验收部门", head.includes("全部成员") && head.includes(DEPT));
-  check("角色列显示 MEMBER 归属", head.includes("成员") && head.includes("ORG"));
+  const memberRow = dir.locator("tbody tr", { hasText: NAME });
+  const roleCell = memberRow.locator('[data-label="角色"]');
+  check("验收成员角色列显示 MEMBER 的组织归属", (await roleCell.innerText()).includes("成员") && (await roleCell.innerText()).includes("组织"));
 
   // 部门侧栏筛选
   await dir.locator(".members-dept-item", { hasText: DEPT }).click();
   await page.waitForTimeout(700);
   const filtered = await dir.locator("table tbody").innerText();
-  check("点击部门后表格只剩该部门成员", filtered.includes(NAME) && !filtered.includes("演示管理员"), filtered.slice(0, 80));
+  check("点击部门后表格只剩该部门成员", filtered.includes(NAME) && await dir.locator("table tbody tr").count() === 1, filtered.slice(0, 80));
 
   // 搜索 + 状态筛选
   await dir.getByLabel("搜索姓名/工号/邮箱").fill(NAME);
@@ -63,11 +65,13 @@ try {
   await dir.locator('[aria-label="状态"]').click();
   await page.getByRole("option", { name: "全部状态", exact: true }).click();
   await page.waitForTimeout(500);
+  await dir.locator(".members-dept-item", { hasText: "全部成员" }).click();
   await dir.locator('[aria-label="角色"]').click();
   await page.getByRole("option", { name: "成员", exact: true }).click();
   await page.waitForTimeout(700);
   const roleFiltered = await dir.locator("table tbody").innerText();
-  check("角色筛选成员后不含管理员角色行", roleFiltered.includes(NAME) && !roleFiltered.includes("演示管理员"), roleFiltered.slice(0, 80));
+  const roles = await dir.locator('table tbody tr [data-label="角色"]').allTextContents();
+  check("角色筛选成员后每行均有成员角色", roleFiltered.includes(NAME) && roles.length > 0 && roles.every((role) => role.includes("成员")), roleFiltered.slice(0, 80));
   await page.screenshot({ path: "/tmp/members-directory.png" });
 } finally {
   try {

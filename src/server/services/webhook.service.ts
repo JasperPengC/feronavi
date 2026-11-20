@@ -12,6 +12,7 @@ import { safeOutboundFetch } from "../lib/safe-fetch.ts";
 import { createHmac, randomBytes } from "node:crypto";
 import { and, asc, desc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import { db } from "../../db/index.ts";
+import { deferAfterCommit } from "../../db/context.ts";
 import { webhookDelivery, webhookEndpoint } from "../../db/schema.ts";
 import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
@@ -123,12 +124,23 @@ export interface DeliveryDeps {
   /** 可注入的 fetch（测试用假接收端，避免生产防护被测试需求削弱） */
   fetchImpl?: typeof fetch;
   now?: () => number;
+  /** 仅持久化投递及任务，与调用方事务共同提交。 */
+  enqueueOnly?: boolean;
+  /** 队列仅接管未开始投递；退避重试由retryDue负责。 */
+  pendingOnly?: boolean;
 }
 
 /** 尽力投递一次；无论成败都写投递记录（失败进死信队列待重试/人工重放） */
 export async function attemptDelivery(deliveryId: string, deps: DeliveryDeps = {}) {
-  const d = (await db.select().from(webhookDelivery).where(eq(webhookDelivery.id, deliveryId)).limit(1))[0];
+  // 与即时投递及其他副本共用行锁；恢复队列不能重复执行正在发送的同一投递。
+  return db.transaction(() => attemptDeliveryLocked(deliveryId, deps));
+}
+
+async function attemptDeliveryLocked(deliveryId: string, deps: DeliveryDeps) {
+  const d = (await db.select().from(webhookDelivery).where(eq(webhookDelivery.id, deliveryId)).for("update"))[0];
   if (!d) throw forbidden();
+  if (d.status === "SUCCEEDED") return { ok: true, attempts: d.attempts, status: d.responseCode };
+  if (deps.pendingOnly && d.status !== "PENDING") return { ok: false, skipped: true, reason: "投递已进入退避或死信状态" };
   const e = (await db.select().from(webhookEndpoint).where(eq(webhookEndpoint.id, d.endpointId)).limit(1))[0];
   if (!e) throw forbidden();
   if (!e.isActive) {
@@ -187,7 +199,16 @@ export async function deliver(event: string, payload: Record<string, unknown>, p
   const results = [];
   for (const e of subs) {
     const [row] = await db.insert(webhookDelivery).values({ endpointId: e.id, event, payload: payload as object, status: "PENDING" }).returning();
-    results.push(await attemptDelivery(row!.id, deps));
+    if (deps.enqueueOnly) {
+      await queueDeliveryAttempt(row!.id);
+      results.push({ queued: true, deliveryId: row!.id });
+    } else if (deferAfterCommit(async () => {
+      // 已持久化的记录在最外层事务提交后才允许触网；进程中断由队列恢复。
+      await attemptDelivery(row!.id, { ...deps, pendingOnly: true });
+    })) {
+      await queueDeliveryAttempt(row!.id);
+      results.push({ queued: true, deliveryId: row!.id });
+    } else results.push(await attemptDelivery(row!.id, deps));
   }
   return { event, endpoints: subs.length, results };
 }
@@ -215,8 +236,22 @@ export async function replayDelivery(actor: Actor, deliveryId: string, deps: Del
   return attemptDelivery(deliveryId, deps);
 }
 
-/** 扫描到期的重试（供 worker 调用；本期无 worker，故暴露给测试与将来的定时任务） */
+async function queueDeliveryAttempt(deliveryId: string) {
+  const { enqueue } = await import("./job.service.ts");
+  return enqueue({ kind: "webhook.attempt", payload: { deliveryId }, dedupeKey: `webhook:${deliveryId}` });
+}
+
+/** full迁移排除运行队列；从持久投递记录重建任务，活跃dedupeKey跨副本唯一。 */
+async function reconcilePendingDeliveries(limit: number): Promise<void> {
+  const pending = await db.select({ id: webhookDelivery.id }).from(webhookDelivery)
+    .where(eq(webhookDelivery.status, "PENDING"))
+    .orderBy(asc(webhookDelivery.createdAt), asc(webhookDelivery.id)).limit(limit);
+  for (const delivery of pending) await queueDeliveryAttempt(delivery.id);
+}
+
+/** 定时重建未开始投递的任务，并处理已到退避时间的失败投递。 */
 export async function retryDue(limit = 50, deps: DeliveryDeps = {}) {
+  await reconcilePendingDeliveries(limit);
   const due = await db.select().from(webhookDelivery)
     .where(and(eq(webhookDelivery.status, "RETRYING"), lte(webhookDelivery.nextRetryAt, new Date())))
     .orderBy(asc(webhookDelivery.nextRetryAt)).limit(limit);

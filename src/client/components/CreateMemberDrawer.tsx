@@ -6,7 +6,7 @@ import { t } from "../i18n/index.ts";
 import { apiPost, ApiError } from "../lib/api.ts";
 import { useSettingsDraft } from "./settings/SettingsDraft.tsx";
 import { Button } from "./ui/Button.tsx";
-import { Drawer } from "./ui/Drawer.tsx";
+import { Modal } from "./ui/Modal.tsx";
 import { TextInput } from "./ui/TextInput.tsx";
 import { toast } from "./ui/Toast.tsx";
 
@@ -59,7 +59,7 @@ export function CreateMemberDrawer({ open, onClose, onCreated }: { open: boolean
   };
   return <>
     {draft.guard}
-    <Drawer open={open} title={t("members.create")} onClose={requestClose} width="sm" footer={<div className="member-create-actions">
+    <Modal open={open} title={t("members.create")} onClose={requestClose} width="sm" footer={<div className="member-create-actions">
       <Button variant="ghost" onClick={requestClose} disabled={create.isPending}>{t("common.cancel")}</Button>
       <Button variant="primary" type="submit" form={formId} loading={create.isPending}>{t("members.create")}</Button>
     </div>}>
@@ -83,6 +83,6 @@ export function CreateMemberDrawer({ open, onClose, onCreated }: { open: boolean
         <label className="member-create-password-toggle"><input type="checkbox" checked={showPassword} disabled={create.isPending} onChange={event => setShowPassword(event.target.checked)} />{t("members.showPassword")}</label>
         <p className="member-create-note">{t("members.firstLoginHint")}</p>
       </form>
-    </Drawer>
+    </Modal>
   </>;
 }

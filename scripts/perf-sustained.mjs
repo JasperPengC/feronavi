@@ -72,6 +72,7 @@ let projectId = null;
 let samples = [];
 let phaseStats = [];
 const requests = [];
+let failedRequests = 0;
 let activeWorkers = MODE === "soak" ? MAX_WORKERS : (RAMP[0] ?? 8);
 let seedInfo;
 
@@ -112,6 +113,7 @@ async function setup() {
 
 function record(phase, name, latency, ok, status, at) {
   requests.push({ phase, name, latency, ok, status, at });
+  if (!ok) failedRequests++;
 }
 async function loop(idx, ids, stopAt, startAt) {
   while (Date.now() < stopAt) {
@@ -170,10 +172,16 @@ try {
   const go = async () => {
     const stopAt = Date.now() + DURATION_MS;
     const startAt = Date.now();
+    let lastProgressAt = startAt;
     const sampler = setInterval(async () => {
       let pg = null;
       try { const [r] = await sql`select count(*)::int as n from pg_stat_activity where datname = current_database()`; pg = r?.n ?? null; } catch { /* ignore */ }
       samples.push({ at: new Date().toISOString(), elapsedMs: Date.now() - startAt, rssMB: rssMB(), cpuPct: cpuPct(), pgConnections: pg, activeWorkers: MODE === "ramp" ? RAMP[Math.min(RAMP.length - 1, Math.floor((Date.now() - startAt) / (DURATION_MS / RAMP.length)))] : MAX_WORKERS });
+      if (Date.now() - lastProgressAt >= 60_000) {
+        lastProgressAt = Date.now();
+        const latest = samples.at(-1);
+        console.log(`  进度 ${Math.floor(latest.elapsedMs / 1000)}s / ${DURATION_MS / 1000}s：请求 ${requests.length}，错误 ${failedRequests}，RSS ${latest.rssMB}MB，PG连接 ${pg}`);
+      }
     }, 10_000);
     // 立即启动全部 MAX_WORKERS（按 activeWorkers 门控），再按时间升档
     const workers = Promise.all(Array.from({ length: MAX_WORKERS }, (_, i) => loop(i, ids, stopAt, startAt)));

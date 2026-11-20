@@ -15,7 +15,8 @@ const db = postgres(DB, { max: 1 });
 const pre = await db`select key from setting where key like 'smtp.%'`;
 if (pre.length > 0) { console.error("SMTP 已配置，拒绝覆盖；请先在空配置实例运行该验收"); process.exit(1); }
 const smtp = new SMTPServer({
-  disabledCommands: ["AUTH"],
+  // 本地收件fixture明确使用无认证明文；生产认证通道必须校验 TLS 证书。
+  disabledCommands: ["AUTH", "STARTTLS"],
   onData(stream, _session, callback) {
     const chunks = [];
     stream.on("data", (c) => chunks.push(c));

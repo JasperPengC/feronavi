@@ -7,6 +7,7 @@ import { apiGet, apiPost, ApiError } from "../lib/api.ts";
 import { t, useLocale } from "../i18n/index.ts";
 import { Button } from "./ui/Button.tsx";
 import { TextInput } from "./ui/TextInput.tsx";
+import { Link } from "@tanstack/react-router";
 
 interface Hit { pageId: string; title: string; headingPath: string | null; snippet: string; score?: number }
 interface SearchResult { hits: Hit[]; mode: string; note?: string }
@@ -24,12 +25,13 @@ interface IndexJob {
   total: number; processed: number; failed: number; errorMessage: string | null; createdAt: string;
 }
 
-export function KnowledgePanel({ projectId, pageId, revisionId, canReindex, onOpenPage }: {
+export function KnowledgePanel({ projectId, pageId, revisionId, canReindex, onOpenPage, indexOnly = false }: {
   projectId: string;
   pageId?: string;
   revisionId?: string | null;
   canReindex?: boolean;
   onOpenPage?: (id: string) => void;
+  indexOnly?: boolean;
 }) {
   useLocale();
   const qc = useQueryClient();
@@ -87,12 +89,13 @@ export function KnowledgePanel({ projectId, pageId, revisionId, canReindex, onOp
 
   return (
     <Panel
-      title={t("kn.workspaceTitle")}
+      title={t(indexOnly ? "kn.indexTitle" : "kn.workspaceTitle")}
       className="knowledge-panel"
-      actions={<Chip active={open} onClick={() => setOpen((v) => !v)}>{open ? t("kn.collapse") : t("kn.expand")}</Chip>}
+      actions={indexOnly ? undefined : <Chip active={open} onClick={() => setOpen((v) => !v)}>{open ? t("kn.collapse") : t("kn.expand")}</Chip>}
       style={{ marginBottom: 16, flex: "none" }}
     >
-      <p className="knowledge-intro">{t("kn.workspaceDescription")}</p>
+      <p className="knowledge-intro">{t(indexOnly ? "assistant.indexIntro" : "kn.workspaceDescription")}</p>
+      {indexOnly && <p className="knowledge-assistant-link"><Link to="/assistant" search={{ project: projectId }}>{t("assistant.openProject")}</Link></p>}
       {pageId && (
         <section className="knowledge-index" aria-labelledby="knowledge-index-title">
           <div className="knowledge-index-head">
@@ -183,7 +186,7 @@ export function KnowledgePanel({ projectId, pageId, revisionId, canReindex, onOp
         </section>
       )}
 
-      {open && (
+      {!indexOnly && open && (
         <>
           {!pageId && <p className="muted knowledge-ai-note">
             {aiStatus.data?.configured

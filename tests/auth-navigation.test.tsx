@@ -87,6 +87,28 @@ afterEach(() => {
 });
 
 describe("登录返回原页面", () => {
+  it("本地2FA挑战后可输入动态码并携带remember再次登录", async () => {
+    const { router } = renderAuth("/login");
+    let signedIn = false;
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input), "http://localhost").pathname;
+      if (path === "/api/v1/auth/login") {
+        const body = JSON.parse(String(init?.body)); bodies.push(body);
+        if (!body.totpCode) return json({ code: "FORBIDDEN", message: "需要双因素验证码", details: { twoFactorRequired: true } }, 403);
+        signedIn = true; return json({ ok: true });
+      }
+      if (path === "/api/v1/auth/me") return signedIn ? json(actor) : json({ code: "UNAUTHORIZED" }, 401);
+      if (path.endsWith("/providers")) return json({ providers: [] });
+      return json({ initialized: true, name: "测试组织" });
+    }));
+    await signIn();
+    const code = await screen.findByLabelText("双因素动态验证码");
+    fireEvent.change(code, { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "登录", exact: true }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/projects"));
+    expect(bodies[1]).toMatchObject({ username: "navigation", totpCode: "123456", remember: false });
+  });
   it.each([
     [`/projects/${projectId}/wiki?page=target-page#section-2`, { page: "target-page" }, "section-2"],
     [`/projects/${projectId}/table?item=target-work-item&view=mine`, { item: "target-work-item", view: "mine" }, ""],

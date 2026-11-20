@@ -11,6 +11,7 @@ import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
 import { writeSecurityAudit } from "./audit.service.ts";
+import { publishWorkspaceInvalidation } from "./workspace-events.service.ts";
 
 export interface OrganizationView {
   id: string; name: string; logoUrl: string | null;
@@ -47,6 +48,7 @@ export async function updateOrganization(actor: Actor, patch: {
   name?: string; logoUrl?: string | null; defaultLocale?: string; defaultTimezone?: string;
 }) {
   assertOrgManage(actor);
+  if (Object.values(patch).every(value => value === undefined)) throw new DomainError("VALIDATION", "请至少修改一项", null);
   const row = (await db.select().from(organization).limit(1))[0];
   if (!row) throw new DomainError("CONFLICT", "组织尚未初始化", null);
   const name = patch.name !== undefined ? patch.name.trim() : row.name;
@@ -72,6 +74,7 @@ export async function updateOrganization(actor: Actor, patch: {
   await writeSecurityAudit({
     actorId: actor.memberId, action: "organization.updated", targetType: "ORGANIZATION", targetId: updated!.id,
   });
+  await publishWorkspaceInvalidation({ domain: "organization", resourceType: "ORGANIZATION", resourceId: updated!.id });
   return {
     id: updated!.id, name: updated!.name, logoUrl: updated!.logoUrl,
     defaultLocale: updated!.defaultLocale, defaultTimezone: updated!.defaultTimezone,

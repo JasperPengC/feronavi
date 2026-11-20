@@ -12,6 +12,7 @@
  * 规范未要求 MCP 会话保持，SSE 推送走已有的 /api/v1/events。
  */
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/ajv";
 import {
   CallToolRequestSchema,
   GetPromptRequestSchema,
@@ -21,12 +22,17 @@ import {
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { DomainError } from "../../shared/errors.ts";
-import { TOOLS, assertToolAllowed, type ToolCtx } from "./tools.ts";
+import { TOOLS, ALL_TOOLS, assertToolAllowed, type ToolCtx } from "./tools.ts";
 import { WRITE_TOOLS } from "./write-tools.ts";
+import { describeTool } from "./contracts.ts";
 import { assertToolPolicyAllowed, recordToolCall } from "../services/mcp-client.service.ts";
 
 /** 读 + 写工具全集（写工具在 READ_ONLY 档会被档位守卫拒绝） */
-const ALL_TOOLS = [...TOOLS, ...WRITE_TOOLS];
+const TOOL_CATALOG = ALL_TOOLS.map(describeTool);
+const validator = new AjvJsonSchemaValidator();
+const outputValidators = new Map(TOOL_CATALOG.map(tool => [tool.name,
+  validator.getValidator<Record<string, unknown>>(tool.outputSchema!),
+]));
 
 export const SERVER_INFO = { name: "feronavi", version: "1.0.0" } as const;
 
@@ -85,15 +91,13 @@ function toEnvelope(e: unknown): { code: string; message: string; details: unkno
   return { code: "INTERNAL", message: (e as Error)?.message ?? "内部错误", details: null };
 }
 
-export function buildMcpServer(ctx: ToolCtx): Server {
+export interface McpCallMetric { tokenId: string; toolName: string; success: boolean; durationMs: number; errorCode?: string }
+
+export function buildMcpServer(ctx: ToolCtx, observeCall?: (metric: McpCallMetric) => void): Server {
   const server = new Server(SERVER_INFO, { capabilities: { tools: {}, resources: {}, prompts: {} } });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: ALL_TOOLS.map((t) => ({
-      name: t.name,
-      description: t.description,
-      inputSchema: t.inputSchema,
-    })),
+    tools: TOOL_CATALOG,
   }));
 
   server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: RESOURCES }));
@@ -103,7 +107,7 @@ export function buildMcpServer(ctx: ToolCtx): Server {
     if (!resource) throw new Error(`资源「${req.params.uri}」不存在`);
     const text = resource.uri === "feronavi://guide/business-workflows"
       ? BUSINESS_WORKFLOW_GUIDE
-      : JSON.stringify({ generatedAt: new Date().toISOString(), tools: ALL_TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) }, null, 2);
+      : JSON.stringify({ generatedAt: new Date().toISOString(), tools: TOOL_CATALOG }, null, 2);
     return { contents: [{ uri: resource.uri, mimeType: resource.mimeType, text }] };
   });
 
@@ -138,19 +142,30 @@ export function buildMcpServer(ctx: ToolCtx): Server {
         }],
       };
     }
+    const startedAt = performance.now();
+    let success = false;
+    let errorCode: string | undefined;
     try {
       assertToolAllowed(ctx, tool);
       // 调用计数/最后活跃（观测）+ 工具级策略 DENY 优先于令牌档位（A39）
       await recordToolCall(ctx.token.tokenId);
       await assertToolPolicyAllowed(ctx.token.tokenId, tool.name);
       const result = await tool.handler(ctx, (req.params.arguments ?? {}) as Record<string, unknown>);
-      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+      const text = JSON.stringify(result, null, 2);
+      const structuredContent = JSON.parse(text) as Record<string, unknown>;
+      const parsed = outputValidators.get(tool.name)!(structuredContent);
+      if (!parsed.valid) throw new DomainError("INTERNAL", "工具结果不符合输出契约", { tool: tool.name });
+      success = true;
+      return { content: [{ type: "text" as const, text }], structuredContent };
     } catch (e) {
+      errorCode = e instanceof DomainError ? e.code : "INTERNAL";
       // 权限拒绝不重试、按错误码分支 —— 规范护栏要求错误可被机器消费
       return {
         isError: true,
         content: [{ type: "text" as const, text: JSON.stringify(toEnvelope(e)) }],
       };
+    } finally {
+      try { observeCall?.({ tokenId: ctx.token.tokenId, toolName: tool.name, success, durationMs: Math.max(0, Math.round(performance.now() - startedAt)), ...(errorCode ? { errorCode } : {}) }); } catch { /* 观测不能影响业务结果。 */ }
     }
   });
 

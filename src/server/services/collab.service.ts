@@ -11,6 +11,7 @@ import { subscription, workItem, workItemCollaborator } from "../../db/schema.ts
 import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
+import { recordBusinessEvent } from "./event-log.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 
 function hasOrgGrant(actor: Actor): boolean {
@@ -23,7 +24,6 @@ async function targetOf(actor: Actor, workItemId: string) {
   if (!wi || wi.deletedAt) throw forbidden();
   if (!(await projectRepo.isVisibleTo(actor.memberId, wi.projectId, hasOrgGrant(actor)))) {
     // C-23：协作者对所协作项可见（关注/协作入口都在这里）
-    const { isCollaborator } = await import("./collab.service.ts").then((m) => m);
     if (!(await isCollaborator(actor.memberId, workItemId))) throw forbidden();
   }
   return wi;
@@ -37,34 +37,39 @@ export async function listCollaborators(actor: Actor, workItemId: string) {
     .from(workItemCollaborator).where(eq(workItemCollaborator.workItemId, workItemId));
 }
 
-export async function addCollaborator(actor: Actor, workItemId: string, memberId: string) {
+/** 写入与幂等重放共用实时授权，不执行任何写操作。 */
+export async function authorizeCollaboratorWrite(actor: Actor, workItemId: string, memberId: string, operation: "add" | "remove") {
   const wi = await targetOf(actor, workItemId);
-  // 管理权：reporter / assignee / update_any 都可以加协作
   const ctx: PermissionContext = { memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId };
   const allowed = can(actor, "work_item:update_any", { projectId: wi.projectId, createdBy: wi.reporterId }, ctx)
-    || actor.memberId === wi.reporterId || actor.memberId === wi.assigneeId;
+    || actor.memberId === wi.reporterId
+    || (operation === "add" ? actor.memberId === wi.assigneeId : actor.memberId === memberId);
   if (!allowed) throw forbidden();
+  return wi;
+}
 
+export { targetOf as assertWorkItemVisible };
+
+export async function addCollaborator(actor: Actor, workItemId: string, memberId: string) {
+  const wi = await authorizeCollaboratorWrite(actor, workItemId, memberId, "add");
   // 数据模型 3.4b 应用层规则：不等于 assignee / reporter（那两身份已隐含编辑权）
   if (memberId === wi.assigneeId || memberId === wi.reporterId) {
     throw new DomainError("VALIDATION", "该成员已是负责人或创建者，无需加为协作者", null);
   }
   const [row] = await db.insert(workItemCollaborator)
     .values({ workItemId, memberId }).onConflictDoNothing().returning();
+  await recordBusinessEvent({ actor, action: "work_item.collaborator_added", targetType: "WORK_ITEM", targetId: workItemId, projectId: wi.projectId });
   return row ?? (await db.select().from(workItemCollaborator)
     .where(and(eq(workItemCollaborator.workItemId, workItemId), eq(workItemCollaborator.memberId, memberId))))[0];
 }
 
 export async function removeCollaborator(actor: Actor, workItemId: string, memberId: string): Promise<void> {
-  const wi = await targetOf(actor, workItemId);
-  const ctx: PermissionContext = { memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId };
-  const allowed = can(actor, "work_item:update_any", { projectId: wi.projectId, createdBy: wi.reporterId }, ctx)
-    || actor.memberId === wi.reporterId || actor.memberId === memberId;   // 自己可以退出协作
-  if (!allowed) throw forbidden();
+  const wi = await authorizeCollaboratorWrite(actor, workItemId, memberId, "remove");
   const del = await db.delete(workItemCollaborator)
     .where(and(eq(workItemCollaborator.workItemId, workItemId), eq(workItemCollaborator.memberId, memberId)))
     .returning({ memberId: workItemCollaborator.memberId });
   if (del.length === 0) throw forbidden();
+  await recordBusinessEvent({ actor, action: "work_item.collaborator_removed", targetType: "WORK_ITEM", targetId: workItemId, projectId: wi.projectId });
 }
 
 /** C-24 判定入口：该成员对该工作项是否**有协作编辑权** */
@@ -77,7 +82,7 @@ export async function isCollaborator(memberId: string, workItemId: string): Prom
 // ── 关注（subscription 表，幂等）────────────────────────────
 
 export async function follow(actor: Actor, workItemId: string, channels: string[]): Promise<void> {
-  await targetOf(actor, workItemId);
+  const wi = await targetOf(actor, workItemId);
   const chans = channels.length ? channels : ["IN_APP"];
   for (const c of chans) {
     if (!["IN_APP", "EMAIL"].includes(c)) {
@@ -87,12 +92,14 @@ export async function follow(actor: Actor, workItemId: string, channels: string[
       .values({ memberId: actor.memberId, targetType: "WORK_ITEM", targetId: workItemId, notifyChannel: c })
       .onConflictDoNothing();
   }
+  await recordBusinessEvent({ actor, action: "work_item.followed", targetType: "WORK_ITEM", targetId: workItemId, projectId: wi.projectId });
 }
 
 export async function unfollow(actor: Actor, workItemId: string): Promise<void> {
-  await targetOf(actor, workItemId);
+  const wi = await targetOf(actor, workItemId);
   await db.delete(subscription)
     .where(and(eq(subscription.memberId, actor.memberId), eq(subscription.targetType, "WORK_ITEM"), eq(subscription.targetId, workItemId)));
+  await recordBusinessEvent({ actor, action: "work_item.unfollowed", targetType: "WORK_ITEM", targetId: workItemId, projectId: wi.projectId });
 }
 
 /** 关注者列表（含成员名/渠道；当前用户是否已关注由前端对照 memberId 判断） */

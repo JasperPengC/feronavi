@@ -32,19 +32,18 @@ import { setTheme } from "../lib/theme.ts";
 import { ToastHost, toast } from "../components/ui/Toast.tsx";
 import { WorkspaceSwitcher, type ShellProject } from "./WorkspaceSwitcher.tsx";
 import { ChangePasswordDialog } from "../components/ChangePasswordDialog.tsx";
-import { useCustomScrollbars } from "../lib/useCustomScrollbars.ts";
 import { readSsoReturnTo } from "../lib/auth-navigation.ts";
+import { firstGrapheme } from "../lib/first-grapheme.ts";
 
 
 
 export function AppShell() {
-  useEvents(true);
   const org = useOrg();
   const orgName = org.data?.name?.trim() || t("app.name");
   useDocumentTitle();
-  useCustomScrollbars();
   const locale = useLocale(); // 订阅语言并重新计算翻译后的页签宽度
   const { data: actor, isLoading } = useActorQuery();
+  useEvents(!!actor, actor?.memberId);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const location = useRouterState({ select: (s) => s.location });
@@ -247,7 +246,7 @@ export function AppShell() {
     let used = 0;
     let count = 0;
     for (const tab of workspaceTabs) {
-      const label = workspaceTabPresentation(tab, projects).label;
+      const label = workspaceTabPresentation(tab, projects, projectId).label;
       const textWidth = [...label].reduce((width, char) => width + (char.charCodeAt(0) > 127 ? 12 : 7), 0);
       const estimate = Math.min(180, Math.max(58, textWidth + 42));
       if (count > 0 && used + estimate > available) break;
@@ -255,7 +254,7 @@ export function AppShell() {
       count += 1;
     }
     return Math.max(1, count);
-  }, [tabbarWidth, workspaceTabs, projects, locale]);
+  }, [tabbarWidth, workspaceTabs, projects, projectId, locale]);
   const [tabOverflowOpen, setTabOverflowOpen] = useState(false);
   const [tabMenuPos, setTabMenuPos] = useState<{ top: number; right: number } | null>(null);
   const tabOverflowTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -446,6 +445,7 @@ export function AppShell() {
 
           <nav className="main-nav shell-main-nav" aria-label={t("nav.main")}>
             {navItem("/workbench", t("nav.overview"), pathname.startsWith("/workbench"), { icon: "grid" })}
+            {navItem("/assistant", t("nav.assistant"), pathname.startsWith("/assistant"), { icon: "book" })}
             {navGroup("project", t("nav.projectsShort"), "layers",
               pathname === "/projects" || pathname.startsWith("/portfolios"),
               <>
@@ -506,6 +506,25 @@ export function AppShell() {
 
         </aside>
 
+        {!mobileNavigation && <button
+          type="button"
+          className="sidebar-collapse-toggle icon-button"
+          aria-label={sidebarCollapsed ? t("header.expandSidebar") : t("header.collapseSidebar")}
+          title={sidebarCollapsed ? t("header.expandSidebar") : t("header.collapseSidebar")}
+          aria-controls="main-navigation"
+          aria-expanded={!sidebarCollapsed}
+          inert={paletteOpen}
+          onClick={() => {
+            const next = !sidebarCollapsed;
+            setSidebarCollapsed(next);
+            try { window.localStorage.setItem("feronavi-sidebar", next ? "collapsed" : "expanded"); } catch { /* ignore */ }
+          }}
+        >
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M13 8H3m3.5-3.5L3 8l3.5 3.5" />
+          </svg>
+        </button>}
+
         {mobileNavigation && menuOpen && <button
           className="shell-scrim"
           type="button"
@@ -536,34 +555,21 @@ export function AppShell() {
               >
                 <Icon name="menu" />
               </button>
-              <button
-                type="button"
-                className="shell-collapse-button icon-button"
-                aria-label={sidebarCollapsed ? t("header.expandSidebar") : t("header.collapseSidebar")}
-                aria-pressed={sidebarCollapsed}
-                onClick={() => {
-                  const next = !sidebarCollapsed;
-                  setSidebarCollapsed(next);
-                  try { window.localStorage.setItem("feronavi-sidebar", next ? "collapsed" : "expanded"); } catch { /* ignore */ }
-                }}
-              >
-                <Icon name="menu" />
-              </button>
               {!mobileNavigation && <div className="shell-header-project">{projectSwitcher}</div>}
             </div>
 
             <div ref={tabbarRef} className="shell-tabbar-space">
             <nav className="shell-tabbar shell-header-tabs" aria-label={t("tabs.label")}>
               {visibleTabs.map((tab) => {
-                const { label, title } = workspaceTabPresentation(tab, projects);
+                const { label, title, accessibleLabel } = workspaceTabPresentation(tab, projects, projectId);
                 return (
                 <div key={tab.path} className="shell-tab" data-active={pathname === tab.path ? "true" : "false"}>
                   <Link aria-current={pathname === tab.path ? "page" : undefined} className="shell-tab-link"
-                    to={tab.path as "/workbench"} title={title}>
+                    to={tab.path as "/workbench"} title={title} aria-label={accessibleLabel}>
                     {label}
                   </Link>
                   {workspaceTabs.length > 1 && (
-                    <button type="button" className="shell-tab-close" aria-label={`${t("tabs.close")} ${label}`}
+                    <button type="button" className="shell-tab-close" aria-label={`${t("tabs.close")} ${accessibleLabel}`}
                       onClick={() => closeWorkspaceTab(tab.path)}><Icon name="x" size={12} /></button>
                   )}
                 </div>
@@ -627,18 +633,19 @@ export function AppShell() {
                 aria-label={t("header.account")}
                 onClick={() => setUserMenuOpen((v) => !v)}
               >
-                {(actor.name || "?").slice(0, 1)}
+                {firstGrapheme(actor.name, actor.username)}
               </button>
             {userMenuOpen && (
               <div className="shell-user-menu" role="menu" aria-label={t("header.account")}>
                 <div className="shell-user-menu-profile">
                   <span className="avatar avatar-violet shell-user-menu-avatar" aria-hidden="true">
-                    {(actor.name || "?").slice(0, 1)}
+                    {firstGrapheme(actor.name, actor.username)}
                   </span>
-                  <span className="shell-user-menu-identity">
+                  <div className="shell-user-menu-identity">
                     <strong>{actor.name}</strong>
                     <small>@{actor.username}</small>
-                  </span>
+                    <PresenceAvatars countOnly />
+                  </div>
                 </div>
                 <div className="shell-user-menu-divider" aria-hidden="true" />
                 {/* 跳转必须用真链接：可中键新开、可复制地址、读屏为链接（用户要求第 2 条） */}
@@ -707,7 +714,7 @@ export function AppShell() {
 function ShellHotkeys({ onOpen }: { onOpen: () => void }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.defaultPrevented || document.querySelector(".ui-drawer-scrim")) return;
+      if (e.defaultPrevented || document.querySelector(".ui-drawer-scrim, .ui-modal-scrim, .modal-scrim")) return;
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         onOpen();
@@ -733,12 +740,13 @@ function ShellLoading() {
 }
 
 /** 页签用简短项目编号区分同名视图，完整项目名放在悬停提示里。 */
-function workspaceTabPresentation(tab: WorkspaceTab, projects: ShellProject[]) {
+function workspaceTabPresentation(tab: WorkspaceTab, projects: ShellProject[], currentProjectId?: string | null) {
   const projectId = /^\/projects\/([^/]+)(?:\/|$)/.exec(tab.path)?.[1];
   const project = projects.find((item) => item.id === projectId);
   const label = t(tab.labelKey);
   return {
-    label: project ? `${project.key} · ${label}` : label,
+    label: project && projectId !== currentProjectId ? `${project.key} · ${label}` : label,
+    accessibleLabel: project ? `${project.key} · ${label}` : label,
     title: project ? `${project.name} · ${label}` : label,
   };
 }

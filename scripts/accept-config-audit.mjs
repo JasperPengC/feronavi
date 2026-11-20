@@ -32,10 +32,10 @@ try {
   await page.goto(`${BASE}/admin/audit`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2500);
   const search = page.getByLabel("搜索动作（如 auth.login）…");
   await search.fill("portfolio."); await page.waitForTimeout(1200);
-  const actions = await page.locator(".audit-table tbody tr td:nth-child(3)").allTextContents();
+  const actions = await page.locator(".audit-table .audit-operation .table-primary").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("title")));
   check("审计页可按 portfolio. 检索到创建/更新/加项目", ["portfolio.created", "portfolio.updated", "portfolio.project_added"].every((a) => actions.includes(a)), JSON.stringify(actions.slice(0, 5)));
   await search.fill("webhook."); await page.waitForTimeout(1200);
-  const whActions = await page.locator(".audit-table tbody tr td:nth-child(3)").allTextContents();
+  const whActions = await page.locator(".audit-table .audit-operation .table-primary").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("title")));
   check("审计页可按 webhook. 检索到创建", whActions.includes("webhook.created"), JSON.stringify(whActions.slice(0, 5)));
   await page.screenshot({ path: "/tmp/config-audit.png" });
 } finally {

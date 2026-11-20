@@ -5,7 +5,7 @@
  * 本组件提供：成员名单（含项目级角色）、加成员（成员 + 角色）、移除成员。
  * 需要 `project:manage_member`；角色下拉需要 `role:manage`（普通成员看不到角色列表时不显示加人表单）。
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiDelete, apiGet, apiPost, ApiError } from "../lib/api.ts";
 import { toast } from "./ui/Toast.tsx";
@@ -14,6 +14,8 @@ import { useCan } from "../lib/actor.ts";
 import { Drawer } from "./ui/Drawer.tsx";
 import { Button } from "./ui/Button.tsx";
 import { Select } from "./Select.tsx";
+import { firstGrapheme } from "../lib/first-grapheme.ts";
+import { Icon } from "./Icon.tsx";
 
 interface ProjectMember { id: string; username: string; name: string; role_key: string | null; role_name: string | null }
 interface MemberOption { id: string; name: string; username: string }
@@ -25,6 +27,8 @@ export function ProjectMembersDrawer({ project, onClose }: { project: { id: stri
   const canRole = useCan("role:manage");
   const [memberId, setMemberId] = useState("");
   const [roleIds, setRoleIds] = useState<string[]>([]);
+
+  useEffect(() => { setMemberId(""); setRoleIds([]); }, [project?.id]);
 
   const members = useQuery({
     queryKey: ["project-members", project?.id],
@@ -68,8 +72,7 @@ export function ProjectMembersDrawer({ project, onClose }: { project: { id: stri
   const roleList = Array.isArray(roles.data) ? roles.data : [];
   const memberOptions = useMemo(() => {
     const existing = new Set(memberList.map((m) => m.id));
-    return [{ value: "", label: t("pm.pickMember") },
-      ...allMemberList.filter((m) => !existing.has(m.id)).map((m) => ({ value: m.id, label: `${m.name}（${m.username}）` }))];
+    return allMemberList.filter((m) => !existing.has(m.id)).map((m) => ({ value: m.id, label: m.name || m.username, secondaryLabel: `@${m.username}` }));
   }, [memberList, allMemberList]);
   const toggleRole = (id: string) => setRoleIds((cur) => cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
 
@@ -83,9 +86,9 @@ export function ProjectMembersDrawer({ project, onClose }: { project: { id: stri
           <ul className="project-member-list">
             {memberList.map((m) => (
               <li key={m.id}>
-                <span className="row-avatar" aria-hidden="true">{(m.name || m.username).slice(0, 1)}</span>
-                <span className="pm-name">{m.name}<small className="muted"> @{m.username}</small></span>
-                <span className="tag">{m.role_name ?? "—"}</span>
+                <span className="row-avatar" aria-hidden="true">{firstGrapheme(m.name, m.username)}</span>
+                <span className="pm-name"><span title={m.name}>{m.name || m.username}</span><small title={`@${m.username}`}>@{m.username}</small></span>
+                <span className="tag pm-member-role" title={m.role_name ?? undefined}>{m.role_name ?? "—"}</span>
                 {canManage && <Button size="sm" variant="ghost" disabled={remove.isPending} onClick={() => remove.mutate(m.id)}>{t("pm.remove")}</Button>}
               </li>
             ))}
@@ -93,14 +96,17 @@ export function ProjectMembersDrawer({ project, onClose }: { project: { id: stri
         )}
         {canManage && canRole && (
           <div className="project-member-add">
-            <Select ariaLabel={t("pm.member")} value={memberId} onChange={setMemberId} searchable options={memberOptions} />
-            <div className="pm-role-picker" role="group" aria-label={t("pm.roles")}>
+            <Select label={t("pm.member")} ariaLabel={t("pm.member")} value={memberId} onChange={setMemberId} searchable placeholder={t("pm.pickMember")} minPanelWidth={280} disabled={allMembers.isLoading || add.isPending} options={memberOptions} />
+            <fieldset className="pm-role-field" disabled={add.isPending}>
+              <legend>{t("pm.roles")}</legend>
+              <div className="pm-role-picker">
               {roleList.map((r) => (
-                <button key={r.id} type="button" className={`btn btn-sm ${roleIds.includes(r.id) ? "btn-primary" : ""}`}
-                  aria-label={`${t("pm.role")}：${r.name}`} aria-pressed={roleIds.includes(r.id)} onClick={() => toggleRole(r.id)}>{r.name}</button>
+                <button key={r.id} type="button" className="pm-role-option"
+                  aria-label={`${t("pm.role")}：${r.name}`} aria-pressed={roleIds.includes(r.id)} onClick={() => toggleRole(r.id)}><Icon name="check" /><span>{r.name}</span></button>
               ))}
-            </div>
-            <Button size="sm" variant="primary" disabled={!memberId || roleIds.length === 0 || add.isPending} onClick={() => add.mutate()}>{t("pm.add")}</Button>
+              </div>
+            </fieldset>
+            <Button className="pm-add-submit" variant="primary" disabled={!memberId || roleIds.length === 0 || add.isPending} onClick={() => add.mutate()}>{t("pm.add")}</Button>
           </div>
         )}
         {!canRole && <p className="muted" style={{ fontSize: "var(--text-xs)" }}>{t("pm.needRolePerm")}</p>}

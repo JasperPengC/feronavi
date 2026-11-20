@@ -35,7 +35,7 @@ try {
   check("真实创建缺陷与临期里程碑", prep.dStatus === 201 && prep.mStatus === 201, JSON.stringify({ d: prep.dStatus, m: prep.mStatus }));
 
   await page.goto(`${BASE}/workbench`, { waitUntil: "domcontentloaded" });
-  await page.getByText("跨域关注", { exact: true }).waitFor({ timeout: 15_000 });
+  await page.getByText("缺陷与里程碑", { exact: true }).waitFor({ timeout: 15_000 });
   const body = await page.locator("main").innerText();
   check("跨域关注区含四张统计", ["我的未完成缺陷", "未完成缺陷", "未完成 S1", "临期 / 逾期里程碑"].every((x) => body.includes(x)));
   check("新建里程碑出现在列表", body.includes(MS));
@@ -48,7 +48,7 @@ try {
     const sidebar = document.querySelector(".shell-sidebar")?.getBoundingClientRect();
     return { vh: innerHeight, footerBottom: footer ? Math.round(footer.bottom) : null, sidebarBottom: sidebar ? Math.round(sidebar.bottom) : null };
   });
-  check("底部外壳留白 12–24px（Footer 不贴视口底边）", layout.footerBottom !== null && layout.vh - layout.footerBottom >= 12 && layout.vh - layout.footerBottom <= 24, JSON.stringify(layout));
+  check("页脚贴合全高外壳且未超出视口", layout.footerBottom !== null && Math.abs(layout.vh - layout.footerBottom) <= 1, JSON.stringify(layout));
   check("侧栏全高（Celeris 骨架：贴视口底边）", layout.sidebarBottom !== null && Math.abs(layout.vh - layout.sidebarBottom) <= 1, JSON.stringify(layout));
   await page.screenshot({ path: "/tmp/workbench-cross.png" });
 } finally {

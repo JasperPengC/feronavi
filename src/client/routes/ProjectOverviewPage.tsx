@@ -20,6 +20,8 @@ import { Button } from "../components/ui/Button.tsx";
 import { ArrowLink } from "../components/ui/ArrowLink.tsx";
 import { WorkItemEditor } from "../components/work-item/WorkItemEditor.tsx";
 import { WorkItemDrawer } from "../components/work-item/DeferredWorkItemDrawer.tsx";
+import { ProjectMembersDrawer } from "../components/ProjectMembersDrawer.tsx";
+import { firstGrapheme } from "../lib/first-grapheme.ts";
 import { ProjectSettingsDrawer } from "../components/project/ProjectSettingsDrawer.tsx";
 import { useCan } from "../lib/actor.ts";
 
@@ -41,6 +43,7 @@ interface ActivityItem { id: string; action: string; summary: string; createdAt:
 export function ProjectOverviewPage() {
   useLocale();
   const canManage = useCan("project:update");
+  const canManageMembers = useCan("project:manage_member");
   const canCreate = useCan("work_item:create");
   const { projectId } = useParams({ from: "/_app/projects/$projectId" });
   // ⚠️ queryKey 不能用 ["projects"]：项目列表页同 key 缓存的是 {items,total}（对象），
@@ -72,7 +75,7 @@ export function ProjectOverviewPage() {
   });
 
   const totalWorkItems = project?.workItemCount ?? 0;
-  const openWorkItems = (board.data?.columns ?? []).filter((c) => c.category !== "DONE" && c.category !== "CANCELLED")
+  const openWorkItems = (board.data?.columns ?? []).filter((c) => !["TERMINAL", "DONE", "CANCELLED"].includes(c.category))
     .reduce((n, c) => n + c.count, 0);
   const milestoneCount = (milestones.data ?? []).filter((m) => !m.archivedAt).length;
   const today = new Date().toISOString().slice(0, 10);
@@ -84,17 +87,16 @@ export function ProjectOverviewPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
   const loading = projects.isLoading;
   return (
     <div className="page project-refinement project-overview-page">
       <PageHead title={project ? `${project.name}` : t("po.title")}
-        sub={project ? `${project.key} · ${project.description || t("po.noDescription")}` : undefined}
+        sub={project ? <span className="po-header-meta"><span>{project.key}</span>{project.status && <span>{project.status.name}</span>}</span> : undefined}
         actions={
           <div className="project-overview-actions">
-            <LinkButton to="/projects">{t("po.allProjects")}</LinkButton>
-            {canManage && <Button onClick={() => setSettingsOpen(true)}>{t("po.settings")}</Button>}
+            {canManage && <Button variant="ghost" onClick={() => setSettingsOpen(true)}>{t("po.settings")}</Button>}
             {canCreate && <Button variant="primary" onClick={() => setCreateOpen(true)}>{t("wie.create")}</Button>}
-            <LinkButton to="/projects/$projectId/board" params={{ projectId }}>{t("nav.board")}</LinkButton>
           </div>
         } />
 
@@ -126,6 +128,10 @@ export function ProjectOverviewPage() {
                   <dt>{t("po.updated")}</dt><dd>{project.updatedAt ? relativeTime(project.updatedAt) : "—"}</dd>
                   <dt>{t("po.iterations")}</dt><dd>{(iterations.data ?? []).length}</dd>
                 </dl>
+                {project.description && <details className="po-description">
+                  <summary>{t("po.description")}</summary>
+                  <p>{project.description}</p>
+                </details>}
               </Panel>
 
               <Panel style={{ marginTop: 12 }}>
@@ -166,16 +172,19 @@ export function ProjectOverviewPage() {
               </Panel>
 
               <Panel style={{ marginTop: 12 }}>
-                <strong style={{ fontSize: "var(--text-sm)" }}>{t("po.membersTitle")}</strong>
+                <div className="po-members-head">
+                  <strong style={{ fontSize: "var(--text-sm)" }}>{t("po.membersTitle")}</strong>
+                  {canManageMembers && <Button size="sm" variant="ghost" onClick={() => setMembersOpen(true)}>{t("pm.title")}</Button>}
+                </div>
                 {members.isLoading && <StateBlock kind="loading" title={t("common.loading")} />}
                 {members.isError && <StateBlock kind="error" title={t("common.loadFailedShort")} action={() => void members.refetch()} actionLabel={t("common.reload")} />}
                 {members.isSuccess && (members.data ?? []).length === 0 && <p className="muted" style={{ fontSize: "var(--text-sm)" }}>{t("pm.empty")}</p>}
-                <ul className="po-activity">
+                <ul className="project-member-list">
                   {(members.data ?? []).slice(0, 8).map((m) => (
                     <li key={m.id}>
-                      <span className="row-avatar" aria-hidden="true" style={{ width: 22, height: 22, fontSize: 11 }}>{(m.name || m.username).slice(0, 1)}</span>
-                      <span style={{ flex: 1 }}>{m.name}<span className="muted"> @{m.username}</span></span>
-                      <span className="tag">{m.role_name ?? "—"}</span>
+                      <span className="row-avatar" aria-hidden="true">{firstGrapheme(m.name, m.username)}</span>
+                      <span className="pm-name"><span title={m.name}>{m.name || m.username}</span><small title={`@${m.username}`}>@{m.username}</small></span>
+                      <span className="tag pm-member-role" title={m.role_name ?? undefined}>{m.role_name ?? "—"}</span>
                     </li>
                   ))}
                 </ul>
@@ -187,6 +196,7 @@ export function ProjectOverviewPage() {
       <WorkItemEditor open={createOpen} projectId={projectId} onClose={() => setCreateOpen(false)}
         onSaved={(item) => { setCreateOpen(false); setCreatedId(item.id); }} />
       <WorkItemDrawer workItemId={createdId} onClose={() => setCreatedId(null)} />
+      <ProjectMembersDrawer project={project && membersOpen ? project : null} onClose={() => setMembersOpen(false)} />
       {project && <ProjectSettingsDrawer open={settingsOpen} project={project} onClose={() => setSettingsOpen(false)} onSaved={() => void projects.refetch()} />}
     </div>
   );

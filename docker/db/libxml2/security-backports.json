@@ -1,0 +1,72 @@
+{
+  "component": "libxml2",
+  "upstreamVersion": "2.13.9",
+  "alpineBaseRevision": 2,
+  "feronaviRevision": 3,
+  "abi": "libxml2.so.2",
+  "originalAlpineSource": "https://gitlab.alpinelinux.org/alpine/aports/-/tree/3.24-stable/main/libxml2",
+  "alreadyFixedInUpstream": [
+    {
+      "cve": "CVE-2026-6653",
+      "fixedSince": "2.11.0",
+      "commit": "463bbeeca1805b5c4828f50d0fefc4eebaf620df"
+    }
+  ],
+  "backports": [
+    {
+      "cve": "CVE-2026-74860",
+      "patch": "CVE-2026-74860-python-reference.patch",
+      "sha512": "7e187a509ed01375642ab7237f1e5b559c82a8ffefaf6fa5419426a9fc11e8a6c06a634677f1934766360469e0a18bf23eb127126d6a201a0629a5bff4290f6b",
+      "upstreamCommit": "f41e1865781f74d1cadfe2fbdfeefed946026f12",
+      "upstreamUrl": "https://gitlab.gnome.org/GNOME/libxml2/-/commit/f41e1865781f74d1cadfe2fbdfeefed946026f12"
+    },
+    {
+      "cve": "CVE-2026-86138",
+      "patch": "CVE-2026-86138-dict-overflow.patch",
+      "sha512": "8ccd3013844feaa6f07d6bbb5404d9a2a3379aba304e4bd66d19f6525f9760a42f7f753222f03fd7395276da781b2da08c01bf96eaafe27ab0df490248a1f668",
+      "upstreamCommit": "a4cba4b5b5a8c42e155ed42d2d2a44955465a2e4",
+      "upstreamUrl": "https://gitlab.gnome.org/GNOME/libxml2/-/commit/a4cba4b5b5a8c42e155ed42d2d2a44955465a2e4"
+    },
+    {
+      "cve": "CVE-2026-86140",
+      "patch": "CVE-2026-86140-validation-bounds.patch",
+      "sha512": "f9bea24803b8d48b0a9f8f11bfcd9a5755f2372c82c0cf7075344088759d9743a3e0dc1a71e9cd4c05cdc40e98174d14430eea121b6df1dd629ed0499715f995",
+      "upstreamCommit": "d1686f91dbda141a752200419d35639fd6b38340",
+      "upstreamUrl": "https://gitlab.gnome.org/GNOME/libxml2/-/commit/d1686f91dbda141a752200419d35639fd6b38340"
+    },
+    {
+      "cve": "CVE-2026-86142",
+      "patch": "CVE-2026-86142-xpointer-length.patch",
+      "sha512": "79a3cbc7c796a5365da99e96aa51a7a598d457b911455c1ef21b4c328d5f89d6552632edc054d0d6fe97181bfa19e066c71c9ea23f044937ebd9575dfcb7af56",
+      "upstreamCommit": "6b3a736c0edc74ceec3d82f5252499d7911b3a58",
+      "upstreamUrl": "https://gitlab.gnome.org/GNOME/libxml2/-/commit/6b3a736c0edc74ceec3d82f5252499d7911b3a58"
+    },
+    {
+      "cve": "CVE-2026-86143",
+      "patch": "CVE-2026-86143-output-length.patch",
+      "sha512": "9c6a987d2ccdb9f7930a4cc28a5161de94d5d2f591e53f8a4872ee77d677e4c26a06854ae9bd62799b33a811c56b0f9d377a96832561495cf20cc20c4bd66df4",
+      "upstreamCommit": "90f293ba74d28b1d570920382e707586f68ebf35",
+      "upstreamUrl": "https://gitlab.gnome.org/GNOME/libxml2/-/commit/90f293ba74d28b1d570920382e707586f68ebf35"
+    },
+    {
+      "cve": "CVE-2026-86144",
+      "patch": "CVE-2026-86144-xinclude-options.patch",
+      "sha512": "350443edae6cdbbcaa76bd161769fc195979cc2506a7c183573eed567c33c98890bcf61c3320c52fb86a5deb04b5da74e27a2aea70b5427d02a6698919e15e0f",
+      "upstreamCommit": "b63cd517afecb76582dd9488c55e54ceaf50de61",
+      "upstreamUrl": "https://gitlab.gnome.org/GNOME/libxml2/-/commit/b63cd517afecb76582dd9488c55e54ceaf50de61"
+    }
+  ],
+  "preservedAlpinePatches": [
+    {
+      "cve": "CVE-2026-6732",
+      "patch": "CVE-2026-6732-test.patch",
+      "sha512": "9117a6a060d9c760ae4aa88c33131b02b4677a6703fe02ea36a474035c901d5da778a4d98402a87187410e9bcfe9819d382f9df4e6fe42ff3cf33acc88ba28a9"
+    },
+    {
+      "cve": "CVE-2026-6732",
+      "patch": "CVE-2026-6732.patch",
+      "sha512": "a54eca0b69fb49c9894684069b0e68dd80f002977c59249bee6d1a168391179e9815dfbe49a9cce3de28ca4a1bdfcac8a691daa240dd70a0206d24d32f6e84cb"
+    }
+  ],
+  "runtimePythonBindings": false
+}

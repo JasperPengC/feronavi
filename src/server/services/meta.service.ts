@@ -5,6 +5,8 @@
  * 因此这里输出的状态/迁移与字段定义必须与实现同源，不许手抄一份容易腐烂的副本。
  */
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { z } from "zod";
+import { createWorkItemSchema, updateWorkItemSchema } from "../../shared/schemas/work-item.ts";
 import { db } from "../../db/index.ts";
 import { workflow, workflowState, workflowTransition } from "../../db/schema.ts";
 import { forbidden } from "../../shared/errors.ts";
@@ -57,27 +59,29 @@ export async function describeWorkflows(actor: Actor, projectId: string) {
  * ⚠️ 与 `shared/schemas/work-item.ts` 同源：新增字段时必须同时更新这里，
  *    否则 agent 会按旧定义提交而被 VALIDATION 拒绝。
  */
-export const WORK_ITEM_FIELDS = [
-  { name: "type", type: "enum", required: true, values: ["REQUIREMENT", "TASK", "DEFECT", "SUBTASK"], note: "SUBTASK 必须带 parentId，且继承父项工作流" },
-  { name: "title", type: "string", required: true, maxLength: 500 },
-  { name: "description", type: "string", required: false, note: "Markdown" },
-  { name: "priority", type: "enum", required: false, values: ["LOWEST", "LOW", "MEDIUM", "HIGH", "URGENT"] },
-  { name: "severity", type: "enum", required: false, values: ["S1", "S2", "S3", "S4"], note: "仅 DEFECT 可填（DB CHECK 兜底）" },
-  { name: "assigneeId", type: "uuid", required: false, note: "人名请先经 project.members 取 ID" },
-  { name: "parentId", type: "uuid", required: false, note: "子任务父子层级" },
-  { name: "startDate", type: "date", required: false, format: "YYYY-MM-DD" },
-  { name: "dueDate", type: "date", required: false, format: "YYYY-MM-DD" },
-  { name: "estimatePoints", type: "number", required: false, note: "故事点" },
-  { name: "milestoneId", type: "uuid", required: false, note: "必须与工作项同项目" },
-  { name: "iterationId", type: "uuid", required: false, note: "必须与工作项同项目" },
-  { name: "releaseId", type: "uuid", required: false, note: "必须与工作项同项目" },
-  { name: "moduleId", type: "uuid", required: false, note: "必须与工作项同项目" },
-] as const;
+const createContract = z.toJSONSchema(createWorkItemSchema, { target: "draft-7" });
+const updateContract = z.toJSONSchema(updateWorkItemSchema, { target: "draft-7" });
+export const WORK_ITEM_FIELDS = Object.entries(createWorkItemSchema.shape).map(([name, field]) => {
+  const schema = z.toJSONSchema(field, { target: "draft-7" });
+  const value = (schema.anyOf as Record<string, unknown>[] | undefined)?.find((entry) => entry.type !== "null") ?? schema;
+  return {
+    name,
+    type: value.enum ? "enum" : value.format === "uuid" ? "uuid" : name.endsWith("Date") ? "date" : value.type,
+    ...(value.enum ? { values: value.enum } : {}),
+    ...(value.maxLength ? { maxLength: value.maxLength } : {}),
+    required: !field.isOptional(),
+    nullable: field.isNullable(),
+    schema,
+    ...(name === "parentId" ? { note: "SUBTASK 必须带 parentId，父项必须在同项目" } : {}),
+    ...(name === "assigneeId" ? { note: "先经 project.members 读取成员ID" } : {}),
+  };
+});
 
 export function describeFields() {
   return {
     fields: WORK_ITEM_FIELDS,
-    note: "状态字段不可直接写：请用 workitem.transition 并先读 meta.workflow 的合法迁移边",
+    schemas: { create: createContract, update: updateContract },
+    note: "MCP 创建另需 projectId；MCP 更新用 expectedVersion 对应 version。状态请用 workitem.transition，并先读取实际允许迁移。",
   };
 }
 

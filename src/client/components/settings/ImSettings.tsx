@@ -9,7 +9,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiDelete, apiGet, apiPatch, apiPost, ApiError } from "../../lib/api.ts";
 import { t, useLocale } from "../../i18n/index.ts";
 import { Button } from "../ui/Button.tsx";
-import { ConfirmButton } from "../ui/ConfirmButton.tsx";
+import { confirmDialog } from "../Dialog.tsx";
 import { TextInput } from "../ui/TextInput.tsx";
 import { Select } from "../Select.tsx";
 import { Icon } from "../Icon.tsx";
@@ -40,7 +40,7 @@ const EMPTY: Form = { provider: "FEISHU", name: "", webhookUrl: "", appKey: "", 
 
 import { useSettingsDraft } from "./SettingsDraft.tsx";
 
-export function ImSettings({ onSuccess, onError }: FeedbackHandlers) {
+export function ImSettings({ onSuccess, onError, compact = false }: FeedbackHandlers & { compact?: boolean }) {
   useLocale();
   const qc = useQueryClient();
   const list = useQuery({
@@ -90,11 +90,13 @@ export function ImSettings({ onSuccess, onError }: FeedbackHandlers) {
   const draft = useSettingsDraft(createOpen, form, create.isPending);
   const requestClose = () => void draft.leave(() => { setCreateOpen(false); setForm(EMPTY); setFormError(null); });
   return (
-    <SettingsSection title={t("set.im")} description={t("se.imDesc")}
-      actions={<Button size="sm" variant="primary" onClick={() => setCreateOpen(true)}><Icon name="plus" size={14} />{t("se.imAdd")}</Button>}>
+    <SettingsSection variant={compact ? "row" : "card"} leading={compact && <Icon name="inbox" size={18} />}
+      title={compact ? t("se.messagingImTitle") : t("set.im")} description={compact ? t("se.messagingImDesc") : t("se.imDesc")}
+      status={compact && list.data?.channels.length === 0 ? t("se.messagingUnconfigured") : undefined}
+      actions={<Button size="sm" variant={compact ? "ghost" : "primary"} aria-label={t("se.imAdd")} onClick={() => setCreateOpen(true)}><Icon name="plus" size={14} />{compact ? t("common.add") : t("se.imAdd")}</Button>}>
       {list.isLoading && <SettingsListState>{t("common.loading")}</SettingsListState>}
       {list.isError && <SettingsListState tone="error" action={<Button size="sm" onClick={() => void list.refetch()}>{t("common.reload")}</Button>}>{t("se.imLoadFailed")}</SettingsListState>}
-      {list.data && list.data.channels.length === 0 && <SettingsListState>{t("se.imEmpty")}</SettingsListState>}
+      {!compact && list.data && list.data.channels.length === 0 && <SettingsListState>{t("se.imEmpty")}</SettingsListState>}
       {!!list.data?.channels.length && (
         <ul className="settings-record-list">
           {list.data.channels.map((channel) => (
@@ -113,7 +115,7 @@ export function ImSettings({ onSuccess, onError }: FeedbackHandlers) {
               <span className="settings-record-actions">
                 <Button size="sm" disabled={test.isPending} onClick={() => test.mutate(channel)}>{t("se.imTest")}</Button>
                 <Button size="sm" onClick={() => toggle.mutate(channel)}>{channel.enabled ? t("se.imDisable") : t("se.imEnable")}</Button>
-                <ConfirmButton size="sm" onConfirm={() => remove.mutate(channel.id)}>{t("common.delete")}</ConfirmButton>
+                <Button size="sm" variant="danger" disabled={remove.isPending} onClick={async () => { if (await confirmDialog(`${t("common.confirmDelete")} ${channel.name}`, { danger: true })) remove.mutate(channel.id); }}>{t("common.delete")}</Button>
               </span>
             </li>
           ))}

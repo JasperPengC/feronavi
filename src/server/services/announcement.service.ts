@@ -7,9 +7,9 @@
  *   3 **撤回仅限发送人本人**（表定义明确要求，不是"有权限即可撤"）
  *   4 扇出走既有通知服务 → 免打扰、通知偏好、分组全部沿用，不新开一条投递通道
  */
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "../../db/index.ts";
-import { announcement, member, notification, roleAssignment } from "../../db/schema.ts";
+import { announcement, member, notification, role, roleAssignment } from "../../db/schema.ts";
 import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
@@ -23,9 +23,14 @@ export interface AnnouncementInput {
   audience?: { roleKeys?: string[]; teamIds?: string[] };
 }
 
-function assertSend(actor: Actor) {
+function canSend(actor: Actor) {
   const ctx: PermissionContext = { memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId };
-  if (!can(actor, "notification:send", { projectId: null, teamId: null }, ctx)) throw forbidden();
+  return can(actor, "notification:send", { projectId: null, teamId: null }, ctx);
+}
+
+/** 受众使用真实角色指派；TEAM 是直接成员关系，不沿权限范围的子团队闭包扩大。 */
+function audienceAssignmentMatch(roleKeys: SQL, teamIds: SQL) {
+  return sql`(${roleKeys} ? ${role.key} or (${roleAssignment.scopeType} = 'TEAM' and ${teamIds} ? ${roleAssignment.scopeId}::text))`;
 }
 
 /** 目标成员：空 audience = 全员；按角色/团队筛选 */
@@ -37,18 +42,16 @@ async function resolveAudience(input: AnnouncementInput): Promise<string[]> {
     return rows.map((r) => r.id);
   }
   // 命中任一声明条件的成员（并集），不与其它条件叠加成"交集"——公告是广播，不是精确筛选
-  const conds = [];
-  if (roleKeys.length > 0) conds.push(inArray(sql`(select r.key from role r where r.id = ${roleAssignment.roleId})`, roleKeys));
-  if (teamIds.length > 0) conds.push(inArray(roleAssignment.scopeId, teamIds));
   const rows = await db.selectDistinct({ id: member.id }).from(roleAssignment)
     .innerJoin(member, eq(member.id, roleAssignment.memberId))
-    .where(and(eq(member.status, "ACTIVE"), conds.length ? sql`(${sql.join(conds, sql` or `)})` : sql`true`))
+    .innerJoin(role, eq(role.id, roleAssignment.roleId))
+    .where(and(eq(member.status, "ACTIVE"), audienceAssignmentMatch(sql`${JSON.stringify(roleKeys)}::jsonb`, sql`${JSON.stringify(teamIds)}::jsonb`)))
     .limit(FANOUT_LIMIT);
   return rows.map((r) => r.id);
 }
 
 export async function sendAnnouncement(actor: Actor, input: AnnouncementInput) {
-  assertSend(actor);
+  if (!canSend(actor)) throw forbidden();
   if (!input.title.trim()) throw new DomainError("VALIDATION", "标题不能为空", null);
   if (!input.body.trim()) throw new DomainError("VALIDATION", "正文不能为空", null);
 
@@ -98,7 +101,21 @@ export async function sendAnnouncement(actor: Actor, input: AnnouncementInput) {
 }
 
 export async function listAnnouncements(actor: Actor, opts: { includeRevoked?: boolean } = {}) {
-  const conds = opts.includeRevoked ? [] : [isNull(announcement.revokedAt)];
+  const manager = canSend(actor);
+  const conds = manager && opts.includeRevoked ? [] : [isNull(announcement.revokedAt)];
+  if (!manager) {
+    const roleKeys = sql`coalesce(${announcement.audience}->'roleKeys', '[]'::jsonb)`;
+    const teamIds = sql`coalesce(${announcement.audience}->'teamIds', '[]'::jsonb)`;
+    conds.push(sql`(
+      (${roleKeys} = '[]'::jsonb and ${teamIds} = '[]'::jsonb)
+      or exists (
+        select 1 from ${roleAssignment}
+        inner join ${role} on ${role.id} = ${roleAssignment.roleId}
+        where ${roleAssignment.memberId} = ${actor.memberId}
+          and ${audienceAssignmentMatch(roleKeys, teamIds)}
+      )
+    )`);
+  }
   return db.select().from(announcement)
     .where(conds.length ? and(...conds) : sql`true`)
     .orderBy(desc(announcement.createdAt)).limit(100);

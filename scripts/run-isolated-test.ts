@@ -18,6 +18,8 @@ if (!script || local.startsWith(`..${sep}`) || local === ".." || !/\.(?:ts|mjs)$
   throw new Error("请指定仓库 scripts 目录中存在的测试脚本");
 }
 const browserMode = !!mode;
+// 该总验收有独立的内层runner；为其1秒终止及随机库DROP留出清理预算。
+const terminationGraceMs = basename(target) === "e2e-system-backup.ts" ? 30_000 : 10_000;
 const empty = mode === "--empty" || ["accept-setup-wizard.mjs", "accept-install-e2e.mjs"].includes(basename(target));
 let database: IsolatedDatabase | undefined;
 const controller = new AbortController();
@@ -37,7 +39,7 @@ const interrupt = () => {
   interrupted = true;
   controller.abort();
   signalChild("SIGTERM");
-  forceStop ??= setTimeout(() => signalChild("SIGKILL"), 10_000);
+  forceStop ??= setTimeout(() => signalChild("SIGKILL"), terminationGraceMs);
   finishDemo?.();
 };
 process.once("SIGINT", interrupt);
@@ -67,7 +69,10 @@ try {
   } else {
     // 持续压测默认10或20分钟；给建样本与清理留空间，不能被普通套件10分钟上限截断。
     const performanceSuite = /^perf-(load-10m|sse-10m|sustained)\.mjs$/u.test(basename(target));
-    const timeoutMs = performanceSuite ? Math.max(1_800_000, Number(process.env.PERF_DURATION_MS ?? 0) + 600_000) : 600_000;
+    const agentBudget = Number(process.env.MCP_AGENT_TIMEOUT_MS ?? 1_200_000);
+    const timeoutMs = performanceSuite ? Math.max(1_800_000, Number(process.env.PERF_DURATION_MS ?? 0) + 600_000)
+      : basename(target) === "e2e-mcp-agent.ts" && Number.isInteger(agentBudget) && agentBudget >= 60_000 && agentBudget <= 1_800_000
+        ? agentBudget + 120_000 : 600_000;
     const timer = setTimeout(interrupt, timeoutMs);
     try {
       process.exitCode = await new Promise<number>((resolveExit, reject) => {

@@ -17,6 +17,7 @@ import { inArray, lt, sql } from "drizzle-orm";
 import { db } from "../../db/index.ts";
 import { activityEntry, auditEntry, invite, knowledgeQueryLog, setting } from "../../db/schema.ts";
 import { exportPackageDir } from "./full-export.service.ts";
+import { pruneSystemTransferFiles } from "./system-backup/storage.ts";
 
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
@@ -132,6 +133,7 @@ export interface RetentionResult {
   exportBytesFreed: number;
   exportHours: number;
   invitesDeleted: number;
+  systemTransferFilesDeleted: number;
 }
 
 /**
@@ -171,9 +173,10 @@ export async function pruneHistoricalLogs(opts: {
   const exportHours = opts.exportHours ?? (opts.now ? 0 : cfg.exportHours);
   const exportPrune = await pruneExportPackages({ now, hours: exportHours, dir: opts.exportDir });
   const invitesDeleted = await pruneInvites({ now });
+  const systemTransferFilesDeleted = await pruneSystemTransferFiles(now.getTime());
   return {
     auditDeleted, activityDeleted, knowledgeDeleted, auditDays, activityDays,
     exportDeleted: exportPrune.deleted, exportBytesFreed: exportPrune.bytesFreed, exportHours: exportPrune.hours,
-    invitesDeleted,
+    invitesDeleted, systemTransferFilesDeleted,
   };
 }

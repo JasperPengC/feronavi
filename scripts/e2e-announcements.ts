@@ -1,5 +1,6 @@
 /** 群发公告自检（第十四期）：最高风险操作的护栏 */
 import "./_env.ts";
+import { confirmedTestArgs } from "./lib/mcp-test-confirmation.ts";
 import { db, sql } from "../src/db/index.ts";
 import { member, role, roleAssignment, announcement, notification, apiToken, idempotencyKey, auditEntry, activityEntry, subscription, memberPreference, notificationPreference, timeLog, workItemCollaborator, workItemRelation } from "../src/db/schema.ts";
 import { hashPassword } from "../src/server/auth/password.ts";
@@ -34,7 +35,7 @@ const BASE = process.env.BASE ?? "http://127.0.0.1:3969";
 const call = async (token: string, name: string, args: Record<string, unknown>) => {
   const res = await fetch(`${BASE}/api/v1/mcp`, {
     method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${token}` },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: confirmedTestArgs(name, args) } }),
   });
   const j = (await res.json()) as { result?: { content?: { text: string }[]; isError?: boolean } };
   let data: Record<string, unknown> | null = null;

@@ -14,22 +14,36 @@
   --card-padding: 20px;
   --card-padding-compact: 12px;
   --section-gap: 16px;
-  --control-height: 36px;
-  --control-height-sm: 32px;
+  --control-height: 32px;
+  --control-height-sm: 28px;
+  --button-height: 28px;
+  --button-height-sm: 24px;
+  --shell-control-height: 32px;
   --focus-ring: var(--primary);
   --focus-width: 2px;
   --focus-offset: 2px;
+  --notification-badge-bg: #b33149;
+  --notification-badge-fg: #ffffff;
   --metric-card-height: 118px;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
                "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   --text-label: 12px; --text-xs: 12px; --text-sm: 13px; --text-base: 14px;
-  --text-md: 15px; --text-lg: 16px; --text-xl: 23px; --text-2xl: 26px;
+  --text-md: 15px; --text-lg: 16px; --text-xl: 24px; --text-2xl: 26px;
   --weight-regular: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
   --floating-filter: none;
   --glass-filter: none;
+}
+@media (max-width: 640px), (pointer: coarse) {
+  :root {
+    --control-height: 44px;
+    --control-height-sm: 40px;
+    --button-height: 44px;
+    --button-height-sm: 40px;
+    --shell-control-height: 40px;
+  }
 }
 .theme-light {
   color-scheme: light;
@@ -50,7 +64,7 @@
   --amber: #8b530e;
   --red: #b33149;
   --surface-chrome: #f7f8fb;
-  --surface-workbench: #e9edf3;
+  --surface-workbench: #eaeef4;
   --surface-panel: #ffffff;
   --surface-raised: #f5f5f7;
   --surface-hover: #ededf2;
@@ -82,7 +96,7 @@
   --shadow: 0 2px 3px rgba(27, 31, 47, 0.025), 0 8px 24px rgba(27, 31, 47, 0.035);
   --shadow-float: 0 16px 48px rgba(20, 27, 40, 0.16);
   --sidebar-bg: #f7f8fb;
-  --content-bg: #e9edf3;
+  --content-bg: #eaeef4;
   --canvas-wash: var(--surface-workbench);
   --glass-surface: #f8f9fc;
   --glass-selected: #ffffff;
@@ -93,9 +107,9 @@
 }
 .theme-dark {
   color-scheme: dark;
-  --bg: #20242b;
-  --surface: #2d333d;
-  --surface-2: #363e49;
+  --bg: #1e2229;
+  --surface: #292f38;
+  --surface-2: #303843;
   --surface-3: #414b58;
   --line: #46515f;
   --line-strong: #626f80;
@@ -110,15 +124,15 @@
   --amber: #edbd77;
   --red: #f494a6;
   --surface-chrome: #111318;
-  --surface-workbench: #20242b;
-  --surface-panel: #2d333d;
-  --surface-raised: #363e49;
-  --surface-hover: #3b4552;
-  --surface-floating: #2d333d;
+  --surface-workbench: #1e2229;
+  --surface-panel: #292f38;
+  --surface-raised: #303843;
+  --surface-hover: #37414e;
+  --surface-floating: #292f38;
   --border-floating: rgba(183, 200, 224, 0.18);
   --shadow-popover: 0 14px 40px rgba(0, 0, 0, 0.32), 0 2px 8px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --shadow-tooltip: 0 4px 16px rgba(0, 0, 0, 0.3);
-  --bg-subtle: #363e49;
+  --bg-subtle: #303843;
   --bg-muted: #414b58;
   --text-muted: #c2c8d2;
   --primary: #7db5ff;
@@ -135,17 +149,17 @@
   --neutral: #c2c8d2;
   --border: #46515f;
   --border-strong: #626f80;
-  --control-bg: #2d333d;
+  --control-bg: #292f38;
   --control-border: #778291;
   --control-border-hover: #a0abba;
   --overlay: rgba(3, 5, 9, 0.65);
   --shadow: 0 2px 6px rgba(0, 0, 0, 0.16);
   --shadow-float: 0 16px 48px rgba(0, 0, 0, 0.4);
   --sidebar-bg: #111318;
-  --content-bg: #20242b;
+  --content-bg: #1e2229;
   --canvas-wash: var(--surface-workbench);
   --glass-surface: #303843;
-  --glass-selected: #485362;
+  --glass-selected: #424e5e;
   --glass-highlight: rgba(255, 255, 255, 0.11);
   --glass-edge: rgba(255, 255, 255, 0.09);
   --glass-shadow: 0 2px 6px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.08);

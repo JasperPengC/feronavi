@@ -178,6 +178,8 @@ try {
     valueMaps: { type: { "缺陷": "DEFECT", "需求：支持导出": "REQUIREMENT", "TASK": "TASK" }, priority: { "高": "HIGH", "中": "MEDIUM", "低": "LOW" } },
     userMap: { 开发者: m2!.id }, externalIdColumn: "外部ID",
   });
+  const dry3 = await importService.dryRun(admin, batch3.batch.id);
+  ok("I7 回滚后再导入先预演：3 条可建 / 1 失败", dry3.willCreate === 3 && dry3.failed === 1, JSON.stringify(dry3).slice(0, 100));
   const c3 = await importService.confirm(admin, batch3.batch.id);
   ok("I7 回滚后再导入 → 重新创建 3 条", c3.created === 3, JSON.stringify(c3).slice(0, 100));
   const totalMaps = await db.select().from(importMapping).where(eq(importMapping.projectId, pid));
@@ -190,6 +192,22 @@ try {
   ok("已回滚批次不允许再确认（CONFLICT）", rolledBackRejected);
   const retry = await importService.confirm(admin, batch2.batch.id, { retryFailedOnly: true });
   ok("I6 retry-failed 只处理失败行（标题仍缺失 → 仍失败）", retry.created === 0 && retry.failed === 1, JSON.stringify(retry).slice(0, 100));
+
+  // 映射修正后的成功预览不能清掉上次执行失败的重试目标。
+  const corrected = await importService.createBatch(admin, pid, { filename: "retry-fixed.csv", buffer: Buffer.from("外部ID,标题,类型\nretry-fixed,修正映射后的任务,旧类型\n") });
+  const correctedMap = { fieldMap: { 标题: "title", 类型: "type" }, externalIdColumn: "外部ID" };
+  await importService.setMapping(admin, corrected.batch.id, correctedMap);
+  await importService.dryRun(admin, corrected.batch.id);
+  const failedRun = await importService.confirm(admin, corrected.batch.id);
+  ok("失败批次保留实际执行失败行", failedRun.failed === 1 && failedRun.created === 0);
+  await importService.setMapping(admin, corrected.batch.id, { ...correctedMap, valueMaps: { type: { 旧类型: "TASK" } } });
+  let missingPreview = false;
+  try { await importService.confirm(admin, corrected.batch.id, { retryFailedOnly: true }); } catch (error) { missingPreview = (error as { code?: string }).code === "CONFLICT"; }
+  ok("改映射后重试必须重新预演", missingPreview);
+  const correctedPreview = await importService.dryRun(admin, corrected.batch.id);
+  ok("修正映射的新预览已无错误", correctedPreview.failed === 0 && correctedPreview.willCreate === 1);
+  const correctedRetry = await importService.confirm(admin, corrected.batch.id, { retryFailedOnly: true });
+  ok("新预览不丢失旧失败行且仅重试该行", correctedRetry.created === 1 && correctedRetry.failed === 0);
 
   // ── HTTP 上传路径（锁住 multipart 注册这类缺陷）──
   // ⚠️ 此前 @fastify/multipart 只做了类型导入、**从未注册**，导致所有 multipart 端点

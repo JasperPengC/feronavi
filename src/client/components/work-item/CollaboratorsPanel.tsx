@@ -23,8 +23,8 @@ export function CollaboratorsPanel({ workItemId, projectId }: { workItemId: stri
   });
   const rows = Array.isArray(list.data) ? list.data : [];
   const names = new Map((members.data ?? []).map((m) => [m.id, `${m.name} @${m.username}`]));
-  const options = useMemo(() => [{ value: "", label: t("wiCollab.member") },
-    ...(members.data ?? []).filter((m) => !rows.some((r) => r.memberId === m.id)).map((m) => ({ value: m.id, label: names.get(m.id) ?? m.username }))], [members.data, rows]);
+  const options = useMemo(() => [
+    ...(members.data ?? []).filter((m) => !rows.some((r) => r.memberId === m.id)).map((m) => ({ value: m.id, label: m.name || m.username, secondaryLabel: `@${m.username}` }))], [members.data, rows]);
   const add = useMutation({
     mutationFn: () => apiPost(`/api/v1/work-items/${workItemId}/collaborators`, { memberId }),
     onSuccess: async () => { setMemberId(""); setError(null); await qc.invalidateQueries({ queryKey: ["work-item-collaborators", workItemId] }); },
@@ -41,7 +41,7 @@ export function CollaboratorsPanel({ workItemId, projectId }: { workItemId: stri
       {rows.length === 0 && !list.isLoading && <p className="muted">{t("wiCollab.empty")}</p>}
       {rows.length > 0 && <ul className="wi-drawer__links">{rows.map((r) => <li key={r.memberId}><span className="tag">{t("wiCollab.role")}</span><span>{names.get(r.memberId) ?? r.memberId}</span><Button size="sm" variant="ghost" onClick={() => remove.mutate(r.memberId)}>{t("common.remove")}</Button></li>)}</ul>}
       <div className="wi-drawer__add-link">
-        <Select ariaLabel={t("wiCollab.member")} value={memberId} onChange={setMemberId} searchable options={options} />
+        <Select ariaLabel={t("wiCollab.member")} value={memberId} onChange={setMemberId} searchable placeholder={t("wiCollab.member")} options={options} />
         <Button size="sm" variant="primary" disabled={!memberId || add.isPending} onClick={() => add.mutate()}>{t("common.add")}</Button>
       </div>
       {error && <p className="field-error" role="alert">{error}</p>}

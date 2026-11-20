@@ -4,6 +4,7 @@ import { render, screen, waitFor, cleanup, fireEvent } from "@testing-library/re
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { makeRouter } from "../src/client/router.tsx";
+import * as Y from "yjs";
 import { t, setLocale } from "../src/client/i18n/index.ts";
 
 const ACTOR = {
@@ -16,9 +17,22 @@ const P = "77777777-7777-7777-7777-777777777777";
 const calls: string[] = [];
 
 function stub(handlers: Record<string, [number, unknown]>) {
+  const documents = new Map<string, Y.Doc>();
   vi.stubGlobal("fetch", vi.fn(async (i: RequestInfo | URL, init?: RequestInit) => {
     const u = String(i);
     calls.push(`${init?.method ?? "GET"} ${u.replace("http://localhost", "")}`);
+    const room = /\/collaboration\/rooms\/PAGE\/([^/]+)(?:\/(.*))?$/u.exec(u);
+    if (room) {
+      const id = room[1]!, action = room[2];
+      const detail = handlers[`/pages/${id}`]?.[1] as typeof DETAIL | undefined;
+      let doc = documents.get(id);
+      if (!doc) { doc = new Y.Doc(); doc.getText("content").insert(0, detail?.content ?? ""); documents.set(id, doc); }
+      let body: unknown = { members: [] };
+      if (action === "state") body = { roomId: id, sequence: 0, baseRevisionId: detail?.currentRevisionId, stateBase64: Buffer.from(Y.encodeStateAsUpdate(doc)).toString("base64") };
+      if (action === "updates") Y.applyUpdate(doc, Buffer.from(JSON.parse(String(init?.body)).updateBase64, "base64"));
+      if (action === "publish") body = { page: { ...detail, content: doc.getText("content").toString() }, indexing: { status: "QUEUED" } };
+      return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+    }
     for (const [k, [status, body]] of Object.entries(handlers)) {
       if (u.includes(k)) return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
     }
@@ -123,6 +137,7 @@ describe("Wiki 页", () => {
     expect(screen.queryByRole("textbox", { name: "文档正文" })).toBeNull();
     expect(screen.queryByRole("textbox", { name: "文档标题" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+    await waitFor(() => expect((screen.getByRole("textbox", { name: "文档正文" }) as HTMLTextAreaElement).disabled).toBe(false));
     expect((screen.getByRole("textbox", { name: "文档正文" }) as HTMLTextAreaElement).value).toContain("# 发布指南");
   });
 
@@ -138,6 +153,7 @@ describe("Wiki 页", () => {
     renderPage();
     await screen.findByRole("button", { name: "编辑" });
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+    await waitFor(() => expect((screen.getByRole("textbox", { name: "文档正文" }) as HTMLTextAreaElement).disabled).toBe(false));
     fireEvent.change(screen.getByRole("textbox", { name: "文档正文" }), { target: { value: "未保存的新步骤" } });
     fireEvent.click(screen.getAllByText("受限文档")[0]!);
     await screen.findByRole("dialog");
@@ -154,14 +170,15 @@ describe("Wiki 页", () => {
     const { qc } = renderPage();
     await screen.findByRole("button", { name: "编辑" });
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+    await waitFor(() => expect((screen.getByRole("textbox", { name: "文档正文" }) as HTMLTextAreaElement).disabled).toBe(false));
     fireEvent.change(screen.getByRole("textbox", { name: "文档正文" }), { target: { value: "我的修改" } });
     qc.setQueryData(["wiki-page", "p1"], { ...readableDetail, currentRevisionId: "r9", content: "其他人的新版本" });
     await waitFor(() => expect((screen.getByRole("textbox", { name: "文档正文" }) as HTMLTextAreaElement).value).toBe("我的修改"));
     fireEvent.click(screen.getByRole("button", { name: t("wk.saveChanges") }));
     await waitFor(() => {
-      const saveCall = vi.mocked(fetch).mock.calls.find(([url, init]) => String(url).includes("/pages/p1") && init?.method === "PATCH");
+      const saveCall = vi.mocked(fetch).mock.calls.find(([url, init]) => String(url).includes("/PAGE/p1/publish") && init?.method === "POST");
       expect(saveCall).toBeTruthy();
-      expect(JSON.parse(String(saveCall![1]!.body))).toMatchObject({ content: "我的修改", expectedRevisionId: "r1" });
+      expect(JSON.parse(String(saveCall![1]!.body))).toMatchObject({ expectedRevisionId: "r1", userConfirmed: true });
     });
   });
 
@@ -170,6 +187,7 @@ describe("Wiki 页", () => {
     const { router } = renderPage();
     await screen.findByRole("button", { name: "编辑" });
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+    await waitFor(() => expect((screen.getByRole("textbox", { name: "文档正文" }) as HTMLTextAreaElement).disabled).toBe(false));
     fireEvent.change(screen.getByRole("textbox", { name: "文档正文" }), { target: { value: "尚未提交的正文" } });
     fireEvent.click(screen.getByRole("link", { name: "← 项目" }));
     await screen.findByRole("dialog");
@@ -178,18 +196,44 @@ describe("Wiki 页", () => {
     expect((screen.getByRole("textbox", { name: "文档正文" }) as HTMLTextAreaElement).value).toBe("尚未提交的正文");
   });
 
-  it("保存等待期间锁定草稿与选页，并从不含正文的保存响应恢复正确阅读内容", async () => {
+  it("协作发送失败时保留草稿，保存不退回整篇PATCH，恢复后继续发布", async () => {
+    stubReadablePages();
+    const previousFetch = fetch;
+    let blocked = true;
+    const requests: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input); requests.push(`${init?.method ?? "GET"} ${path}`);
+      if (blocked && path.endsWith("/PAGE/p1/updates")) return new Response(JSON.stringify({ code: "FORBIDDEN", message: "验收：暂不接受更新" }), { status: 403 });
+      return previousFetch(input, init);
+    }));
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "编辑", exact: true }));
+    await waitFor(() => expect((screen.getByRole("textbox", { name: "文档正文" }) as HTMLTextAreaElement).disabled).toBe(false));
+    fireEvent.change(screen.getByRole("textbox", { name: "文档正文" }), { target: { value: "发送失败后仍保留的草稿" } });
+    await screen.findByText(t("wk.collab.error"));
+    fireEvent.click(screen.getByRole("button", { name: t("wk.saveChanges") }));
+    await screen.findByText("验收：暂不接受更新");
+    expect((screen.getByRole("textbox", { name: "文档正文" }) as HTMLTextAreaElement).value).toBe("发送失败后仍保留的草稿");
+    expect(requests.some(request => request.startsWith("PATCH") && request.endsWith("/pages/p1"))).toBe(false);
+    expect(requests.some(request => request.endsWith("/PAGE/p1/publish"))).toBe(false);
+    blocked = false;
+    fireEvent.click(screen.getByRole("button", { name: t("wk.saveChanges") }));
+    await waitFor(() => expect(requests.some(request => request.endsWith("/PAGE/p1/publish"))).toBe(true));
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "文档正文" })).toBeNull());
+  });
+
+  it("保存等待期间锁定草稿与选页，并显示服务端返回的合并正文", async () => {
     stubReadablePages();
     let resolveSave: (response: Response) => void = () => {};
     let persisted = false;
     const previousFetch = fetch;
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
-      if (path.endsWith("/pages/p1") && init?.method === "PATCH") {
+      if (path.endsWith("/PAGE/p1/publish") && init?.method === "POST") {
         return new Promise<Response>((resolve) => { resolveSave = resolve; });
       }
       if (path.endsWith("/pages/p1") && persisted) {
-        return new Response(JSON.stringify({ ...readableDetail, content: "已保存的发布步骤", revisionNo: 2, currentRevisionId: "r2" }),
+        return new Response(JSON.stringify({ ...readableDetail, content: "已保存的发布步骤，协作者补充", revisionNo: 2, currentRevisionId: "r2" }),
           { status: 200, headers: { "content-type": "application/json" } });
       }
       return previousFetch(input, init);
@@ -197,6 +241,7 @@ describe("Wiki 页", () => {
     const { router } = renderPage();
     await screen.findByRole("button", { name: "编辑" });
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+    await waitFor(() => expect((screen.getByRole("textbox", { name: "文档正文" }) as HTMLTextAreaElement).disabled).toBe(false));
     fireEvent.change(screen.getByRole("textbox", { name: "文档正文" }), { target: { value: "已保存的发布步骤" } });
     fireEvent.click(screen.getByRole("button", { name: t("wk.saveChanges") }));
     await waitFor(() => expect((screen.getByRole("textbox", { name: "文档正文" }) as HTMLTextAreaElement).disabled).toBe(true));
@@ -209,9 +254,9 @@ describe("Wiki 页", () => {
     expect((screen.getByRole("textbox", { name: "文档标题" }) as HTMLInputElement).value).toBe("公开文档");
     persisted = true;
     const { content: _content, changeSummary: _summary, ...metadata } = readableDetail;
-    resolveSave(new Response(JSON.stringify({ ...metadata, revisionNo: 2, currentRevisionId: "r2" }),
+    resolveSave(new Response(JSON.stringify({ page: { ...metadata, content: "已保存的发布步骤，协作者补充", revisionNo: 2, currentRevisionId: "r2" }, indexing: { status: "QUEUED" } }),
       { status: 200, headers: { "content-type": "application/json" } }));
-    await screen.findByText("已保存的发布步骤");
+    await screen.findByText("已保存的发布步骤，协作者补充");
     expect(screen.queryByRole("textbox", { name: "文档正文" })).toBeNull();
     expect(screen.getByRole("heading", { name: "公开文档" })).toBeTruthy();
   });
@@ -239,7 +284,7 @@ describe("Wiki 页", () => {
     expect(screen.getByText("受限")).toBeTruthy();
   });
 
-  it("编辑详情：显示版本号与正文，保存走 PATCH", async () => {
+  it("编辑详情：显示版本号与正文，保存走协作发布", async () => {
     stub({
       "/auth/me": [200, ACTOR], [`/projects/${P}/pages`]: [200, PAGES],
       [`/projects/${P}/members`]: [200, { members: [] }],
@@ -254,11 +299,12 @@ describe("Wiki 页", () => {
     fireEvent.click(screen.getAllByText("受限文档")[0]!);
     await screen.findByText("机密正文");
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+    await waitFor(() => expect((screen.getByRole("textbox", { name: "文档正文" }) as HTMLTextAreaElement).disabled).toBe(false));
     await waitFor(() => expect((screen.getByLabelText("文档正文") as HTMLTextAreaElement).value).toBe("机密正文"));
     expect(screen.getAllByText("第 1 版").length).toBeGreaterThan(0);   // 版本徽标与历史行都有
     fireEvent.change(screen.getByLabelText("文档正文"), { target: { value: "更新后的机密正文" } });
     fireEvent.click(screen.getByRole("button", { name: /保存修改|wk.saveChanges/ }));
-    await waitFor(() => expect(calls.some((c) => c.startsWith("PATCH") && c.includes("/pages/p2"))).toBe(true));
+    await waitFor(() => expect(calls.some((c) => c.startsWith("POST") && c.includes("/PAGE/p2/publish"))).toBe(true));
   });
 
   it("乐观锁冲突给出可读提示，而不是静默覆盖", async () => {
@@ -271,24 +317,20 @@ describe("Wiki 页", () => {
     });
     renderPage();
     await waitFor(() => expect(screen.getByText("受限文档")).toBeTruthy());
-    // 覆盖 fetch：PATCH 返回 VERSION_CONFLICT
+    // 发布版本已被其他编辑者推进，保留原草稿并提示冲突。
+    const previousFetch = fetch;
     vi.stubGlobal("fetch", vi.fn(async (i: RequestInfo | URL, init?: RequestInit) => {
       const u = String(i);
-      if (u.includes("/pages/p2") && init?.method === "PATCH") {
+      if (u.includes("/PAGE/p2/publish") && init?.method === "POST") {
         return new Response(JSON.stringify({ code: "VERSION_CONFLICT", message: "该文档已被他人修改，请刷新后重试", details: null }),
           { status: 409, headers: { "content-type": "application/json" } });
       }
-      if (u.includes("/auth/me")) return new Response(JSON.stringify(ACTOR), { status: 200, headers: { "content-type": "application/json" } });
-      if (u.includes(`/projects/${P}/pages`)) return new Response(JSON.stringify(PAGES), { status: 200, headers: { "content-type": "application/json" } });
-      if (u.includes("/revisions")) return new Response(JSON.stringify({ revisions: [] }), { status: 200, headers: { "content-type": "application/json" } });
-      if (u.includes("/permissions")) return new Response(JSON.stringify({ permissions: [] }), { status: 200, headers: { "content-type": "application/json" } });
-      if (u.includes("/members")) return new Response(JSON.stringify({ members: [] }), { status: 200, headers: { "content-type": "application/json" } });
-      if (u.includes("/pages/p2")) return new Response(JSON.stringify(DETAIL), { status: 200, headers: { "content-type": "application/json" } });
-      return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+      return previousFetch(i, init);
     }));
     fireEvent.click(screen.getAllByText("受限文档")[0]!);
     await screen.findByText("机密正文");
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+    await waitFor(() => expect((screen.getByRole("textbox", { name: "文档正文" }) as HTMLTextAreaElement).disabled).toBe(false));
     await waitFor(() => expect(screen.getByLabelText("文档正文")).toBeTruthy());
     fireEvent.change(screen.getByLabelText("文档正文"), { target: { value: "更新后的机密正文" } });
     fireEvent.click(screen.getByRole("button", { name: /保存修改|wk.saveChanges/ }));
@@ -314,7 +356,7 @@ describe("Wiki 页", () => {
     expect(screen.getByText("移除")).toBeTruthy();
   });
 
-  it("显示当前页索引与真实切片状态，并执行检索、引用问答和重建", async () => {
+  it("文档页保留真实索引维护，问答通过独立项目入口访问", async () => {
     const p1 = { ...PAGES.pages[0]!, content: "备份数据库与密钥", revisionNo: 2, changeSummary: "更新" };
     const calls: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -341,13 +383,14 @@ describe("Wiki 页", () => {
     renderPage();
     await screen.findByText("备份数据库与密钥");
 
-    fireEvent.click(screen.getByRole("button", { name: "知识库" }));
+    expect(screen.getByRole("link", { name: "知识助手", exact: true }).getAttribute("href")).toBe("/assistant");
+    fireEvent.click(screen.getByRole("button", { name: "索引状态" }));
     await waitFor(() => expect(document.querySelector(".knowledge-panel")).toBeTruthy());
     const knowledgePanel = document.querySelector(".knowledge-panel");
     expect(knowledgePanel?.closest(".wiki-layout")).toBeTruthy();
     expect(knowledgePanel?.parentElement?.classList.contains("wiki-rag-column")).toBe(true);
     expect(document.querySelector(".wiki-layout .wiki-recent-panel")).toBeTruthy();
-    expect(screen.getByRole("complementary", { name: "知识库" })).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "索引状态" })).toBeTruthy();
 
     const preview = await screen.findByRole("button", { name: /kn\.chunkPreview|切片预览|文本切片/ });
     fireEvent.click(preview);
@@ -355,16 +398,10 @@ describe("Wiki 页", () => {
     expect(screen.getByText("备份数据库与密钥。")).toBeTruthy();
     expect(screen.getByText(/kn\.hasVector|已向量化/)).toBeTruthy();
 
-    const searchInput = screen.getByLabelText("知识检索");
-    fireEvent.change(searchInput, { target: { value: "备份密钥" } });
-    fireEvent.keyDown(searchInput, { key: "Enter" });
-    await waitFor(() => expect(calls.some((call) => call.includes("/knowledge/search?q=%E5%A4%87%E4%BB%BD%E5%AF%86%E9%92%A5"))).toBe(true));
-    expect(screen.getAllByText("公开文档").length).toBeGreaterThan(1);
-
-    const askInput = screen.getByLabelText("知识问答");
-    fireEvent.change(askInput, { target: { value: "要备份什么？" } });
-    fireEvent.keyDown(askInput, { key: "Enter" });
-    await waitFor(() => expect(screen.getByText("同时备份数据库和密钥。")).toBeTruthy());
+    expect(screen.queryByLabelText("知识检索")).toBeNull();
+    expect(screen.queryByLabelText("知识问答")).toBeNull();
+    const assistant = screen.getByRole("link", { name: "在知识助手中提问" });
+    expect(assistant.getAttribute("href")).toBe(`/assistant?project=${P}`);
 
     fireEvent.click(screen.getByRole("button", { name: /kn\.reindex|重建索引/ }));
     await waitFor(() => expect(calls.some((call) => call.startsWith("POST") && call.includes("/pages/p1/reindex"))).toBe(true));

@@ -59,7 +59,7 @@ export function SettingsPage({ section = "personal" }: { section?: SettingsTab }
     ] : []),
   ] : [
     ...(has("ai:configure") ? [{ value: "ai", label: t("se.areaAi"), content: <AiSettings {...feedback} /> }] : []),
-    ...(has("integration:manage") ? [{ value: "messaging", label: t("se.areaMessaging"), content: <><ImSettings {...feedback} /><WebhookSettings {...feedback} /><IntegrationSettings {...feedback} /></> }] : []),
+    ...(has("integration:manage") ? [{ value: "messaging", label: t("se.areaMessaging"), content: <><ImSettings compact {...feedback} /><WebhookSettings compact {...feedback} /><IntegrationSettings compact {...feedback} /></> }] : []),
     ...(has("setting:manage") ? [{ value: "access", label: t("se.areaAccess"), content: <><SsoSettings {...feedback} /><ScimSettings {...feedback} /></> }] : []),
   ];
   const selected = areas.find(area => area.value === selection[section])?.value ?? areas[0]?.value ?? "";
@@ -80,7 +80,7 @@ export function SettingsPage({ section = "personal" }: { section?: SettingsTab }
           <PageTabs id={tabsId} label={pageTitle} tabs={areas} value={selected}
             onChange={value => setSelection(current => ({ ...current, [section]: value }))} />
           {areas.map(area => <TabPanel key={`${section}-${area.value}`} tabsId={tabsId} value={area.value} activeValue={selected}>
-            <div className="settings-grid">{area.content}</div>
+            <div className={`settings-grid${area.value === "messaging" ? " settings-grid--messaging" : ""}`}>{area.content}</div>
           </TabPanel>)}
         </>}
 

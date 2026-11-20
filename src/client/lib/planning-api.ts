@@ -3,6 +3,7 @@ import { apiGet, apiPost, apiPatch, apiDelete } from "./api.ts";
 
 export interface PlanEntity {
   id: string;
+  projectId?: string;
   name: string;
   description?: string | null;
   startDate?: string | null;
@@ -11,14 +12,18 @@ export interface PlanEntity {
   versionTag?: string | null;
   releaseDate?: string | null;
   archivedAt?: string | null;
+  completedAt?: string | null;
+  carryOver?: boolean;
+  pendingWorkItemCount?: number;
+  completionResult?: { completedAt: string; movedCount: number; targetIterationId: string | null; movedWorkItemIds: string[] } | null;
   progressMode?: string;
   progressValue?: string | null;
   createdAt?: string;
 }
 
 export const planning = {
-  list: (kind: string, projectId: string) =>
-    apiGet<PlanEntity[]>(`/api/v1/projects/${projectId}/${kind}s`),
+  list: (kind: string, projectId: string, includeArchived = false) =>
+    apiGet<PlanEntity[]>(`/api/v1/projects/${projectId}/${kind}s`, includeArchived ? { archived: true } : undefined),
   create: (kind: string, projectId: string, body: unknown) =>
     apiPost<PlanEntity>(`/api/v1/projects/${projectId}/${kind}s`, body),
   update: (kind: string, id: string, body: unknown) =>
@@ -27,6 +32,8 @@ export const planning = {
     apiPost(`/api/v1/${kind}s/${id}/archive`),
   unarchive: (kind: string, id: string) =>
     apiPost(`/api/v1/${kind}s/${id}/unarchive`),
+  complete: (kind: "iteration" | "release", id: string, body: { targetIterationId?: string } = {}) =>
+    apiPost<{ id: string; completedAt: string; alreadyCompleted: boolean; movedCount: number; completionResult: PlanEntity["completionResult"] }>(`/api/v1/${kind}s/${id}/complete`, body),
 };
 
 export interface CalendarDay { date: string; items: { id: string; key: string; title: string; type: string }[]; count: number }

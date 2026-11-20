@@ -12,6 +12,7 @@ import { db, sql } from "../../db/index.ts";
 import { todo, project, workflowState } from "../../db/schema.ts";
 import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
+import { publishWorkspaceInvalidation } from "./workspace-events.service.ts";
 
 function hasOrgGrant(actor: Actor): boolean {
   return actor.grants.some((g) => g.scopeType === "ORG");
@@ -145,6 +146,7 @@ export async function createTodo(actor: Actor, input: { title: string; dueDate?:
   const [row] = await db.insert(todo).values({
     memberId: actor.memberId, title: input.title, dueDate: input.dueDate ?? null,
   }).returning();
+  await publishWorkspaceInvalidation({ domain: "todo", resourceType: "TODO", resourceId: row!.id, memberId: actor.memberId });
   return row;
 }
 
@@ -164,6 +166,7 @@ export async function updateTodo(
     set.doneAt = patch.done ? new Date() : null;   // 完成时间随状态写入/清空
   }
   const [row] = await db.update(todo).set(set).where(eq(todo.id, id)).returning();
+  await publishWorkspaceInvalidation({ domain: "todo", resourceType: "TODO", resourceId: id, memberId: actor.memberId });
   return row;
 }
 
@@ -172,6 +175,7 @@ export async function deleteTodo(actor: Actor, id: string) {
     .where(and(eq(todo.id, id), eq(todo.memberId, actor.memberId)))
     .returning({ id: todo.id });
   if (res.length === 0) throw forbidden();
+  await publishWorkspaceInvalidation({ domain: "todo", resourceType: "TODO", resourceId: id, memberId: actor.memberId });
 }
 
 void isNull;

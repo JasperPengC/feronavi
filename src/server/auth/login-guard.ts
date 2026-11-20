@@ -1,69 +1,94 @@
-/**
- * 登录失败锁定 —— **IP + 账号双维度**（第 5.9 节：10 次失败 → 锁 10 分钟）
- *
- * 两个维度缺一不可：
- *   - 只按账号 → 攻击者可以拿一个账号把**别人**锁死（拒绝服务）
- *   - 只按 IP   → 攻击者换 IP 即可绕过；且 NAT 后面的整个办公室会被一起锁
- *   所以两边都记，任一维度超限即拒绝。
- *
- * 计数放 Valkey（**可丢**）：锁定状态丢了最坏是少挡几次尝试，
- * 不属于「真相」，不需要进 PG（与队列/会话的区别见第 4.4 节）。
- */
+/** 登录双维度防线：Redis 在副本间共享，本地限额始终生效并覆盖缓存故障。 */
 import Redis from "ioredis";
+import { createHash } from "node:crypto";
 
 const MAX_FAILURES = 10;
-const LOCK_SECONDS = 10 * 60;
-const WINDOW_SECONDS = 10 * 60;
+const LOCK_SECONDS = 600;
+const MAX_ENTRIES = 10_000;
+const counters = new Map<string, { count: number; expires: number }>();
+const key = (kind: string, value: string) => `feronavi:login:${kind}:${createHash("sha256").update(value).digest("hex")}`;
+const account = (username: string) => username.toLowerCase();
+const failureKeys = (username: string, ip: string) => [key("failure:acct", account(username)), key("failure:ip", ip)];
+const attemptKeys = (username: string, ip: string) => [key("attempt:acct", account(username)), key("attempt:ip", ip)];
 
-let client: Redis | null = null;
-let disabled = false;
-
-function getClient(): Redis | null {
-  if (disabled) return null;
-  if (client) return client;
-  const url = process.env.REDIS_URL;
-  if (!url) { disabled = true; return null; }
-  try {
-    client = new Redis(url, { maxRetriesPerRequest: 1, enableOfflineQueue: false });
-    client.on("error", () => {});
-    return client;
-  } catch { disabled = true; return null; }
+function localCount(k: string): number {
+  const entry = counters.get(k);
+  if (!entry) return 0;
+  if (entry.expires <= Date.now()) { counters.delete(k); return 0; }
+  return entry.count;
+}
+function localIncrement(k: string, seconds: number): number {
+  const count = localCount(k);
+  if (!count && counters.size >= MAX_ENTRIES) {
+    for (const [storedKey, entry] of counters) if (entry.expires <= Date.now()) counters.delete(storedKey);
+    // 活跃条目不能被随机新账号挤掉；容量耗尽时拒绝新键，内存与计算队列均有界。
+    if (counters.size >= MAX_ENTRIES) return Number.POSITIVE_INFINITY;
+  }
+  counters.set(k, { count: count + 1, expires: counters.get(k)?.expires ?? Date.now() + seconds * 1000 });
+  return count + 1;
 }
 
-const acctKey = (u: string) => `feronavi:loginfail:acct:${u.toLowerCase()}`;
-const ipKey = (ip: string) => `feronavi:loginfail:ip:${ip}`;
+let client: Redis | undefined;
+let connecting: Promise<Redis | null> | undefined;
+let retryAfter = 0;
+async function getClient(): Promise<Redis | null> {
+  if (!process.env.REDIS_URL || Date.now() < retryAfter) return null;
+  if (client?.status === "ready") return client;
+  if (connecting) return connecting;
+  client?.disconnect();
+  const next = new Redis(process.env.REDIS_URL, {
+    lazyConnect: true, enableOfflineQueue: false, maxRetriesPerRequest: 0,
+    connectTimeout: 250, commandTimeout: 250, retryStrategy: () => null,
+  });
+  next.on("error", () => {});
+  client = next;
+  connecting = next.connect().then(() => next).catch(() => {
+    next.disconnect(); retryAfter = Date.now() + 5000; return null;
+  }).finally(() => { connecting = undefined; });
+  return connecting;
+}
+async function shared<T>(operation: (c: Redis) => Promise<T>): Promise<T | null> {
+  try { const c = await getClient(); return c ? await operation(c) : null; }
+  catch { client?.disconnect(); retryAfter = Date.now() + 5000; return null; }
+}
 
-/**
- * 是否已锁定。
- * ⚠️ **Valkey 不可用时返回 false（放行）** —— 登录是入口，缓存故障不能把所有人挡在门外。
- * 代价是锁定在这段时间内失效，属可接受降级（真实防线是密码强度 + 速率限制）。
- */
+/** 在昂贵校验前原子预留额度，避免并发请求全部通过“先查后记”。 */
+export async function consumeLoginAttempt(username: string, ip: string): Promise<boolean> {
+  const keys = attemptKeys(username, ip);
+  const counts = keys.map((k) => localIncrement(k, 60));
+  if (counts[0]! > 10 || counts[1]! > 20) return false;
+  const result = await shared((c) => c.eval(`
+    local a = redis.call('INCR', KEYS[1])
+    if a == 1 then redis.call('EXPIRE', KEYS[1], 60) end
+    local i = redis.call('INCR', KEYS[2])
+    if i == 1 then redis.call('EXPIRE', KEYS[2], 60) end
+    if a > 10 or i > 20 then return 0 end
+    return 1
+  `, 2, ...keys));
+  return result === null || Number(result) === 1;
+}
+
 export async function isLockedOut(username: string, ip: string): Promise<boolean> {
-  try {
-    const c = getClient();
-    if (!c) return false;
-    const [a, i] = await c.mget(acctKey(username), ipKey(ip));
-    return Number(a ?? 0) >= MAX_FAILURES || Number(i ?? 0) >= MAX_FAILURES;
-  } catch {
-    return false;
-  }
+  const keys = failureKeys(username, ip);
+  if (keys.some((k) => localCount(k) >= MAX_FAILURES)) return true;
+  const counts = await shared((c) => c.mget(...keys));
+  return counts?.some((count) => Number(count ?? 0) >= MAX_FAILURES) ?? false;
 }
 
 export async function recordLoginFailure(username: string, ip: string): Promise<void> {
-  try {
-    const c = getClient();
-    if (!c) return;
-    const pipe = c.multi();
-    pipe.incr(acctKey(username)); pipe.expire(acctKey(username), LOCK_SECONDS);
-    pipe.incr(ipKey(ip));         pipe.expire(ipKey(ip), WINDOW_SECONDS);
-    await pipe.exec();
-  } catch { /* 降级：记不上就算了，不能因为计数失败让登录报错 */ }
+  const keys = failureKeys(username, ip);
+  keys.forEach((k) => localIncrement(k, LOCK_SECONDS));
+  await shared((c) => c.eval(`
+    for _, k in ipairs(KEYS) do
+      if redis.call('INCR', k) == 1 then redis.call('EXPIRE', k, ARGV[1]) end
+    end
+    return 1
+  `, 2, ...keys, LOCK_SECONDS));
 }
 
-export async function clearLoginFailures(username: string, ip: string): Promise<void> {
-  try {
-    const c = getClient();
-    if (!c) return;
-    await c.del(acctKey(username), ipKey(ip));
-  } catch { /* 同上 */ }
+export async function clearLoginFailures(username: string, _ip: string): Promise<void> {
+  // 成功仅清账号失败数：不能用自有账号登录清除同IP撞库累计，也不清请求额度。
+  const k = failureKeys(username, "")[0]!;
+  counters.delete(k);
+  await shared((c) => c.del(k));
 }

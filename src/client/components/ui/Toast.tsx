@@ -13,9 +13,10 @@ function emit() { listeners.forEach((listener) => listener(items)); }
 function remove(id: number) { items = items.filter((item) => item.id !== id); emit(); }
 function push(kind: ToastKind, message: ReactNode) {
   const id = nextId++;
-  items = [...items, { id, kind, message }];
+  // 错误需要读完并手动关闭；限制数量，避免连续故障遮住整个工作区。
+  items = [...items, { id, kind, message }].slice(-3);
   emit();
-  window.setTimeout(() => remove(id), 4200);
+  if (kind !== "error") window.setTimeout(() => remove(id), 4200);
 }
 
 export const toast = {

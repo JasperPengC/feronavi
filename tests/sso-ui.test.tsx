@@ -39,9 +39,12 @@ describe("SSO 管理", () => {
     expect(screen.getByText(/已配置密钥/)).toBeTruthy();
     expect(screen.getByText(/已启用/)).toBeTruthy();
 
+    expect(screen.queryByLabelText("Issuer（https）")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "新建身份源" }));
+    expect(screen.getByRole("dialog")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Issuer（https）"), { target: { value: "https://idp2.example.com" } });
     fireEvent.change(screen.getByLabelText("Client ID"), { target: { value: "client-2" } });
-    fireEvent.click(screen.getByRole("button", { name: "新建身份源" }));
+    fireEvent.click(screen.getByRole("dialog").querySelector('button[type="submit"]')!);
     await waitFor(() => expect(posts.length).toBe(1));
     expect(posts[0]!.body).toMatchObject({ kind: "OIDC", issuer: "https://idp2.example.com", clientId: "client-2", enabled: false, autoProvision: false });
     expect(onSuccess).toHaveBeenCalledWith("身份源已保存");

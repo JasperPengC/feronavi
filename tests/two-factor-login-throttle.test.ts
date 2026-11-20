@@ -2,6 +2,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const fake = vi.hoisted(() => ({ failures: 0, correct: false }));
 vi.mock("../src/server/auth/login-guard.ts", () => ({
+  consumeLoginAttempt: async () => true,
   isLockedOut: async () => fake.failures >= 10,
   recordLoginFailure: async () => { fake.failures++; },
   clearLoginFailures: async () => { fake.failures = 0; },

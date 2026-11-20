@@ -86,7 +86,7 @@ export function TransferWatchersPanel({ workItemId, version, assigneeId, onTrans
       {canAssign && (
         <div className="tw-transfer-form">
           <Select ariaLabel={t("tw.assignee")} value={targetId} onChange={setTargetId} searchable
-            options={[{ value: "", label: t("tw.chooseAssignee") }, ...(members.data ?? []).map((m) => ({ value: m.id, label: `${m.name} @${m.username}` }))]} />
+            options={[{ value: "", label: t("tw.chooseAssignee") }, ...(members.data ?? []).map((m) => ({ value: m.id, label: m.name || m.username, secondaryLabel: `@${m.username}` }))]} />
           <TextInput aria-label={t("tw.reason")} placeholder={t("tw.reasonHint")} value={reason} onChange={(e) => setReason(e.target.value)} />
           <Button size="sm" variant="primary" disabled={!targetId || busy} onClick={() => void transfer()}>{t("tw.transfer")}</Button>
         </div>

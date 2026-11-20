@@ -1,0 +1,61 @@
+数据库镜像 · 第三方组件声明
+============================
+
+Feronavi · 数据库镜像
+Copyright (C) 2026 Feronavi contributors
+
+本镜像在 PostgreSQL 之上分发了下列第三方组件。各组件的版权归其各自
+所有者，并在下方所列许可证下使用。本文件是仓库根目录 NOTICE 的
+**数据库镜像专属子集** —— 只声明本镜像实际分发的组件。
+
+
+PostgreSQL 16
+-------------
+许可证：PostgreSQL License
+版权：Copyright (c) 1996-2026, PostgreSQL Global Development Group
+      Copyright (c) 1994, The Regents of the University of California
+说明：数据库本体，来自官方 postgres:16-alpine3.24 镜像，保留 PostgreSQL 16、XML、XSLT、GSSAPI、LDAP、LLVM JIT 和 ICU 能力。
+
+
+pgvector 0.8.7
+--------------
+许可证：PostgreSQL License
+版权：Portions Copyright (c) 1996-2026, PostgreSQL Global Development Group
+      Portions Copyright (c) 1994, The Regents of the University of California
+说明：向量检索扩展，提供 semantic search 所需的 vector 类型与索引。
+源码：https://github.com/pgvector/pgvector
+
+
+zhparser v2.3
+-------------
+许可证：PostgreSQL License
+版权：Portions Copyright (c) 2012-2013, Jov (amutu@amutu.com)
+说明：PostgreSQL 中文分词扩展。
+      zhparser 的仓库根目录未提供 LICENSE 文件，仅有 COPYRIGHT，
+      其内容为 PostgreSQL License。
+
+
+SCWS 1.2.3
+----------
+许可证：BSD（3 条款）
+版权：Copyright (C) 2007-2013 hightman. All rights reserved.
+说明：zhparser 依赖的简易中文分词库，随本镜像分发。
+      SCWS 未随源码包提供标准命名的许可证文件，但 COPYING 声明为
+      BSD 许可证，条款为标准三条款 BSD（保留版权声明、保留免责声明、
+      不得以项目名称为衍生产品背书）。
+源码：http://www.xunsearch.com/scws/
+
+
+扩展的完整许可证和版权正文见本目录 licenses/ 下的
+pgvector-LICENSE、zhparser-COPYRIGHT、scws-COPYING。
+本目录 LICENSE 为项目整体 AGPL-3.0-only 许可证。
+
+
+libxml2 2.13.9 + Feronavi security revision 3
+-------------------------------------------
+许可证：MIT
+说明：保留 Alpine 3.24 的 CVE-2026-6732 修复，回移上游六项安全修复，
+      保留 libxml2.so.2 ABI，使 PostgreSQL、libxslt、LLVM 使用同一个修复库。
+      原始源码、补丁上游提交和校验和见随镜像的 security/libxml2-backports.json。
+完整版权与许可见 licenses/libxml2-Copyright。
+源码：https://gitlab.gnome.org/GNOME/libxml2

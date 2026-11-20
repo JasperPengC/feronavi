@@ -32,7 +32,7 @@ await ensureInitialized();
 const app = await buildApp({ logger: false });
 await app.listen({ port: Number(process.env.PORT ?? 3987), host: "127.0.0.1" });
 const BASE = process.env.BASE ?? "http://127.0.0.1:3987";
-const DAY = new Date().toISOString().slice(0, 10);
+const DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 
 try {
   // ── 基本创建与列表 ──

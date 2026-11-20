@@ -7,12 +7,16 @@
  * **任何读取路径（列表、树、详情、版本、搜索、MCP）都必须经 `visiblePageCondition`** ——
  * 否则直链或搜索就会成为越权入口。
  */
-import { and, asc, desc, eq, exists, ilike, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "../../db/index.ts";
-import { page, pagePermission, pageRevision, role } from "../../db/schema.ts";
+import { deferAfterCommit } from "../../db/context.ts";
+import { page, pagePermission, pageRevision } from "../../db/schema.ts";
 import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
+import { hasAcl, visiblePageCondition } from "./page-access.service.ts";
+export { aclPrincipals, hasAcl, visiblePageCondition } from "./page-access.service.ts";
+import { businessEffects } from "./business-effects.ts";
 import { recordBusinessEvent } from "./event-log.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 import { assertTreeParent, lockProjectTree } from "./project-tree.ts";
@@ -31,54 +35,6 @@ async function assertProjectVisible(actor: Actor, projectId: string) {
   if (!(await projectRepo.isVisibleTo(actor.memberId, projectId, hasOrg(actor)))) throw forbidden();
 }
 
-/** 我作为 ACL 主体的身份：本人 + 持有的角色 id + 被指派的团队 id */
-export async function aclPrincipals(actor: Actor): Promise<{ roleIds: string[]; teamIds: string[] }> {
-  const roleKeys = [...new Set(actor.grants.map((g) => g.roleKey).filter(Boolean))];
-  const roleIds = roleKeys.length
-    ? (await db.select({ id: role.id }).from(role).where(inArray(role.key, roleKeys))).map((r) => r.id)
-    : [];
-  const teamIds = [...new Set(actor.grants.filter((g) => g.scopeType === "TEAM" && g.scopeId).map((g) => g.scopeId!))];
-  return { roleIds, teamIds };
-}
-
-/**
- * **可见性条件（唯一实现）**：读路径一律 `and(项目范围, visiblePageCondition(...))`。
- * 注意 `visibility='PROJECT'` 的页面在项目数据范围内即可见；RESTRICTED 才查 ACL。
- */
-export async function visiblePageCondition(actor: Actor, opts: { forWrite?: boolean } = {}): Promise<SQL> {
-  const { roleIds, teamIds } = await aclPrincipals(actor);
-  const principals = [
-    and(eq(pagePermission.principalType, "MEMBER"), eq(pagePermission.principalId, actor.memberId)),
-    roleIds.length ? and(eq(pagePermission.principalType, "ROLE"), inArray(pagePermission.principalId, roleIds)) : undefined,
-    teamIds.length ? and(eq(pagePermission.principalType, "TEAM"), inArray(pagePermission.principalId, teamIds)) : undefined,
-  ].filter(Boolean);
-  const grant = exists(
-    db.select({ x: sql`1` }).from(pagePermission).where(and(
-      eq(pagePermission.pageId, page.id),
-      opts.forWrite ? eq(pagePermission.canWrite, true) : eq(pagePermission.canRead, true),
-      principals.length ? or(...principals) : sql`false`,
-    )),
-  );
-  return or(eq(page.visibility, "PROJECT"), grant)!;
-}
-
-/** 该页是否给了我可读/可写的资源级授权（MEMBER 本人 / 我持有的 ROLE / 我被指派的 TEAM） */
-export async function hasAcl(actor: Actor, pageId: string, kind: "read" | "write"): Promise<boolean> {
-  const { roleIds, teamIds } = await aclPrincipals(actor);
-  const principals = [
-    and(eq(pagePermission.principalType, "MEMBER"), eq(pagePermission.principalId, actor.memberId)),
-    roleIds.length ? and(eq(pagePermission.principalType, "ROLE"), inArray(pagePermission.principalId, roleIds)) : undefined,
-    teamIds.length ? and(eq(pagePermission.principalType, "TEAM"), inArray(pagePermission.principalId, teamIds)) : undefined,
-  ].filter(Boolean);
-  if (!principals.length) return false;
-  const hit = await db.select({ x: sql`1` }).from(pagePermission).where(and(
-    eq(pagePermission.pageId, pageId),
-    kind === "write" ? eq(pagePermission.canWrite, true) : eq(pagePermission.canRead, true),
-    or(...principals),
-  )).limit(1);
-  return !!hit[0];
-}
-
 /**
  * 写权 = **角色权限 ∪ 资源级 ACL**（规范：页 ACL 是额外的资源级授权，不是替代品）。
  * 角色侧：`page:update_any` 任意页；`page:update_own` own 页（Wiki 的"own"= 首版作者）。
@@ -93,11 +49,6 @@ async function assertCanWrite(actor: Actor, pageId: string, projectId: string): 
   if (can(actor, "page:update_own", { projectId, teamId: null, createdBy: first?.authorId ?? null }, ctx)) return;
   if (await hasAcl(actor, pageId, "write")) return;
   throw forbidden();
-}
-
-/** 协作房间复用 Wiki 的唯一写权限判定，不在协作服务复制一套规则。 */
-export async function assertPageWritable(actor: Actor, pageId: string, projectId: string): Promise<void> {
-  await assertCanWrite(actor, pageId, projectId);
 }
 
 function slugify(title: string): string {
@@ -139,6 +90,16 @@ export async function getPage(actor: Actor, id: string) {
   return { ...p, content: rev?.content ?? "", revisionNo: rev?.revisionNo ?? 0, changeSummary: rev?.changeSummary ?? null };
 }
 
+/** 幂等响应重放也必须重新验证当前项目可见性和页面写权。 */
+export async function assertPageWritable(actor: Actor, pageId: string, projectId?: string) {
+  const [current] = await db.select().from(page).where(and(eq(page.id, pageId), isNull(page.deletedAt))).limit(1);
+  if (!current) throw forbidden();
+  if (projectId && current.projectId !== projectId) throw forbidden();
+  await assertProjectVisible(actor, current.projectId);
+  await assertCanWrite(actor, pageId, current.projectId);
+  return current;
+}
+
 /** 关键字检索：**必须套可见性条件**，否则受限页会从搜索泄露 */
 export async function searchPages(actor: Actor, projectId: string, q: string) {
   await assertProjectVisible(actor, projectId);
@@ -163,6 +124,17 @@ async function allocateSlug(projectId: string, title: string, excludeId?: string
   throw new DomainError("CONFLICT", "同名文档过多，请换一个标题", null);
 }
 
+/** 重放建页结果前重新验证项目、受限页权限以及父页可见性和归属。 */
+export async function assertPageCreatable(actor: Actor, projectId: string, input: { parentId?: string | null; visibility?: "PROJECT" | "RESTRICTED" }) {
+  await assertProjectVisible(actor, projectId);
+  assertCan(actor, "page:create", projectId);
+  if (input.visibility === "RESTRICTED") assertCan(actor, "page:manage_visibility", projectId);
+  if (input.parentId) {
+    await assertTreeParent("page", projectId, input.parentId);
+    await getPage(actor, input.parentId);
+  }
+}
+
 /** 建页：**同一事务内**建首版 revision + 回填 current_revision_id + 同步 search_vector */
 export async function createPage(actor: Actor, projectId: string, input: Parameters<typeof createPageLocked>[2]) {
   return db.transaction(async () => {
@@ -174,14 +146,8 @@ export async function createPage(actor: Actor, projectId: string, input: Paramet
 async function createPageLocked(actor: Actor, projectId: string, input: {
   title: string; content?: string; parentId?: string | null; visibility?: "PROJECT" | "RESTRICTED"; sortOrder?: number;
 }) {
-  await assertProjectVisible(actor, projectId);
-  assertCan(actor, "page:create", projectId);
+  await assertPageCreatable(actor, projectId, input);
   const visibility = input.visibility ?? "PROJECT";
-  if (visibility === "RESTRICTED") assertCan(actor, "page:manage_visibility", projectId);
-  if (input.parentId) {
-    await assertTreeParent("page", projectId, input.parentId);
-    await getPage(actor, input.parentId);
-  }
   const slug = await allocateSlug(projectId, input.title);
 
   const createdPage = await db.transaction(async (tx) => {
@@ -226,18 +192,18 @@ async function syncSearchVector(tx: Executor, pageId: string, title: string, con
 }
 
 /** 改页：**乐观锁**（以 currentRevisionId 作为期望值做 CAS；表定义里没有 version 列，不擅自加） */
-export async function updatePage(actor: Actor, id: string, input: Parameters<typeof updatePageLocked>[2]) {
+export async function updatePage(actor: Actor, id: string, input: Parameters<typeof updatePageLocked>[2], options: { collaborationPublish?: boolean } = {}) {
   const current = await getPage(actor, id);
   return db.transaction(async () => {
     await lockProjectTree(current.projectId);
-    return updatePageLocked(actor, id, input);
+    return updatePageLocked(actor, id, input, options);
   });
 }
 
 async function updatePageLocked(actor: Actor, id: string, input: {
   title?: string; content?: string; parentId?: string | null; sortOrder?: number;
   visibility?: "PROJECT" | "RESTRICTED"; changeSummary?: string | null; expectedRevisionId?: string;
-}) {
+}, options: { collaborationPublish?: boolean }) {
   const current = await getPage(actor, id);              // 内含可见性校验
   await assertCanWrite(actor, id, current.projectId);    // 角色权限 ∪ 资源级 ACL
   if (input.visibility && input.visibility !== current.visibility) {
@@ -273,10 +239,14 @@ async function updatePageLocked(actor: Actor, id: string, input: {
     await syncSearchVector(tx, id, title, content);
     return { ...updated!, revisionNo: rev!.revisionNo };
   });
-  await recordBusinessEvent({
-    actor, action: "wiki.updated", targetType: "PAGE", targetId: id, projectId: current.projectId,
-    summary: `${actor.name} 更新了文档「${title}」`,
-  });
+  const documents = businessEffects();
+  const room = await documents.synchronizePublishedPage(actor, { pageId: id, projectId: current.projectId, revisionId: updatedPage.currentRevisionId!, content: input.content });
+  await recordBusinessEvent({ actor, action: "wiki.updated", targetType: "PAGE", targetId: id, projectId: current.projectId,
+    summary: `${actor.name} 更新了文档「${title}」` });
+  if (!options.collaborationPublish) {
+    const complete = () => documents.finishPagePublication(actor, { pageId: id, revisionId: updatedPage.currentRevisionId!, ...(room ?? {}) });
+    if (!deferAfterCommit(complete)) await complete();
+  }
   return updatedPage;
 }
 
@@ -302,7 +272,7 @@ async function deletePageLocked(actor: Actor, id: string): Promise<void> {
     summary: `${actor.name} 删除了文档「${current.title}」`,
   });
   {
-    const { cleanupLinksFor } = await import("./work-item-link.service.ts");
+    const { cleanupLinksFor } = await import("../repos/content-link.repo.ts");
     await cleanupLinksFor("PAGE", id);
   }
 }
@@ -318,22 +288,30 @@ export async function listRevisions(actor: Actor, pageId: string) {
 }
 
 /** 回滚到历史版本：**append-only** —— 把旧内容写成新 revision，不删旧版 */
-export async function restoreRevision(actor: Actor, pageId: string, revisionId: string) {
+export async function getRevision(actor: Actor, pageId: string, revisionId: string) {
+  await getPage(actor, pageId);
+  const [revision] = await db.select().from(pageRevision).where(and(eq(pageRevision.pageId, pageId), eq(pageRevision.id, revisionId))).limit(1);
+  if (!revision) throw new DomainError("NOT_FOUND", "版本不存在", null);
+  return revision;
+}
+
+export async function restoreRevision(actor: Actor, pageId: string, revisionId: string, expectedRevisionId?: string) {
   const current = await getPage(actor, pageId);
   return db.transaction(async () => {
     await lockProjectTree(current.projectId);
-    return restoreRevisionLocked(actor, pageId, revisionId);
+    return restoreRevisionLocked(actor, pageId, revisionId, expectedRevisionId);
   });
 }
 
-async function restoreRevisionLocked(actor: Actor, pageId: string, revisionId: string) {
+async function restoreRevisionLocked(actor: Actor, pageId: string, revisionId: string, expectedRevisionId?: string) {
   const current = await getPage(actor, pageId);
   await assertCanWrite(actor, pageId, current.projectId);
+  if (expectedRevisionId && current.currentRevisionId !== expectedRevisionId) throw new DomainError("VERSION_CONFLICT", "该文档已被他人修改，请刷新后重试", { expected: expectedRevisionId, actual: current.currentRevisionId });
   const target = (await db.select().from(pageRevision)
     .where(and(eq(pageRevision.id, revisionId), eq(pageRevision.pageId, pageId))).limit(1))[0];
   if (!target) throw new DomainError("NOT_FOUND", "版本不存在", null);
 
-  return db.transaction(async (tx) => {
+  const restored = await db.transaction(async (tx) => {
     const [rev] = await tx.insert(pageRevision).values({
       pageId, revisionNo: current.revisionNo + 1, content: target.content,
       changeSummary: `回滚到第 ${target.revisionNo} 版`, authorId: actor.memberId,
@@ -343,6 +321,13 @@ async function restoreRevisionLocked(actor: Actor, pageId: string, revisionId: s
     await syncSearchVector(tx, pageId, current.title, target.content);
     return { ...rev!, revisionNo: rev!.revisionNo };
   });
+  const documents = businessEffects();
+  const room = await documents.synchronizePublishedPage(actor, { pageId, projectId: current.projectId, revisionId: restored.id, content: target.content });
+  await recordBusinessEvent({ actor, action: "wiki.restored", targetType: "PAGE", targetId: pageId, projectId: current.projectId,
+    summary: `${actor.name} 将文档「${current.title}」恢复到第 ${target.revisionNo} 版` });
+  const complete = () => documents.finishPagePublication(actor, { pageId, revisionId: restored.id, ...(room ?? {}) });
+  if (!deferAfterCommit(complete)) await complete();
+  return restored;
 }
 
 // ── 页面级 ACL ──────────────────────────────────────────────
@@ -379,8 +364,14 @@ export async function setPermissions(actor: Actor, pageId: string, perms: {
     throw new DomainError("VALIDATION", "受限页必须至少保留一个可读主体，否则页面将无人可读", null);
   }
   return db.transaction(async (tx) => {
+    // 替换集合前先串行化同项目页面写入；仅锁旧ACL行会漏掉并发插入的新授权。
+    await lockProjectTree(current.projectId);
+    const latest = await loadPageForAdmin(actor, pageId);
+    if (latest.visibility !== "RESTRICTED") throw new DomainError("VALIDATION", "只有受限页面才能设置授权", null);
     await tx.delete(pagePermission).where(eq(pagePermission.pageId, pageId));
     await tx.insert(pagePermission).values(perms.map((p) => ({ pageId, ...p })));
+    await recordBusinessEvent({ actor, action: "wiki.permissions_updated", targetType: "PAGE", targetId: pageId,
+      projectId: latest.projectId, summary: `${actor.name} 更新了文档访问权限` });
     return tx.select().from(pagePermission).where(eq(pagePermission.pageId, pageId));
   });
 }

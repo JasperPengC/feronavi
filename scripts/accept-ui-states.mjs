@@ -37,24 +37,28 @@ try {
     if (!el) return null;
     const s = getComputedStyle(el);
     const active = document.activeElement;
-    return { radius: s.borderTopLeftRadius, bodyPad: getComputedStyle(el.querySelector(".ui-drawer-body")).padding, focusedInside: !!el.contains(active), role: el.getAttribute("role") };
+    const body = getComputedStyle(el.querySelector(".ui-drawer-body"));
+    return { radius: s.borderTopLeftRadius, expectedRadius: s.getPropertyValue("--radius").trim(), bodyPad: body.padding,
+      inlinePadding: [body.paddingLeft, body.paddingRight], expectedPadding: s.getPropertyValue("--card-padding").trim(),
+      focusedInside: !!el.contains(active), role: el.getAttribute("role") };
   });
-  check("项目抽屉打开且圆角/内边距统一", !!drawer && drawer.radius === "14px" && drawer.bodyPad !== "0px", JSON.stringify(drawer));
+  check("项目抽屉使用当前圆角与水平内边距 token", !!drawer && drawer.role === "dialog" && drawer.radius === drawer.expectedRadius && drawer.inlinePadding.every((value) => value === drawer.expectedPadding), JSON.stringify(drawer));
   check("抽屉打开后焦点在面板内", !!drawer && drawer.focusedInside);
-  await page.keyboard.press("Escape"); await page.waitForTimeout(250);
+  await page.keyboard.press("Escape"); await page.locator(".ui-drawer").waitFor({ state: "hidden" });
   check("Escape 关闭抽屉", await page.locator(".ui-drawer").count() === 0);
 
   // ④ 下拉：面板打开、圆角、选项 hover
-  await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(900);
+  await page.goto(`${BASE}/settings/personal`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(900);
   const trigger = page.locator(".select-trigger").first();
   await trigger.click(); await page.waitForTimeout(200);
   const panel = await page.evaluate(() => {
     const el = document.querySelector(".select-panel");
     if (!el) return null;
     const s = getComputedStyle(el);
-    return { role: el.getAttribute("role"), radius: s.borderRadius, display: s.display, items: el.querySelectorAll("[role='option']").length };
+    return { role: el.querySelector("[role='listbox']")?.getAttribute("role"), radius: s.borderRadius, display: s.display, items: el.querySelectorAll("[role='option']").length };
   });
-  check("下拉面板打开且有统一圆角", !!panel && panel.display !== "none" && panel.radius === "8px", JSON.stringify(panel));
+  // menu-panel 的现行浮层圆角为 12px；触发器使用独立的控件圆角 token。
+  check("下拉面板使用统一菜单圆角且包含可访问选项", !!panel && panel.display !== "none" && panel.radius === "12px" && panel.role === "listbox" && panel.items > 0, JSON.stringify(panel));
   await page.keyboard.press("Escape");
 
   // ⑤ 表格排序：th[aria-sort] 随点击切换，排序按钮有 focus 样式
@@ -67,26 +71,28 @@ try {
 
   // ⑥ 禁用态：令牌页创建按钮（未填用途）不可点击且视觉降级
   await page.goto(`${BASE}/tokens`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(900);
-  const disabled = await page.evaluate(() => {
-    const el = document.querySelector(".btn:disabled");
-    if (!el) return null;
+  await page.getByRole("button", { name: "新建令牌", exact: true }).click();
+  const disabled = await page.getByRole("dialog").getByRole("button", { name: "创建", exact: true }).evaluate((el) => {
     const s = getComputedStyle(el);
-    return { opacity: s.opacity, cursor: s.cursor, aria: el.getAttribute("aria-disabled") };
+    return { disabled: el.disabled, opacity: s.opacity, cursor: s.cursor };
   });
-  check("禁用按钮不可点击且有视觉降级", !!disabled && Number(disabled.opacity) < 1 && disabled.cursor === "not-allowed", JSON.stringify(disabled));
+  check("未填写用途时创建按钮禁用且有视觉降级", disabled.disabled && Number(disabled.opacity) < 1 && disabled.cursor === "not-allowed", JSON.stringify(disabled));
+  await page.getByRole("dialog").getByRole("button", { name: "取消", exact: true }).click();
 
-  // ⑦ 空态：项目集页空态块有内边距/圆角
-  await page.goto(`${BASE}/portfolios`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(900);
+  // ⑦ 用无匹配搜索稳定产生空态，避免依赖演示项目集是否为空。
+  await page.goto(`${BASE}/issues`, { waitUntil: "domcontentloaded" });
+  await page.getByLabel("搜索标题或编号").fill(`ui-state-no-match-${Date.now()}`);
+  await page.locator(".ui-state-empty").waitFor();
   const empty = await page.evaluate(() => {
-    const el = document.querySelector(".ui-state-block, .empty-panel");
+    const el = document.querySelector(".ui-state-empty");
     if (!el) return null;
     const s = getComputedStyle(el);
-    return { radius: s.borderRadius, padding: s.padding, minHeight: s.minHeight };
+    return { radius: s.borderRadius, expectedRadius: s.getPropertyValue("--radius").trim(), padding: s.padding, minHeight: s.minHeight, action: el.querySelector("button")?.textContent?.trim() };
   });
-  check("空态块有统一圆角与内边距", !!empty && empty.radius === "14px" && empty.padding !== "0px", JSON.stringify(empty));
+  check("空态块有统一圆角、内边距和恢复动作", !!empty && empty.radius === empty.expectedRadius && empty.padding !== "0px" && empty.action === "清除筛选", JSON.stringify(empty));
 
   // ⑧ 错误态：拦截问题统计接口 500，检查统一 error block + 重试
-  await page.route("**/api/v1/issues/stats", (route) => route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "验收失败" }) }));
+  await page.route("**/api/v1/issues/stats", (route) => route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ code: "INTERNAL", message: "验收失败", details: null }) }));
   await page.goto(`${BASE}/issues`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2400);
   const errorInfo = await page.evaluate(() => {
     const el = document.querySelector(".ui-state-error");

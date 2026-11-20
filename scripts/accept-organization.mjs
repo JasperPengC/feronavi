@@ -18,43 +18,51 @@ const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 }, c
 await ctx.addCookies([{ name: "feronavi_theme", value: "light", domain: "127.0.0.1", path: "/" }]);
 const page = await ctx.newPage();
 const drawer = page.locator(".ui-drawer");
+const departmentDialog = page.getByRole("dialog", { name: "新建部门", exact: true });
+const positionDialog = page.getByRole("dialog", { name: "新建职位", exact: true });
 try {
   await page.goto(`${BASE}/login`); await page.waitForTimeout(500);
   await page.evaluate(async () => { await fetch("/api/v1/auth/login", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: "demo", password: "demo-password-12345" }) }); });
+  const me = await page.evaluate(async () => (await fetch("/api/v1/auth/me")).json());
+  const [{ email: actorEmail }] = await sql`select email from member where id = ${me.memberId}`;
   await page.goto(`${BASE}/admin/organization`, { waitUntil: "domcontentloaded" });
-  await page.locator(".org-chart").waitFor({ timeout: 15_000 });
-  // Round 78 默认视图改为「架构图」；本套件操作列表管理（树行/加子部门按钮）
-  await page.getByRole("button", { name: "列表管理", exact: true }).click();
-  await page.waitForTimeout(600);
+  const tree = page.getByRole("tree", { name: "部门", exact: true });
+  await tree.waitFor({ timeout: 15_000 });
   check("侧栏/页面可进入组织架构", (await page.locator(".page").innerText()).includes("部门树与职位") || (await page.locator(".page").innerText()).includes("部门"));
 
   await page.getByRole("button", { name: "新建部门", exact: true }).click();
-  await drawer.getByLabel("名称").fill(DEPT);
-  await drawer.getByRole("button", { name: "保存", exact: true }).click();
+  await departmentDialog.getByLabel("名称", { exact: true }).fill(DEPT);
+  await departmentDialog.getByRole("button", { name: "保存", exact: true }).click();
   await page.waitForTimeout(1000);
   check("新建顶级部门后树中出现", (await page.locator(".page").innerText()).includes(DEPT));
 
-  await page.locator(".org-tree-row", { hasText: DEPT }).getByRole("button", { name: "加子部门", exact: true }).click();
-  await drawer.getByLabel("名称").fill(CHILD);
-  await drawer.getByRole("button", { name: "保存", exact: true }).click();
+  const rootNode = tree.getByRole("treeitem").filter({ has: page.locator(".ui-tree-label", { hasText: DEPT }) });
+  await rootNode.locator(":scope > .ui-tree-row").click();
+  await page.getByRole("button", { name: "加子部门", exact: true }).click();
+  await departmentDialog.getByLabel("名称", { exact: true }).fill(CHILD);
+  await departmentDialog.getByRole("button", { name: "保存", exact: true }).click();
   await page.waitForTimeout(1000);
-  check("新建子部门后树中出现且带缩进", (await page.locator(".page").innerText()).includes(CHILD));
+  await rootNode.locator(":scope > .ui-tree-row").getByRole("button", { name: "展开", exact: true }).click();
+  const childNode = tree.locator('[role="treeitem"][aria-level="2"]', { hasText: CHILD });
+  check("新建子部门后树中出现且为第二级", await childNode.isVisible());
+  await childNode.locator(":scope > .ui-tree-row").click();
 
+  await page.getByRole("tab", { name: /^职位 / }).click();
   await page.getByRole("button", { name: "新建职位", exact: true }).click();
-  await drawer.getByLabel("名称").fill(POS);
-  await drawer.locator('[aria-label="所属部门"]').click();
+  await positionDialog.getByLabel("名称", { exact: true }).fill(POS);
+  await positionDialog.getByRole("button", { name: "所属部门", exact: true }).click();
   await page.getByRole("option", { name: CHILD, exact: true }).click();
-  await drawer.getByRole("button", { name: "保存", exact: true }).click();
+  await positionDialog.getByRole("button", { name: "保存", exact: true }).click();
   await page.waitForTimeout(1000);
   check("新建职位后右侧出现且显示所属部门", (await page.locator(".page").innerText()).includes(POS) && (await page.locator(".page").innerText()).includes(CHILD));
   await page.screenshot({ path: "/tmp/organization-page.png" });
 
   await page.goto(`${BASE}/members`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(1800);
-  const row = page.locator(".members-load-row", { hasText: "演示管理员" }).first();
+  const row = page.locator(".members-table tbody tr").filter({ has: page.getByText(actorEmail, { exact: true }) });
   await row.getByRole("button", { name: "归属", exact: true }).click();
-  await drawer.locator('[aria-label="所属部门"]').click();
+  await drawer.getByRole("button", { name: "所属部门", exact: true }).click();
   await page.getByRole("option", { name: CHILD, exact: true }).click();
-  await drawer.locator('[aria-label="职位"]').click();
+  await drawer.getByRole("button", { name: "职位", exact: true }).click();
   await page.getByRole("option", { name: POS, exact: true }).click();
   await drawer.getByRole("button", { name: "保存", exact: true }).click();
   await page.waitForTimeout(1200);

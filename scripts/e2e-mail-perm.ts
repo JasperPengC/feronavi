@@ -263,7 +263,7 @@ try {
     await settingService.putSettings({ "smtp.port": (silent.address() as { port: number }).port });
     const start = Date.now();
     const timedOut = await mailService.sendMail({ to: "timeout@test.local", subject: "超时测试", text: "仅本地连接" });
-    ok("SMTP 不发送 greeting 时34秒内超时", timedOut.ok === false && /greeting|timeout/iu.test(timedOut.reason ?? "") && Date.now() - start >= 29_000 && Date.now() - start < 34_000, `elapsedMs=${Date.now() - start}`);
+    ok("SMTP 不发送 greeting 时19秒内超时", timedOut.ok === false && /greeting|timeout/iu.test(timedOut.reason ?? "") && Date.now() - start >= 14_000 && Date.now() - start < 19_000, `elapsedMs=${Date.now() - start}`);
   } finally {
     clearTimeout(watchdog);
     for (const socket of sockets) socket.destroy();

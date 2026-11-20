@@ -10,7 +10,7 @@ import { apiDelete, apiGet, apiPatch, apiPost, ApiError } from "../../lib/api.ts
 import { t, useLocale } from "../../i18n/index.ts";
 import { Select } from "../Select.tsx";
 import { Button } from "../ui/Button.tsx";
-import { ConfirmButton } from "../ui/ConfirmButton.tsx";
+import { confirmDialog } from "../Dialog.tsx";
 import { TextInput } from "../ui/TextInput.tsx";
 import { Modal } from "../ui/Modal.tsx";
 import { SettingsListState, SettingsSection } from "./SettingsSection.tsx";
@@ -187,8 +187,8 @@ function ProviderPanel({
                   onClick={() => void run(p.id, () => apiPatch(`/api/v1/ai/providers/${p.id}`, { isActive: !p.isActive }), p.isActive ? t("se.aiDisabled") : t("se.aiEnabled"))}>
                   {p.isActive ? t("se.aiDisable") : t("se.aiEnable")}
                 </Button>
-                <ConfirmButton size="sm" disabled={busyId === p.id}
-                  onConfirm={() => void run(p.id, () => apiDelete(`/api/v1/ai/providers/${p.id}`), t("se.aiDeleted"))}>{t("common.delete")}</ConfirmButton>
+                <Button size="sm" variant="danger" disabled={busyId === p.id}
+                  onClick={async () => { if (await confirmDialog(`${t("common.confirmDelete")} ${p.note || providerModel(p)}`, { danger: true })) void run(p.id, () => apiDelete(`/api/v1/ai/providers/${p.id}`), t("se.aiDeleted")); }}>{t("common.delete")}</Button>
               </div>
             </li>
           ))}

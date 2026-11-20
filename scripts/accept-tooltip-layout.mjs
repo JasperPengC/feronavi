@@ -85,8 +85,10 @@ try {
 
   await page.goto(`${base}/issues`);
   await page.getByRole("button", { name: "展开趋势与分布" }).click();
-  const dateLabels = await page.locator(".issues-trend-day small").allTextContents();
-  check("问题趋势保留月日标签", dateLabels.length === 14 && dateLabels.every((date) => /^\d{2}-\d{2}$/.test(date)));
+  await page.locator(".issues-trend-day").last().waitFor();
+  const dateLabels = await page.locator(".issues-trend-dates span").allTextContents();
+  check("问题趋势保留14个数据点与4个月日轴标签", await page.locator(".issues-trend-day").count() === 14
+    && dateLabels.length === 4 && dateLabels.every((date) => /^\d{2}-\d{2}$/.test(date)));
   await page.locator(".issues-trend-day").last().hover();
   await inside();
 

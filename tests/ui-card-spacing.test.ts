@@ -14,17 +14,18 @@ describe("共享卡片节奏", () => {
     const padding = Number(tokens.match(/--card-padding:\s*(\d+)px/)?.[1]);
     expect(padding).toBeGreaterThanOrEqual(16);
     expect(padding).toBeLessThanOrEqual(24);
-    expect(quality).toMatch(/\.panel,\s*\.ui-panel,\s*\.card\s*\{[^}]*padding:\s*var\(--card-padding\)\s*!important/s);
+    expect(quality).toMatch(/\.card,\s*\.panel,\s*\.ui-panel\s*\{[^}]*padding:\s*var\(--card-padding\)/s);
   });
 
-  it("同类指标卡使用统一高度，表单控件与常规按钮使用统一触控高度", () => {
+  it("同类指标卡使用统一高度，表单与动作按钮分别使用各自的公共高度", () => {
     expect(tokens).toMatch(/--metric-card-height:\s*118px/);
     expect(quality).toMatch(/\.metric-card,\s*\.ui-metric-card\s*\{[^}]*min-height:\s*var\(--metric-card-height\)/s);
     expect(quality).not.toMatch(/\.members-metric-grid \.metric-card\s*\{[^}]*min-height/);
     expect(quality).not.toMatch(/\.workbench-page \.metric-card\s*\{[^}]*min-height/);
-    expect(quality).toMatch(/\.input,\s*\.select-trigger:not\(\.btn-sm\),\s*\.btn:not\(\.btn-sm\)\s*\{[^}]*min-height:\s*var\(--control-height\)/s);
-    expect(tokens).toMatch(/\.ui-button-md\s*\{[^}]*min-height:\s*var\(--control-height\)/s);
-    expect(quality).toMatch(/\.select-trigger:not\(\.btn-sm\)/);
+    const controls = readFileSync("src/client/styles/controls.css", "utf8");
+    expect(controls).toMatch(/\.input,\s*\.select-trigger,[^{]*\{[^}]*min-height:\s*var\(--control-height\)/s);
+    expect(controls).toMatch(/\.btn\s*\{[^}]*min-height:\s*var\(--button-height\)/s);
+    expect(tokens).not.toMatch(/\.ui-button-md\s*\{/);
     expect(quality).not.toMatch(/\.workbench-page \.workbench-todo-form \.input\s*\{[^}]*min-height:\s*38px/s);
   });
 
@@ -37,11 +38,20 @@ describe("共享卡片节奏", () => {
     expect(quality).toMatch(/\.page\s*\{[^}]*width:\s*100%[^}]*max-width:\s*none/s);
     expect(shell).toMatch(/\.shell\.app-frame \.shell-content\.content-shell\s*\{[^}]*padding:\s*var\(--page-inset\)/s);
     expect(shell).toMatch(/\.shell-loading-content\s*\{[^}]*padding:\s*var\(--page-inset\)/s);
-    expect(settings).toMatch(/\.settings-content \.settings-grid > \.settings-section\s*\{[^}]*padding:\s*22px\s*!important/s);
+    expect(settings).toMatch(/\.settings-content \.settings-grid > \.settings-section\s*\{[^}]*padding:\s*var\(--card-padding\)/s);
   });
 
-  it("面板使用表面层级，不叠加大阴影", () => {
-    expect(quality).toMatch(/\.panel,\s*\.ui-panel,\s*\.card\s*\{[^}]*box-shadow:\s*none\s*!important/s);
+  it("通用表面由组件样式单一拥有，页面和外壳不再次覆盖", () => {
+    const components = readFileSync("src/client/styles/components.css", "utf8");
+    const pages = readFileSync("src/client/styles/pages.css", "utf8");
+    const shellStyles = readFileSync("src/client/styles/shell.css", "utf8");
+    const surfaces = /\.card,\s*\.panel,\s*\.ui-panel\s*\{[^}]*\}/gs;
+    const definitions = [...components.matchAll(surfaces)];
+    expect(definitions).toHaveLength(1);
+    expect(definitions[0][0]).toMatch(/box-shadow:\s*var\(--shadow\)/);
+    expect(definitions[0][0]).not.toContain("!important");
+    expect(pages).not.toMatch(/\.card,\s*\.panel,\s*\.ui-panel/);
+    expect(shellStyles).not.toMatch(/(?:^|\n)\.btn,\s*\.tag,\s*\.input/);
   });
 
   it("知识库文档树在桌面保留足够标题宽度", () => {

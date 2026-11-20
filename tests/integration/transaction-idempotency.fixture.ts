@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
 assert.match(new URL(process.env.DATABASE_URL ?? "postgres://invalid/").pathname.slice(1), /^feronavi_test_[a-f0-9]{32}$/u);
+await (await import("../../src/server/application/bootstrap-business-effects.ts")).bootstrapBusinessEffects();
 const { db, sql, inTransaction } = await import("../../src/db/index.ts");
 const { currentDatabaseContext, deferAfterCommit } = await import("../../src/db/context.ts");
 const { member, idempotencyKey, auditEntry } = await import("../../src/db/schema.ts");
@@ -72,7 +73,8 @@ try {
     await withAdvisoryLock(884023, async () => {
       const [{ pid }] = await sql`select pg_backend_pid() as pid`;
       await runScheduledAutomations(new Date("2026-11-08T00:00:00Z"));
-      assert.equal((await db.select().from(workItemSla).where(eq(workItemSla.workItemId, item.id))).length, 0);
+      // 每批事务提交时已执行后续链；仍在保留连接与调度锁内完成，不能延迟到锁释放后。
+      assert.equal((await db.select().from(workItemSla).where(eq(workItemSla.workItemId, item.id))).length, 1);
       deferAfterCommit(async () => {
         const [inside] = await sql`select pg_backend_pid() as pid`; assert.equal(inside!.pid, pid);
         deferAfterCommit(async () => { nestedPid = Number((await sql`select pg_backend_pid() as pid`)[0]!.pid); });

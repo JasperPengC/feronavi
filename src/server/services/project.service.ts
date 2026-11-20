@@ -10,7 +10,7 @@ import { db, sql } from "../../db/index.ts";
 import { and as _and, eq as _eq, inArray } from "drizzle-orm";
 import { department, project, workflow, workflowState, workflowTransition, projectMembership, role } from "../../db/schema.ts";
 import { DomainError, forbidden } from "../../shared/errors.ts";
-import type { CreateProjectInput } from "../../shared/schemas/project.ts";
+import { updateProjectSchema, transitionProjectStatusSchema, type CreateProjectInput } from "../../shared/schemas/project.ts";
 import type { Actor } from "../permission/actor.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
@@ -155,6 +155,7 @@ export async function getProjectDetail(actor: Actor, projectId: string) {
   if (!p) throw forbidden();
 
   const statuses = await projectRepo.listStatusDefs();
+  const status = statuses.find(row => row.id === p.statusId);
   const wfs = await db.select().from(workflow).where(eq(workflow.projectId, projectId));
   const states = wfs.length
     ? await db.select().from(workflowState).where(
@@ -168,6 +169,8 @@ export async function getProjectDetail(actor: Actor, projectId: string) {
     : null;
   return {
     id: p.id, key: p.key, name: p.name, description: p.description,
+    leadMemberId: p.leadMemberId,
+    status: status ? { key: status.key, name: status.name, category: status.category, color: status.color } : null,
     departmentId: p.departmentId, department: dept,
     archivedAt: p.archivedAt, createdAt: p.createdAt, updatedAt: p.updatedAt,
     statusDefs: statuses.map((s) => ({ key: s.key, name: s.name, category: s.category, color: s.color })),
@@ -178,6 +181,44 @@ export async function getProjectDetail(actor: Actor, projectId: string) {
         .map((s) => ({ key: s.key, name: s.name, category: s.category, color: s.color })),
     })),
   };
+}
+
+/** REST/MCP 共用项目写入，保持项目可见性、领域权限及审计一致。 */
+async function assertProjectAction(actor: Actor, projectId: string, action: string) {
+  if (!(await projectRepo.isVisibleTo(actor.memberId, projectId, hasOrgGrant(actor)))) throw forbidden();
+  const ctx: PermissionContext = { memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId };
+  if (!can(actor, action, { projectId, teamId: null }, ctx)) throw forbidden();
+}
+
+export async function updateProject(actor: Actor, projectId: string, raw: unknown) {
+  const parsed = updateProjectSchema.safeParse(raw);
+  if (!parsed.success) throw new DomainError("VALIDATION", "参数不合法（项目标识创建后不可修改）", parsed.error.issues);
+  await assertProjectAction(actor, projectId, "project:update");
+  await assertDepartmentActive(parsed.data.departmentId);
+  const row = await projectRepo.update(projectId, parsed.data);
+  if (!row) throw forbidden();
+  await recordBusinessEvent({ actor, action: "project.updated", targetType: "PROJECT", targetId: projectId, projectId,
+    summary: `${actor.name} 更新了项目「${row.name}」` });
+  return row;
+}
+
+export async function transitionProjectStatus(actor: Actor, projectId: string, raw: unknown) {
+  const parsed = transitionProjectStatusSchema.safeParse(raw);
+  if (!parsed.success) throw new DomainError("VALIDATION", "参数不合法", parsed.error.issues);
+  await assertProjectAction(actor, projectId, "project:manage_status");
+  const current = await projectRepo.findById(projectId);
+  if (!current) throw forbidden();
+  const target = await projectRepo.findStatusByKey(parsed.data.statusKey);
+  if (!target) throw new DomainError("VALIDATION", `未知的项目状态「${parsed.data.statusKey}」`, null);
+  const previous = current.statusId ? (await projectRepo.listStatusDefs()).find(row => row.id === current.statusId) : null;
+  const from = previous?.category ?? "NOT_STARTED";
+  const allowed = from === "NOT_STARTED" ? (target.category === "IN_PROGRESS" || target.key === "CANCELLED")
+    : from === "IN_PROGRESS" ? target.category !== "NOT_STARTED" : target.category === "IN_PROGRESS";
+  if (!allowed) throw new DomainError("VALIDATION", `不允许从「${previous?.name ?? "未开始"}」流转到「${target.name}」`, null);
+  await projectRepo.setStatus(projectId, target.id);
+  await recordBusinessEvent({ actor, action: "project.status_changed", targetType: "PROJECT", targetId: projectId, projectId,
+    summary: `${actor.name} 把项目「${current.name}」状态改为「${target.name}」` });
+  return { id: projectId, status: { key: target.key, name: target.name, category: target.category, color: target.color } };
 }
 
 
@@ -264,4 +305,17 @@ export async function projectInsights(projectIds: string[]): Promise<Map<string,
     lastActivityAt: r.last_activity_at ? new Date(r.last_activity_at).toISOString() : null,
     memberCount: Number(r.member_count),
   }]));
+}
+
+/** REST 与 MCP 共用项目归档事务和权限判定。 */
+export async function setArchived(actor: Actor, projectId: string, archived: boolean): Promise<void> {
+  if (!(await projectRepo.isVisibleTo(actor.memberId, projectId, hasOrgGrant(actor)))) throw forbidden();
+  const ctx: PermissionContext = { memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId };
+  if (!can(actor, "project:archive", { projectId, teamId: null }, ctx)) throw forbidden();
+  await db.transaction(async () => {
+    const row = await projectRepo.setArchived(projectId, archived);
+    if (!row) throw forbidden();
+    await recordBusinessEvent({ actor, action: archived ? "project.archived" : "project.unarchived", targetType: "PROJECT", targetId: projectId, projectId,
+      summary: `${actor.name} ${archived ? "归档" : "取消归档"}了项目「${row.name}」` });
+  });
 }

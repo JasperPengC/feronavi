@@ -15,6 +15,7 @@ try {
   await page.goto(`${BASE}/login`); await page.waitForTimeout(600);
   await page.evaluate(async () => { await fetch("/api/v1/auth/login", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: "demo", password: "demo-password-12345" }) }); });
   await page.goto(`${BASE}/system`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2600);
+  await page.getByRole("tab", { name: "运维", exact: true }).click();
   const card = page.locator(".card", { hasText: "运维状态" });
   check("系统页出现「运维状态」卡", (await card.count()) === 1);
   // 仪表盘化后调度明细在可展开 details 中：先展开再核对（设计变更，非删信息）
@@ -25,8 +26,10 @@ try {
   check("展示日志保留期（天）", /日志保留期/.test(text) && /审计/.test(text) && /活动/.test(text));
   check("展示平台计数（集成/开关/MCP）", /启用集成/.test(text) && /启用开关/.test(text) && /MCP 客户端/.test(text));
   check("展示后台调度间隔（含集成同步）", /后台调度/.test(text) && /(h|min|s)/.test(text) && text.includes("集成同步"));
+  await page.getByRole("tab", { name: "概览", exact: true }).click();
   check("仪表盘 KPI 卡 4 张（服务/迁移/任务/死信）", (await page.locator(".sys-kpi-grid .metric-card").count()) === 4, String(await page.locator(".sys-kpi-grid .metric-card").count()));
   check("异常置顶/全绿横幅可见", (await page.locator(".sys-all-ok, .sys-alert-stack").count()) === 1);
+  await page.getByRole("tab", { name: "运维", exact: true }).click();
   check("运维状态按主题分组（Webhook/任务/留存/平台）", (await card.locator(".sys-group").count()) >= 4, String(await card.locator(".sys-group").count()));
   await card.scrollIntoViewIfNeeded();
   await page.screenshot({ path: "/tmp/system-ops.png" });

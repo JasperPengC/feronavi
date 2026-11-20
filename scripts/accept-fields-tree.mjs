@@ -5,7 +5,7 @@ import "./_env.ts";
  * 页面真实行为断言（不看代码）：
  *   ① 左侧按「字段类型」分组、可展开到具体字段（层级来自真实 type 属性，不是造出来的分类）；
  *   ② 点类型 → 右侧表格只剩该类型；点字段 → 只剩该字段；
- *   ③ 键盘 ↓ 能移动选中项；折叠分组 → 子项真的消失；
+ *   ③ 键盘 ↓ 移动焦点、Enter 选中；折叠分组 → 子项真的消失；
  *   ④ 创建表单的控件都有可见标签（字段 key / 字段名称 / 字段类型 / 必填）。
  */
 import { chromium } from "playwright";
@@ -30,6 +30,8 @@ async function state(page) {
       tree: !!document.querySelector('.ui-tree [role="tree"]'),
       items, rows,
       selectedText: document.querySelector('.ui-tree-item[data-selected="true"] .ui-tree-label')?.textContent?.trim() ?? null,
+      focusedText: document.activeElement?.matches('[role="treeitem"]')
+        ? document.activeElement.querySelector(".ui-tree-label")?.textContent?.trim() : null,
       fieldLabels: [...document.querySelectorAll(".field > label")].map((l) => (l.textContent || "").replace(/\s+/g, " ").trim()),
     };
   });
@@ -87,8 +89,13 @@ try {
   check("字段是 level2 叶子", s0.items.filter((i) => i.level === "2").length === 6,
     `leaves=${s0.items.filter((i) => i.level === "2").map((i) => i.text).join("/")}`);
   check("默认显示全部 6 个字段", s0.rows.length === 6, `rows=${s0.rows.length}`);
-  check("创建表单有可见标签", ["字段 key", "字段名称", "字段类型"].every((x) => s0.fieldLabels.includes(x)),
-    JSON.stringify(s0.fieldLabels.slice(0, 5)));
+  await page.getByRole("button", { name: "新建字段", exact: true }).click();
+  const createForm = page.getByRole("dialog", { name: "创建", exact: true });
+  await createForm.getByLabel("字段 key", { exact: true }).waitFor();
+  const visibleLabels = await state(page);
+  check("打开创建表单后控件有可见标签", ["字段 key", "字段名称", "字段类型"].every((x) => visibleLabels.fieldLabels.includes(x)) && await createForm.getByRole("checkbox", { name: "必填", exact: true }).isVisible(),
+    JSON.stringify(visibleLabels.fieldLabels.slice(0, 5)));
+  await createForm.getByRole("button", { name: "取消", exact: true }).click();
   await page.screenshot({ path: "/tmp/accept-fields-1-all.png" });
 
   // ② 点类型 → 只看该类型
@@ -111,7 +118,12 @@ try {
   await page.keyboard.press("ArrowDown");
   await page.waitForTimeout(400);
   const s3 = await state(page);
-  check("键盘 ↓ 移动选中", s3.selectedText !== s2.selectedText, `${s2.selectedText} → ${s3.selectedText}`);
+  check("键盘 ↓ 移动焦点且保留当前选择", s3.focusedText === "验收文本B" && s3.selectedText === "验收文本A",
+    JSON.stringify({ focused: s3.focusedText, selected: s3.selectedText }));
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => document.querySelector('tbody .row-name')?.textContent?.trim() === "验收文本B");
+  const activated = await state(page);
+  check("Enter 选中焦点字段并筛选表格", activated.selectedText === "验收文本B" && activated.rows.length === 1 && activated.rows[0] === "验收文本B");
 
   // 点「全部字段」回到全量
   await page.locator('[role="treeitem"][aria-level="1"]').filter({ hasText: "全部字段" }).first().locator(".ui-tree-row").first().click();

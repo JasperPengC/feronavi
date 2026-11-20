@@ -85,13 +85,21 @@ async function assertCanModify(actor: Actor, log: { memberId: string; workItemId
   if (!can(actor, "work_item:update_any", { projectId: wi.projectId, createdBy: wi.reporterId }, ctx)) throw forbidden();
 }
 
-export async function updateTimeLog(actor: Actor, logId: string, patch: {
-  minutes?: number; loggedDate?: string; note?: string | null;
-}) {
+/** 工时变更与缓存重放共用当前记录所有权/管理权。 */
+export async function authorizeTimeLogMutation(actor: Actor, logId: string) {
   const rows = await db.select().from(timeLog).where(eq(timeLog.id, logId)).limit(1);
   const log = rows[0];
   if (!log) throw forbidden();
   await assertCanModify(actor, log);
+  return log;
+}
+
+export { wiVisible as assertTimeLogWorkItemVisible };
+
+export async function updateTimeLog(actor: Actor, logId: string, patch: {
+  minutes?: number; loggedDate?: string; note?: string | null;
+}) {
+  await authorizeTimeLogMutation(actor, logId);
   if (patch.minutes !== undefined && (!Number.isInteger(patch.minutes) || patch.minutes <= 0)) {
     throw new DomainError("VALIDATION", "minutes 必须是正整数", null);
   }
@@ -107,9 +115,6 @@ export async function updateTimeLog(actor: Actor, logId: string, patch: {
 }
 
 export async function deleteTimeLog(actor: Actor, logId: string): Promise<void> {
-  const rows = await db.select().from(timeLog).where(eq(timeLog.id, logId)).limit(1);
-  const log = rows[0];
-  if (!log) throw forbidden();
-  await assertCanModify(actor, log);
+  await authorizeTimeLogMutation(actor, logId);
   await db.delete(timeLog).where(eq(timeLog.id, logId));
 }

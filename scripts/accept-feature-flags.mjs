@@ -19,11 +19,12 @@ const page = await ctx.newPage();
 try {
   await page.goto(`${BASE}/login`); await page.waitForTimeout(600);
   await page.evaluate(async () => { await fetch("/api/v1/auth/login", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: "demo", password: "demo-password-12345" }) }); });
-  await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2600);
+  await page.goto(`${BASE}/system`, { waitUntil: "domcontentloaded" });
+  await page.getByRole("tab", { name: "集成与更新", exact: true }).click();
   const section = page.locator(".settings-section", { hasText: "功能开关" });
   await section.scrollIntoViewIfNeeded();
-  check("设置页出现「功能开关」区块", (await section.count()) === 1);
-  check("区块如实说明当前无内置消费者", (await section.innerText()).includes("没有内置业务消费者"));
+  check("系统集成页出现「功能开关」区块", (await section.count()) === 1);
+  check("区块如实说明当前无内置消费者", (await section.innerText()).includes("当前没有系统功能使用这些开关"));
   await section.getByLabel("开关 key").fill(KEY);
   await section.getByRole("button", { name: "添加开关" }).click();
   await page.waitForTimeout(1300);

@@ -48,7 +48,7 @@ describe("外部集成设置", () => {
     }));
     renderSection();
     await waitFor(() => expect(screen.getByText("还没有集成。")).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "+ 添加集成" }));
+    fireEvent.click(screen.getByRole("button", { name: "添加集成" }));
     await waitFor(() => expect(screen.getByLabelText("名称")).toBeTruthy());
     fireEvent.change(screen.getByLabelText("名称"), { target: { value: "验收集成" } });
     fireEvent.change(screen.getByLabelText("服务地址（https）"), { target: { value: "http://127.0.0.1:8080" } });

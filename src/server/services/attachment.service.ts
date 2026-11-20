@@ -15,7 +15,8 @@ import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from "@aws-sd
 import { and, eq, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { readFile, writeFile, mkdir, unlink } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { createReadStream } from "node:fs";
+import { dirname, join, resolve, sep } from "node:path";
 import { db } from "../../db/index.ts";
 import { attachment } from "../../db/schema.ts";
 import { DomainError, forbidden } from "../../shared/errors.ts";
@@ -155,26 +156,57 @@ async function store(storagePath: string, data: Buffer, mimeType?: string): Prom
   await writeFile(full, data);
 }
 
-async function load(storagePath: string, backend: "local" | "s3"): Promise<Buffer> {
+/** 迁移保留命名空间固定在DATA_DIR，普通附件继续遵循ATTACHMENT_DIR。 */
+function resolveStoredAttachmentPath(storagePath: string, backend: "local" | "s3"): string {
+  const restored = backend === "local" && /^restored\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/[a-f0-9]{64}$/iu.test(storagePath);
+  const rootPath = restored ? resolve(process.env.DATA_DIR ?? "/tmp/feronavi-data", "attachments") : resolve(STORAGE_ROOT);
+  const fullPath = resolve(rootPath, storagePath);
+  if (fullPath === rootPath || !fullPath.startsWith(rootPath + sep)) {
+    throw new DomainError("VALIDATION", "附件存储路径不合法", null);
+  }
+  return fullPath;
+}
+
+async function readBounded(stream: AsyncIterable<Uint8Array>, maxBytes: number): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of stream) {
+    total += chunk.byteLength;
+    if (total > maxBytes) throw new DomainError("VALIDATION", "附件超过本次下载大小上限", null);
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks, total);
+}
+
+export async function readStoredAttachment(storagePath: string, backend: "local" | "s3", maxBytes?: number): Promise<Buffer> {
+  if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes < 0)) throw new DomainError("VALIDATION", "下载大小上限不合法", null);
+  const fullPath = resolveStoredAttachmentPath(storagePath, backend);
+  if (backend === "local") return maxBytes === undefined ? readFile(fullPath) : readBounded(createReadStream(fullPath), maxBytes);
   const cfg = await loadStorageConfig();
   if (backend === "s3") {
     if (!isS3Configured(cfg)) throw new DomainError("VALIDATION", "S3 配置不完整，请到设置 → 组织与实例配置附件存储", null);
     const r = await s3Client(cfg).send(new GetObjectCommand({ Bucket: cfg.bucket, Key: storageKey(cfg, storagePath) }));
     if (!r.Body) throw new DomainError("INTERNAL", "S3 返回空对象", null);
-    return Buffer.from(await r.Body.transformToByteArray());
+    return maxBytes === undefined ? Buffer.from(await r.Body.transformToByteArray()) : readBounded(r.Body as AsyncIterable<Uint8Array>, maxBytes);
   }
-  return readFile(join(STORAGE_ROOT, storagePath));
+  throw new DomainError("VALIDATION", "附件存储后端不合法", null);
+}
+
+const load = readStoredAttachment;
+
+/** 幂等重放前也检查当前目标可见性（含页面 ACL）与上传权限。 */
+export async function assertUploadable(actor: Actor, targetType: string, targetId: string) {
+  const projectId = await assertTargetVisible(actor, targetType, targetId);
+  const ctx: PermissionContext = { memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId };
+  if (!can(actor, "attachment:upload", { projectId, teamId: null, createdBy: null }, ctx)) throw forbidden();
+  return projectId;
 }
 
 export async function upload(actor: Actor, input: {
   targetType: string; targetId: string;
   originalName: string; mimeType: string; sizeBytes: number; data: Buffer;
 }) {
-  const projectId = await assertTargetVisible(actor, input.targetType, input.targetId);
-  // 兑现目录承诺的 attachment:upload（权限键审计 2026-11-01）：GUEST 不持有该键 → 访客不可上传；
-  // ADMIN/MEMBER/PM 均持有，现有角色行为不变。放在 projectId 解析之后，PROJECT 级授权才能生效。
-  const ctx: PermissionContext = { memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId };
-  if (!can(actor, "attachment:upload", { projectId, teamId: null, createdBy: null }, ctx)) throw forbidden();
+  const projectId = await assertUploadable(actor, input.targetType, input.targetId);
   const v = validateUpload(input);
   if (!v.ok) throw new DomainError("VALIDATION", v.reason, null);
 
@@ -202,6 +234,7 @@ export async function upload(actor: Actor, input: {
     const label = await describeTarget(input.targetType, input.targetId);
     await recordBusinessEvent({
       actor, action: "attachment.uploaded", targetType: "ATTACHMENT", targetId: row!.id, projectId,
+      invalidation: { domain: "attachment", resourceType: input.targetType, resourceId: input.targetId },
       summary: `${actor.name} 在${label}上传了附件「${row!.originalName}」`,
     });
     const resourceType = ["PAGE", "WORK_ITEM", "COMMENT"].includes(input.targetType) ? input.targetType : null;
@@ -222,16 +255,29 @@ export async function listAttachments(actor: Actor, targetType: string, targetId
     .where(and(eq(attachment.targetType, targetType), eq(attachment.targetId, targetId)));
 }
 
+/** 精确安全元数据：先验证父对象可读，存储细节与二进制内容不出此边界。 */
+export async function getMetadata(actor: Actor, id: string) {
+  const [row] = await db.select().from(attachment).where(eq(attachment.id, id)).limit(1);
+  if (!row) throw forbidden();
+  await assertTargetVisible(actor, row.targetType, row.targetId);
+  return {
+    id: row.id, targetType: row.targetType, targetId: row.targetId,
+    originalName: row.originalName, mimeType: row.mimeType, sizeBytes: row.sizeBytes,
+    uploaderId: row.uploaderId, createdAt: row.createdAt,
+    downloadPath: `/api/v1/attachments/${row.id}`,
+  };
+}
+
 /**
  * 下载：`Content-Disposition: attachment`，永远同源。
  * ⚠️ 与预览**必须是两个端点** —— 合成一个意味着预览内容可被当成下载执行。
  */
-export async function download(actor: Actor, id: string): Promise<{ data: Buffer; originalName: string; mimeType: string }> {
+export async function download(actor: Actor, id: string, maxBytes?: number): Promise<{ data: Buffer; originalName: string; mimeType: string }> {
   const rows = await db.select().from(attachment).where(eq(attachment.id, id)).limit(1);
   const row = rows[0];
   if (!row) throw forbidden();
   await assertTargetVisible(actor, row.targetType, row.targetId);
-  return { data: await load(row.storagePath, row.storageBackend as "local" | "s3"), originalName: row.originalName, mimeType: row.mimeType };
+  return { data: await load(row.storagePath, row.storageBackend as "local" | "s3", maxBytes), originalName: row.originalName, mimeType: row.mimeType };
 }
 
 /** 预览：`Content-Disposition: inline`。只允许白名单内的可预览类型 */
@@ -265,7 +311,7 @@ export async function remove(actor: Actor, id: string): Promise<void> {
     if (row.storageBackend === "s3" && isS3Configured(cfg)) {
       await s3Client(cfg).send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: storageKey(cfg, row.storagePath) })).catch(() => {});
     } else {
-      await unlink(join(STORAGE_ROOT, row.storagePath)).catch(() => {});
+      await unlink(resolveStoredAttachmentPath(row.storagePath, row.storageBackend as "local" | "s3")).catch(() => {});
     }
   }
   await db.delete(attachment).where(eq(attachment.id, id));
@@ -273,6 +319,7 @@ export async function remove(actor: Actor, id: string): Promise<void> {
     const label = await describeTarget(row.targetType, row.targetId);
     await recordBusinessEvent({
       actor, action: "attachment.deleted", targetType: "ATTACHMENT", targetId: id, projectId,
+      invalidation: { domain: "attachment", resourceType: row.targetType, resourceId: row.targetId },
       summary: `${actor.name} 删除了${label}的附件「${row.originalName}」`,
     });
     const resourceType = ["PAGE", "WORK_ITEM", "COMMENT"].includes(row.targetType) ? row.targetType : null;

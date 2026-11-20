@@ -34,9 +34,13 @@ await app.listen({ port: Number(process.env.PORT ?? 3972), host: "127.0.0.1" });
 const BASE = process.env.BASE ?? "http://127.0.0.1:3972";
 
 try {
-  await wiService.createWorkItem(admin, pid, { type: "TASK", title: "中文标题的任务" });
+  const historical = await wiService.createWorkItem(admin, pid, { type: "TASK", title: "中文标题的任务" });
   await wiService.createWorkItem(admin, pid, { type: "DEFECT", title: "一个缺陷" });
   await db.insert(iteration).values({ projectId: pid, name: "迭代一", startDate: "2026-11-01", endDate: "2026-11-14" });
+  const [ended] = await db.insert(iteration).values({ projectId: pid, name: "已结束历史迭代", startDate: "2026-10-01", endDate: "2026-10-14", completedAt: new Date() }).returning();
+  await db.insert(iteration).values({ projectId: pid, name: "归档但未结束的迭代", startDate: "2026-12-01", endDate: "2026-12-14", archivedAt: new Date() });
+  const [terminal] = await db.select().from(workflowState).where(and(eq(workflowState.workflowId, historical!.workflowId), eq(workflowState.category, "TERMINAL"))).limit(1);
+  await db.update(workItem).set({ iterationId: ended!.id, statusId: terminal!.id, completedAt: new Date() }).where(eq(workItem.id, historical!.id));
 
   const { buffer, filename } = await report.projectReport(admin, pid);
   writeFileSync(OUT, buffer);
@@ -55,6 +59,9 @@ print("HAS_SECTION", "一、状态分布" in text and "四、逾期工作项" in
 print("HAS_COUNT", "3" in text)
 print("HAS_TYPE", "任务" in text and "缺陷" in text)
 print("HAS_ITER", "迭代一" in text)
+print("NO_ARCHIVED_ITER", "归档但未结束的迭代" not in text)
+print("NO_ENDED_ITER", "已结束历史迭代" not in text)
+print("HAS_HISTORY_COUNTS", "工作项合计 2 项，其中已完成 1 项（完成率 50%）" in text)
 print("HAS_NOTE", "不含模型生成" in text)
 `;
   let out = "";
@@ -66,6 +73,9 @@ print("HAS_NOTE", "不含模型生成" in text)
   ok("章节标题可提取", has("HAS_SECTION") === "True");
   ok("类型分布中文可提取（任务/缺陷）", has("HAS_TYPE") === "True");
   ok("迭代名可提取", has("HAS_ITER") === "True");
+  ok("归档但未结束的迭代不计入进行中", has("NO_ARCHIVED_ITER") === "True");
+  ok("已结束迭代不计入进行中", has("NO_ENDED_ITER") === "True");
+  ok("历史已完成工作项仍计入项目统计", has("HAS_HISTORY_COUNTS") === "True");
   ok("写明口径说明（报告不含模型摘要）", has("HAS_NOTE") === "True");
 
   // ── HTTP ──

@@ -42,13 +42,16 @@ describe("按钮体系（结构约束）", () => {
     expect(css2).toMatch(/\.btn\.is-loading::after\s*\{/);
   });
   it("图标按钮是正方形，且宽度随尺寸成套变化（不写死一个值）", () => {
-    // 以当前生产样式为准；旧 28/44px 声明已被后续 32/36px 规则覆盖并清理。
-    expect(css2).toMatch(/\.btn-icon\s*\{[^}]*width:\s*36px/);
-    expect(css2).toMatch(/\.btn-icon\.btn-sm\s*\{[^}]*width:\s*32px/);
-    expect(css2).toMatch(/\.btn-icon\.btn-lg\s*\{[^}]*width:\s*36px/);
+    const controls = readFileSync("src/client/styles/controls.css", "utf8");
+    expect(controls).toMatch(/\.btn\s*\{[^}]*height:\s*var\(--button-height\)/);
+    expect(controls).toMatch(/\.btn-icon\s*\{[^}]*width:\s*var\(--button-height\)/);
+    expect(controls).toMatch(/\.btn-sm\s*\{[^}]*height:\s*var\(--button-height-sm\)/);
+    expect(controls).toMatch(/\.btn-icon\.btn-sm\s*\{[^}]*width:\s*var\(--button-height-sm\)/);
+    expect(controls).toMatch(/\.btn-icon\.btn-lg\s*\{[^}]*width:\s*var\(--button-height\)/);
   });
-  it("按钮使用统一控件圆角（Round 112：8px，非胶囊）", () => {
-    expect(css2).toMatch(/\.btn \{[\s\S]*?border-radius:\s*var\(--radius-sm\)/);
+  it("按钮使用公共控件规范的胶囊圆角", () => {
+    const controls = readFileSync("src/client/styles/controls.css", "utf8");
+    expect(controls).toMatch(/\.btn\s*\{[^}]*border-radius:\s*var\(--radius-pill\)/);
   });
 
   it("reduce 下有**全局关断开关**兜底（所有动画时长归零 + 只播一次）", () => {

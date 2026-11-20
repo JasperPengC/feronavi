@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPut, ApiError } from "../../lib/api.ts";
 import { t, useLocale } from "../../i18n/index.ts";
 import { Button } from "../ui/Button.tsx";
+import { Modal } from "../ui/Modal.tsx";
 import { TextInput } from "../ui/TextInput.tsx";
 import { Select } from "../Select.tsx";
 import { SettingsListState, SettingsSection } from "./SettingsSection.tsx";
@@ -25,7 +26,7 @@ interface ClientRow {
 
 import { useSettingsDraft } from "./SettingsDraft.tsx";
 
-export function McpClientSettings({ onSuccess, onError }: FeedbackHandlers) {
+export function McpClientSettings({ onSuccess }: FeedbackHandlers) {
   useLocale();
   const qc = useQueryClient();
   const list = useQuery({
@@ -35,6 +36,7 @@ export function McpClientSettings({ onSuccess, onError }: FeedbackHandlers) {
   });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<PolicyRow[]>([]);
+  const [formError, setFormError] = useState<string | null>(null);
   const [newTool, setNewTool] = useState("");
   const [newEffect, setNewEffect] = useState<"ALLOW" | "DENY">("DENY");
 
@@ -44,18 +46,20 @@ export function McpClientSettings({ onSuccess, onError }: FeedbackHandlers) {
     }),
     onSuccess: async () => {
       setEditingId(null);
+      setFormError(null);
       setDraft([]);
       setNewTool("");
       onSuccess(t("se.mcpSaved"));
       await qc.invalidateQueries({ queryKey: ["mcp-clients"] });
     },
-    onError: (e) => onError(e instanceof ApiError ? e.message : t("se.mcpSaveFailed")),
+    onError: (e) => setFormError(e instanceof ApiError ? e.message : t("se.mcpSaveFailed")),
   });
 
   const guard = useSettingsDraft(!!editingId, { draft, newTool, newEffect }, save.isPending);
   const startEdit = (c: ClientRow) => {
     void guard.leave(() => {
     setEditingId(c.id);
+    setFormError(null);
     setDraft(c.policies.map((p) => ({ ...p })));
     setNewTool("");
     setNewEffect("DENY");
@@ -68,6 +72,8 @@ export function McpClientSettings({ onSuccess, onError }: FeedbackHandlers) {
     setDraft((d) => [...d, { toolName: tool, effect: newEffect }]);
     setNewTool("");
   };
+
+  const requestClose = () => void guard.leave(() => { setEditingId(null); setFormError(null); });
 
   return (
     <SettingsSection title={t("set.mcpClients")} description={t("se.mcpDesc")}>
@@ -90,11 +96,18 @@ export function McpClientSettings({ onSuccess, onError }: FeedbackHandlers) {
                   {c.policies.length === 0 ? t("se.mcpNoPolicy") : c.policies.map((p) => `${p.toolName}=${p.effect}`).join("，")}
                 </span>
               </span>
-              <Button size="sm" variant="ghost" onClick={() => (editingId === c.id ? void guard.leave(() => setEditingId(null)) : startEdit(c))}>
-                {editingId === c.id ? t("se.mcpCancel") : t("se.mcpEdit")}
-              </Button>
-              {editingId === c.id && (
-                <div className="settings-deliveries" role="region" aria-label={t("se.mcpPolicies")}>
+              <Button size="sm" variant="ghost" aria-haspopup="dialog" onClick={() => startEdit(c)}>{t("se.mcpEdit")}</Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Modal open={!!editingId} width="lg" title={t("se.mcpPolicies")} onClose={requestClose}
+        footer={<>
+          <Button disabled={save.isPending} onClick={requestClose}>{t("common.cancel")}</Button>
+          <Button variant="primary" disabled={save.isPending || !editingId} loading={save.isPending} onClick={() => { if (editingId && !save.isPending) { setFormError(null); save.mutate(editingId); } }}>{t("se.mcpSave")}</Button>
+        </>}>
+        {formError && <p className="field-error" role="alert">{formError}</p>}
+        <fieldset disabled={save.isPending} className="settings-form-fields">
                   {draft.length === 0 && <SettingsListState>{t("se.mcpNoPolicy")}</SettingsListState>}
                   {draft.length > 0 && (
                     <ul className="settings-delivery-list">
@@ -116,14 +129,9 @@ export function McpClientSettings({ onSuccess, onError }: FeedbackHandlers) {
                       value={newEffect} onChange={(v) => setNewEffect(v as "ALLOW" | "DENY")}
                       options={[{ value: "DENY", label: "DENY" }, { value: "ALLOW", label: "ALLOW" }]} />
                     <Button size="sm" variant="ghost" disabled={!newTool.trim()} onClick={addPolicy}>{t("se.mcpAddPolicy")}</Button>
-                    <Button size="sm" variant="primary" loading={save.isPending} onClick={() => save.mutate(c.id)}>{t("se.mcpSave")}</Button>
                   </div>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+        </fieldset>
+      </Modal>
     </SettingsSection>
   );
 }

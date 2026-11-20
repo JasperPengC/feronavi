@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 
 assert.match(new URL(process.env.DATABASE_URL ?? "postgres://invalid/").pathname.slice(1), /^feronavi_test_[a-f0-9]{32}$/u);
+await (await import("../../src/server/application/bootstrap-business-effects.ts")).bootstrapBusinessEffects();
 const { db, sql } = await import("../../src/db/index.ts");
 const { member, role, roleAssignment, page, intakeSubmission, project: projectTable, notification, mention } = await import("../../src/db/schema.ts");
 const { eq } = await import("drizzle-orm");
@@ -104,6 +105,7 @@ try {
   async function batch(text: string) {
     const { batch } = await imports.createBatch(actor, project.id, { filename: "domain.csv", buffer: Buffer.from(text) });
     await imports.setMapping(actor, batch.id, { fieldMap: { title: "title" }, externalIdColumn: "id" });
+    await imports.dryRun(actor, batch.id);
     return batch;
   }
   await check("导入映射失败时回滚工作项", async () => {

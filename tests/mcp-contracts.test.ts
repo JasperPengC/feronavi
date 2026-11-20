@@ -33,6 +33,7 @@ vi.mock("../src/server/services/work-item.service.ts", () => ({
   getWorkItem: async () => ({ id: "11111111-1111-4111-8111-111111111111", projectId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", version: 1 }),
   updateWorkItem: async (_actor: Actor, id: string, patch: object) => ({ id, ...patch }),
 }));
+import { AGENT_TOOLS } from "../src/server/mcp/tools.ts";
 import { buildMcpServer, TOOLS, WRITE_TOOLS } from "../src/server/mcp/server.ts";
 
 const projectA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -54,6 +55,29 @@ function envelope(result: Awaited<ReturnType<Client["callTool"]>>) {
 }
 
 describe("MCP 服务端执行声明的输入契约", () => {
+  it("工具目录声明结构化输出和安全操作提示", async () => {
+    const client = await connect();
+    const listed = await client.listTools();
+    expect(listed.tools.length).toBeGreaterThan(0);
+    for (const tool of listed.tools) {
+      expect(tool.outputSchema, tool.name).toMatchObject({ type: "object" });
+      expect(tool.annotations, tool.name).toMatchObject({
+        readOnlyHint: expect.any(Boolean),
+        destructiveHint: expect.any(Boolean),
+        idempotentHint: expect.any(Boolean),
+      });
+    }
+    expect(listed.tools.find(tool => tool.name === "ping")?.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true });
+    expect(listed.tools.find(tool => tool.name === "workitem.create")?.annotations).toMatchObject({ readOnlyHint: false, idempotentHint: false });
+    expect(listed.tools.find(tool => tool.name === "comment.delete")?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
+    const ping = await client.callTool({ name: "ping", arguments: {} });
+    expect(ping.structuredContent).toEqual({ ok: true, server: "feronavi" });
+    expect(envelope(ping)).toEqual(ping.structuredContent);
+    const invalid = await client.callTool({ name: "ping", arguments: { unexpected: true } });
+    expect(invalid.isError).toBe(true);
+    expect(envelope(invalid).code).toBe("VALIDATION");
+  });
+
   it("未知字段在进入业务处理前返回 VALIDATION", async () => {
     const client = await connect();
     const result = await client.callTool({ name: "workitem.update", arguments: { workItemId: "11111111-1111-4111-8111-111111111111", expectedVersion: 1, statusId: "22222222-2222-4222-8222-222222222222" } });
@@ -72,13 +96,22 @@ describe("MCP 服务端执行声明的输入契约", () => {
       expect(envelope(result).code, tool.name).toBe("VALIDATION");
     }
   });
+  it("所有写工具声明必填确认，旧工具也在业务执行前拒绝未确认写入", async () => {
+    for (const tool of [...WRITE_TOOLS, ...AGENT_TOOLS].filter(tool => tool.kind === "write")) {
+      expect(tool.inputSchema.required, tool.name).toContain("userConfirmed");
+    }
+    const client = await connect();
+    const args = { projectId: projectA, type: "TASK", title: "unconfirmed" };
+    expect(envelope(await client.callTool({ name: "workitem.create", arguments: args })).code).toBe("VALIDATION");
+    expect(envelope(await client.callTool({ name: "workitem.create", arguments: { ...args, userConfirmed: false } })).code).toBe("COMMAND_CONFIRMATION_REQUIRED");
+  });
   it("合法创建仍执行成功", async () => {
-    const result = await (await connect()).callTool({ name: "workitem.create", arguments: { projectId: projectA, type: "TASK", title: "valid" } });
+    const result = await (await connect()).callTool({ name: "workitem.create", arguments: { projectId: projectA, type: "TASK", title: "valid", userConfirmed: true } });
     expect(result.isError).not.toBe(true);
     expect(envelope(result).result).toMatchObject({ projectId: projectA, title: "valid" });
   });
   it("项目白名单之外的创建拒绝，即使账号是组织管理员", async () => {
-    const result = await (await connect([projectA])).callTool({ name: "workitem.create", arguments: { projectId: projectB, type: "TASK", title: "outside" } });
+    const result = await (await connect([projectA])).callTool({ name: "workitem.create", arguments: { projectId: projectB, type: "TASK", title: "outside", userConfirmed: true } });
     expect(envelope(result).code).toBe("NOT_FOUND");
   });
 });
@@ -93,12 +126,12 @@ describe("MCP 协作房间冷启动", () => {
     expect(data).toMatchObject({ mode: "COMMAND", actions: ["workitem.get", "workitem.update", "workitem.transition", "workitem.assign", "workitem.comment"] });
   });
 
-  it("command 首次访问先创建房间，但仍要求用户确认", async () => {
+  it("未确认的command在创建房间前拒绝", async () => {
     collabRoomMock.getOrCreateRoom.mockClear();
     const result = await (await connect()).callTool({ name: "collab.command", arguments: {
       resourceType: "WORK_ITEM", resourceId: inside, action: "workitem.update", input: { expectedVersion: 1, title: "冷启动验证" }, userConfirmed: false,
     } });
-    expect(collabRoomMock.getOrCreateRoom).toHaveBeenCalledWith(actor, "WORK_ITEM", inside);
+    expect(collabRoomMock.getOrCreateRoom).not.toHaveBeenCalled();
     expect(envelope(result).code).toBe("COMMAND_CONFIRMATION_REQUIRED");
   });
 });
@@ -123,24 +156,24 @@ const resourceCalls: [string, Record<string, unknown>][] = [
 ];
 for (const [name, args] of resourceCalls) {
   it(`${name} 按实际资源所属项目拒绝白名单外访问 ${JSON.stringify(args)}`, async () => {
-    const result = await (await connect([projectA])).callTool({ name, arguments: args });
+    const result = await (await connect([projectA])).callTool({ name, arguments: name === "notification.list" ? args : { userConfirmed: true, ...args } });
     expect(envelope(result).code).toBe("NOT_FOUND");
   });
 }
 it("受限项目令牌不能读取全账号通知或发送全局公告", async () => {
   const client = await connect([projectA]);
   for (const [name, args] of [["notification.list", {}], ["notification.markRead", {}], ["announcement.send", { title: "x", body: "x" }], ["announcement.revoke", { announcementId: outside }]] as const) {
-    expect(envelope(await client.callTool({ name, arguments: args })).code).toBe("FORBIDDEN");
+    expect(envelope(await client.callTool({ name, arguments: name === "notification.list" ? args : { userConfirmed: true, ...args } })).code).toBe("FORBIDDEN");
   }
 });
 it("MCP 校验嵌套额外字段和动态布尔值，不能只校验顶层对象", async () => {
   const client = await connect();
-  expect(envelope(await client.callTool({ name: "announcement.send", arguments: { title: "x", body: "x", audience: { undeclaredField: true } } })).code).toBe("VALIDATION");
-  expect(envelope(await client.callTool({ name: "notification.setPrefs", arguments: { categoryPrefs: { ASSIGN: { inApp: "yes" } } } })).code).toBe("VALIDATION");
+  expect(envelope(await client.callTool({ name: "announcement.send", arguments: { userConfirmed: true, title: "x", body: "x", audience: { undeclaredField: true } } })).code).toBe("VALIDATION");
+  expect(envelope(await client.callTool({ name: "notification.setPrefs", arguments: { userConfirmed: true, categoryPrefs: { ASSIGN: { inApp: "yes" } } } })).code).toBe("VALIDATION");
 });
 
 it.each([{ actions: [{}] }, { conditions: { all: 123 } }, { actions: [{ type: "CALL_WEBHOOK", hidden: true }] }])("自动化 MCP 在服务执行前拒绝非法嵌套结构 %j", async (bad) => {
   const client = await connect();
-  const result = await client.callTool({ name: "automation.createRule", arguments: { projectId: projectA, name: "bad", trigger: "SCHEDULE", actions: [{ type: "CALL_WEBHOOK" }], ...bad } });
+  const result = await client.callTool({ name: "automation.createRule", arguments: { userConfirmed: true, projectId: projectA, name: "bad", trigger: "SCHEDULE", actions: [{ type: "CALL_WEBHOOK" }], ...bad } });
   expect(envelope(result).code).toBe("VALIDATION");
 });

@@ -10,21 +10,22 @@ import { assertDocumentUpdateAllowed, isCollabResourceType, requireUserConfirmat
 import * as rooms from "../services/collab-room.persistence.ts";
 import * as documents from "../services/collab-document.service.ts";
 import * as commands from "../services/collab-command.service.ts";
+import { COLLAB_COMMANDS } from "../../shared/collab-commands.ts";
 
 const ACTIONS: Record<string, { read: string[]; write: string[] }> = {
   PAGE: { read: ["page.get"], write: ["collab.update", "collab.publishPage"] },
   WORK_ITEM: { read: ["workitem.get"], write: ["workitem.update", "workitem.transition", "workitem.assign", "workitem.comment"] },
   COMMENT: { read: [], write: ["comment.update", "comment.delete"] },
-  PLAN: { read: ["plan.getMilestone"], write: ["plan.createMilestone", "plan.createIteration", "plan.createRelease", "plan.createModule"] },
+  PLAN: { read: ["plan.getMilestone", "plan.getIteration", "plan.getRelease", "plan.getModule"], write: [...COLLAB_COMMANDS.PLAN] },
   APPROVAL: { read: ["approval.list"], write: ["approval.approve", "approval.reject"] },
-  AUTOMATION: { read: ["automation.listRules", "automation.listRuns"], write: ["automation.createRule"] },
+  AUTOMATION: { read: ["automation.listRules", "automation.listRuns", "automation.dryRun"], write: COLLAB_COMMANDS.AUTOMATION.filter(action => action !== "automation.dryRun") },
 };
 const DOMAIN_TOOLS: Record<string, string[]> = {
   WORK_ITEM: ["workitem.get", "workitem.update", "workitem.transition", "workitem.assign", "workitem.comment"],
   COMMENT: ["comment.update", "comment.delete"],
-  PLAN: ["plan.getMilestone", "plan.createMilestone", "plan.createIteration", "plan.createRelease", "plan.createModule"],
+  PLAN: ["plan.getMilestone", "plan.getIteration", "plan.getRelease", "plan.getModule", ...COLLAB_COMMANDS.PLAN],
   APPROVAL: ["approval.list", "approval.approve", "approval.reject"],
-  AUTOMATION: ["automation.listRules", "automation.listRuns", "automation.createRule"],
+  AUTOMATION: ["automation.listRules", "automation.listRuns", ...COLLAB_COMMANDS.AUTOMATION],
 };
 
 declare module "fastify" { interface FastifyRequest { actor?: Actor } }
@@ -78,7 +79,7 @@ export async function registerCollaborationRoutes(app: FastifyInstance): Promise
     const p = params.parse(req.params);
     const room = await rooms.getRoom(actor, p.resourceType, p.resourceId);
     const state = await documents.loadDocument(room.id);
-    return { roomId: room.id, baseRevisionId: room.baseRevisionId, sequence: state.sequence, stateBase64: Buffer.from(state.state).toString("base64") };
+    return { roomId: room.id, baseRevisionId: state.baseRevisionId, sequence: state.sequence, stateBase64: Buffer.from(state.state).toString("base64") };
   });
 
   app.post("/api/v1/collaboration/rooms/:resourceType/:resourceId/updates", { onRequest: app.csrfProtection }, async (req) => {
@@ -108,8 +109,8 @@ export async function registerCollaborationRoutes(app: FastifyInstance): Promise
     const state = await documents.loadDocument(room.id);
     return {
       roomId: room.id, resourceType: room.resourceType, resourceId: room.resourceId, projectId: room.projectId,
-      mode: room.mode, baseRevisionId: room.baseRevisionId, sequence: state.sequence,
-      canRead: true, canWrite, publishedRevisionId: room.resourceType === "PAGE" ? room.baseRevisionId : null,
+      mode: room.mode, baseRevisionId: state.baseRevisionId, sequence: state.sequence,
+      canRead: true, canWrite, publishedRevisionId: room.resourceType === "PAGE" ? state.baseRevisionId : null,
       actions: room.mode === "TEXT_CRDT" ? [
         ...(ACTIONS[room.resourceType]?.read ?? []),
         ...(canWrite ? ACTIONS[room.resourceType]?.write ?? [] : []),

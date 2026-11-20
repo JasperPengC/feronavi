@@ -6,10 +6,10 @@
  *   2 **CRLF 行尾**：RFC 4180 规定；Excel 与 pandas 都能正确解析
  *   3 **schemaVersion 走响应头**：CSV 里塞元数据会破坏解析器，头信息放 header 更干净
  */
-import { and, asc, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, asc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "../../db/index.ts";
 import { customFieldDef, customFieldValue, milestone, module, release, iteration, workItem, workflowState } from "../../db/schema.ts";
-import { forbidden } from "../../shared/errors.ts";
+import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 
@@ -37,7 +37,7 @@ export interface WorkItemExportFilters {
   q?: string;
 }
 
-export async function exportWorkItemsCsv(actor: Actor, projectId: string, filters: WorkItemExportFilters = {}): Promise<{ csv: string; count: number }> {
+export async function exportWorkItemsCsv(actor: Actor, projectId: string, filters: WorkItemExportFilters = {}, options: { maxRows?: number } = {}): Promise<{ csv: string; count: number }> {
   if (!(await projectRepo.findById(projectId))) throw forbidden();
   if (!(await projectRepo.isVisibleTo(actor.memberId, projectId, hasOrg(actor)))) throw forbidden();
 
@@ -51,11 +51,21 @@ export async function exportWorkItemsCsv(actor: Actor, projectId: string, filter
     const q = `%${filters.q.trim()}%`;
     conds.push(or(ilike(workItem.title, q), ilike(workItem.key, q))!);
   }
-  let items = await db.select().from(workItem)
-    .where(and(...conds))
-    .orderBy(asc(workItem.number));
+  if (filters.statusCategory) {
+    const statusCondition = filters.statusCategory === "OPEN"
+      ? sql`${workflowState.category} not in ('DONE', 'CANCELLED', 'TERMINAL')`
+      : filters.statusCategory === "DONE"
+        ? inArray(workflowState.category, ["DONE", "TERMINAL"])
+        : eq(workflowState.category, filters.statusCategory);
+    conds.push(inArray(workItem.statusId, db.select({ id: workflowState.id }).from(workflowState).where(statusCondition)));
+  }
+  const query = db.select().from(workItem).where(and(...conds)).orderBy(asc(workItem.number));
+  let items = await (options.maxRows ? query.limit(options.maxRows + 1) : query);
+  if (options.maxRows && items.length > options.maxRows) {
+    throw new DomainError("VALIDATION", "导出行数超过上限，请收窄筛选条件", { limit: options.maxRows });
+  }
 
-  const states = await db.select({ id: workflowState.id, key: workflowState.key, name: workflowState.name, category: workflowState.category }).from(workflowState);
+  const states = items.length ? await db.select({ id: workflowState.id, key: workflowState.key, name: workflowState.name, category: workflowState.category }).from(workflowState).where(inArray(workflowState.id, [...new Set(items.map(item => item.statusId))])) : [];
   const stateName = new Map(states.map((s) => [s.id, s.name]));
   const stateCategory = new Map(states.map((s) => [s.id, s.category]));
   if (filters.statusCategory) {
@@ -77,7 +87,7 @@ export async function exportWorkItemsCsv(actor: Actor, projectId: string, filter
   const defs = await db.select().from(customFieldDef).where(eq(customFieldDef.projectId, projectId))
     .orderBy(asc(customFieldDef.sortOrder), asc(customFieldDef.key));
   const valueRows = items.length
-    ? await db.select().from(customFieldValue)
+    ? await db.select().from(customFieldValue).where(inArray(customFieldValue.workItemId, items.map(item => item.id)))
     : [];
   const valueByItem = new Map(valueRows.map((v) => [v.workItemId, (v.values ?? {}) as Record<string, unknown>]));
 

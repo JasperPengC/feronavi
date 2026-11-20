@@ -1,0 +1,17 @@
+.markdown-table-scroll { max-width: 100%; overflow-x: auto; margin-bottom: 12px; scrollbar-width: thin; }
+.markdown-table-scroll table { min-width: max-content; margin-bottom: 0; }
+.markdown-table-scroll th, .markdown-table-scroll td { max-width: 32rem; overflow-wrap: anywhere; }
+.markdown-body .contains-task-list { list-style: none; padding-left: 4px; }
+.markdown-body .task-list-item input { margin-right: 8px; accent-color: var(--text-muted); }
+.markdown-diagram { margin: 16px 0; max-width: 100%; min-width: 0; }
+.markdown-diagram-viewport { max-width: 100%; max-height: 640px; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.markdown-diagram iframe { display: block; min-width: 100%; border: 0; min-height: 80px; background: transparent; }
+.markdown-diagram-tools { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 12px; line-height: 1.7; color: var(--text-muted); }
+.markdown-diagram-tools .btn { color: inherit; font-size: 12px !important; font-weight: 400; box-shadow: none; }
+.markdown-diagram > p, .markdown-diagram summary { font-size: 12px; line-height: 1.7; color: var(--text-muted); }
+.markdown-diagram summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; gap: 6px; width: fit-content; list-style: none; }
+.markdown-diagram summary::-webkit-details-marker { display: none; }
+.markdown-diagram details[open] summary svg { transform: rotate(180deg); }
+.markdown-diagram summary:focus-visible, .markdown-diagram-viewport:focus-visible, .markdown-table-scroll:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.markdown-diagram pre { max-height: 320px; overflow: auto; }
+@media (max-width: 760px) { .markdown-diagram summary, .markdown-diagram-tools .btn { min-height: 44px !important; } }

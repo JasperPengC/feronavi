@@ -6,7 +6,7 @@
  */
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../../db/index.ts";
-import { iteration, member, project, projectStatusDef, workItem } from "../../db/schema.ts";
+import { iteration, member, project, workflow, workflowState, workItem } from "../../db/schema.ts";
 import { forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import * as projectRepo from "../repos/project.repo.ts";
@@ -21,31 +21,30 @@ export async function projectReport(actor: Actor, projectId: string): Promise<{ 
     throw forbidden();
   }
 
-  /**
-   * ⚠️ `project_status_def` **没有 project_id** —— 工作流状态是组织级全局定义，项目通过 workflow 引用。
-   * 因此项目维度的过滤只能放在 **join 条件**里，不能放在 where（否则会把没有工作项的状态整行滤掉，
-   * 而"某状态 0 项"恰恰是报告要展示的信息）。
-   */
+  // 工作项引用项目工作流的状态，不引用项目自身的状态字典。
+  // 保留零项状态，并合并不同工作项类型中名称和类别相同的状态。
   const byStatus = await db.select({
-    name: projectStatusDef.name, category: projectStatusDef.category,
+    name: workflowState.name, category: workflowState.category,
     n: sql<number>`count(${workItem.id})::int`,
-  }).from(projectStatusDef)
+  }).from(workflowState)
+    .innerJoin(workflow, eq(workflowState.workflowId, workflow.id))
     .leftJoin(workItem, and(
-      eq(workItem.statusId, projectStatusDef.id),
+      eq(workItem.statusId, workflowState.id),
       eq(workItem.projectId, projectId),
       isNull(workItem.deletedAt),
     ))
-    .groupBy(projectStatusDef.name, projectStatusDef.category, projectStatusDef.sortOrder)
-    .orderBy(projectStatusDef.sortOrder);
+    .where(eq(workflow.projectId, projectId))
+    .groupBy(workflowState.name, workflowState.category)
+    .orderBy(sql`min(${workflowState.sortOrder})`);
 
   const byType = await db.select({ type: workItem.type, n: sql<number>`count(*)::int` })
     .from(workItem).where(and(eq(workItem.projectId, projectId), isNull(workItem.deletedAt)))
     .groupBy(workItem.type);
 
-  // `iteration` 用 completed_at 表示已结束（没有 archived_at）；报告只列未结束的迭代
+  // 报告只列未结束且未归档的迭代。
   const iterations = await db.select({
     name: iteration.name, startDate: iteration.startDate, endDate: iteration.endDate,
-  }).from(iteration).where(and(eq(iteration.projectId, projectId), isNull(iteration.completedAt)))
+  }).from(iteration).where(and(eq(iteration.projectId, projectId), isNull(iteration.completedAt), isNull(iteration.archivedAt)))
     .orderBy(desc(iteration.startDate)).limit(5);
 
   const overdue = await db.select({

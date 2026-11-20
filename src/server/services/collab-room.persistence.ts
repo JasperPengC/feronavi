@@ -1,6 +1,6 @@
 import { and, eq, sql as drizzleSql } from "drizzle-orm";
 import { db } from "../../db/index.ts";
-import { approvalRequest, automationRule, collabMember, collabRoom, collabSnapshot, collabUpdate, comment, idea, iteration, milestone, module, page, release, workItem } from "../../db/schema.ts";
+import { approvalRequest, automationRule, collabMember, collabRoom, collabSnapshot, collabUpdate, comment, idea, iteration, milestone, module, page, pageRevision, release, workItem } from "../../db/schema.ts";
 import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import * as projectRepo from "../repos/project.repo.ts";
@@ -11,6 +11,7 @@ import * as planning from "./planning.service.ts";
 import * as ideas from "./idea.service.ts";
 import { isCollabResourceType, modeForResource, type CollabResourceType, validateClientId } from "./collab-room.service.ts";
 import * as Y from "yjs";
+import { lockProjectTree } from "./project-tree.ts";
 
 async function resolveProjectId(resourceType: CollabResourceType, resourceId: string): Promise<string | null> {
   if (resourceType === "PAGE") return (await db.select({ projectId: page.projectId }).from(page).where(eq(page.id, resourceId)).limit(1))[0]?.projectId ?? null;
@@ -22,6 +23,7 @@ async function resolveProjectId(resourceType: CollabResourceType, resourceId: st
     if (!row) return null;
     if (row.targetType === "PAGE") return resolveProjectId("PAGE", row.targetId);
     if (row.targetType === "WORK_ITEM") return resolveProjectId("WORK_ITEM", row.targetId);
+    if (row.targetType === "MILESTONE") return (await db.select({ projectId: milestone.projectId }).from(milestone).where(eq(milestone.id, row.targetId)).limit(1))[0]?.projectId ?? null;
     if (row.targetType === "IDEA") return (await db.select({ projectId: idea.projectId }).from(idea).where(eq(idea.id, row.targetId)).limit(1))[0]?.projectId ?? null;
     return null;
   }
@@ -41,6 +43,7 @@ async function assertResourceVisible(actor: Actor, resourceType: CollabResourceT
     if (!row || row.deletedAt) throw new DomainError("NOT_FOUND", "协作资源不存在", null);
     if (row.targetType === "PAGE") await wiki.getPage(actor, row.targetId);
     else if (row.targetType === "WORK_ITEM") await workItems.getWorkItem(actor, row.targetId);
+    else if (row.targetType === "MILESTONE") await planning.get(actor, row.targetId, "milestone");
     else if (row.targetType === "IDEA") await ideas.getIdea(actor, row.targetId);
     else throw new DomainError("NOT_FOUND", "协作资源不存在", null);
     return;
@@ -77,6 +80,16 @@ export async function getRoom(actor: Actor, resourceType: string, resourceId: st
 }
 
 export async function getOrCreateRoom(actor: Actor, resourceType: string, resourceId: string) {
+  if (resourceType !== "PAGE") return getOrCreateRoomLocked(actor, resourceType, resourceId);
+  const projectId = await resolveProjectId("PAGE", resourceId);
+  if (!projectId) throw new DomainError("NOT_FOUND", "协作资源不存在", null);
+  return db.transaction(async () => {
+    await lockProjectTree(projectId);
+    return getOrCreateRoomLocked(actor, resourceType, resourceId);
+  });
+}
+
+async function getOrCreateRoomLocked(actor: Actor, resourceType: string, resourceId: string) {
   if (!isCollabResourceType(resourceType)) throw new DomainError("VALIDATION", "不支持的协作资源类型", null);
   const existing = (await db.select().from(collabRoom).where(and(eq(collabRoom.resourceType, resourceType), eq(collabRoom.resourceId, resourceId))).limit(1))[0];
   if (existing) await assertVisible(actor, existing);
@@ -103,9 +116,22 @@ export async function getOrCreateRoom(actor: Actor, resourceType: string, resour
         roomId: room.id, sequence: 0, stateBase64: Buffer.from(Y.encodeStateAsUpdate(doc)).toString("base64"),
         baseRevisionId: currentPage.currentRevisionId,
       });
+      await tx.update(collabRoom).set({ baseRevisionId: currentPage.currentRevisionId }).where(eq(collabRoom.id, room.id));
+    } else if (currentPage.currentRevisionId) {
+      const documents = await import("./collab-document.service.ts");
+      const state = await documents.loadDocument(room.id);
+      if (room.baseRevisionId !== currentPage.currentRevisionId || state.baseRevisionId !== currentPage.currentRevisionId) {
+        // 修复升级前留下的分歧。仅标题/位置变化时保留草稿；外部正文变化用同一Y.Doc替换。
+        const base = room.baseRevisionId ? (await tx.select({ content: pageRevision.content }).from(pageRevision)
+          .where(and(eq(pageRevision.id, room.baseRevisionId), eq(pageRevision.pageId, resourceId))).limit(1))[0] : null;
+        await documents.synchronizePublishedPage(actor, {
+          pageId: resourceId, projectId, revisionId: currentPage.currentRevisionId,
+          ...(base?.content === currentPage.content ? {} : { content: currentPage.content }),
+        });
+      }
     }
   });
-  return room;
+  return currentPage ? (await db.select().from(collabRoom).where(eq(collabRoom.id, room.id)).limit(1))[0]! : room;
 }
 
 export async function canWriteRoom(actor: Actor, room: typeof collabRoom.$inferSelect): Promise<boolean> {

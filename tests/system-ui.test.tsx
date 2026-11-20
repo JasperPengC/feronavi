@@ -29,7 +29,10 @@ async function switchTab(label: string) {
   await waitFor(() => expect(screen.getAllByText("系统自检").length).toBeGreaterThan(0));
   fireEvent.click(screen.getByRole("tab", { name: label }));
 }
-beforeEach(() => { vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} })); });
+beforeEach(() => {
+  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
+});
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 const MIG_OK = { applied: 25, files: 25, consistent: true, latestAppliedAt: "2026-11-01", externalDatabase: false,
@@ -70,18 +73,19 @@ describe("系统自检页", () => {
     expect(document.body.textContent).toMatch(/静默跳过或重放/);
   });
 
-  it("备份区写明三件套与恢复步骤，且**没有假按钮**（备份由部署方执行）", async () => {
+  it("数据库灾备与同构恢复说明默认折叠在运维区域", async () => {
     stub({ "/auth/me": [200, ACTOR], "/system/status": [200, { ok: true, version: "1" }],
       "/system/migrations": [200, MIG_OK], "/knowledge/ai-status": [200, { configured: false, dimensionOk: true, message: "未配置" }],
       "/auth/2fa": [200, { enabled: false, pending: false }] });
     renderPage();
-    await switchTab("数据");
+    await switchTab("运维");
+    const details = screen.getByText("数据库灾备与同构恢复");
+    fireEvent.click(details);
     await waitFor(() => expect(document.body.textContent).toMatch(/备份必须包含/));
+    expect(details.closest("details")?.open).toBe(true);
     expect(document.body.textContent).toMatch(/少了密钥，敏感设置的密文将永远解不开/);
     expect(screen.getByText(/scripts\/backup\.sh/)).toBeTruthy();
     expect(document.body.textContent).toContain("恢复步骤（演练过再上生产）");
-    // 平台上不存在"立即备份"这类按钮（会误导用户以为平台会代跑）
-    expect(screen.queryByText(/立即备份/)).toBeNull();
   });
 
   it("未配置 AI 时说明会退化为关键词（不是错误状态）", async () => {

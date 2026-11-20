@@ -7,6 +7,7 @@
  * ⚠️ stdio 模式下 **stdout 属于协议**：任何调试输出都必须走 stderr，
  *    否则会污染 JSON-RPC 流导致客户端解析失败。
  */
+import { bootstrapBusinessEffects } from "../application/bootstrap-business-effects.ts";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { buildMcpServer } from "../mcp/server.ts";
 import { authenticateToken } from "../services/token.service.ts";
@@ -23,6 +24,7 @@ if (!auth) {
   process.exit(1);
 }
 
+await bootstrapBusinessEffects();
 const server = buildMcpServer({ actor: auth.actor, token: auth.ctx });
 await server.connect(new StdioServerTransport());
 process.stderr.write(`[feronavi-mcp] 已连接：${auth.actor.name}（档位 ${auth.ctx.tier}）\n`);

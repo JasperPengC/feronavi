@@ -17,13 +17,13 @@ import { apiGet, apiPost, apiPatch, ApiError } from "../lib/api.ts";
 import { t, useLocale } from "../i18n/index.ts";
 import { Select } from "../components/Select.tsx";
 import { Checkbox } from "../components/Checkbox.tsx";
-import { Drawer } from "../components/ui/Drawer.tsx";
+import { Modal } from "../components/ui/Modal.tsx";
 import { toast } from "../components/ui/Toast.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { PageHead } from "../components/Page.tsx";
 import { TreeLayout } from "../components/layout/TreeLayout.tsx";
 import { Button } from "../components/ui/Button.tsx";
-import { ConfirmButton } from "../components/ui/ConfirmButton.tsx";
+import { confirmDialog } from "../components/Dialog.tsx";
 import { TextArea } from "../components/ui/TextArea.tsx";
 import { TextInput } from "../components/ui/TextInput.tsx";
 import { Tree } from "../components/ui/Tree.tsx";
@@ -44,7 +44,6 @@ const TYPE_LABEL: Record<string, string> = {
 const TYPE_ORDER = ["TEXT", "NUMBER", "DATE", "SINGLE_SELECT", "MULTI_SELECT", "PERSON"];
 
 import { useSettingsDraft } from "../components/settings/SettingsDraft.tsx";
-import { DraftNavigationGuard } from "../components/ui/DraftNavigationGuard.tsx";
 import { useCan } from "../lib/actor.ts";
 
 export function CustomFieldsPage() {
@@ -54,6 +53,7 @@ export function CustomFieldsPage() {
   const canManage = useCan("work_item:manage_field");
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ key: "", name: "", type: "TEXT", options: "", isRequired: false });
+  const [createError, setCreateError] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [editField, setEditField] = useState<FieldDef | null>(null);
   const [editForm, setEditForm] = useState({ name: "", options: "", isRequired: false, sortOrder: 0 });
@@ -83,7 +83,7 @@ export function CustomFieldsPage() {
         : {}),
     }),
     onSuccess: async () => { setCreateOpen(false); setForm({ key: "", name: "", type: "TEXT", options: "", isRequired: false }); await invalidate(); },
-    onError: (e) => toast.error(e instanceof ApiError ? e.message : t("cf.createFailed")),
+    onError: (e) => setCreateError(e instanceof ApiError ? e.message : t("cf.createFailed")),
   });
 
   const archive = useMutation({
@@ -141,15 +141,17 @@ export function CustomFieldsPage() {
     : selectedType ? rows.filter((f) => f.type === selectedType) : rows;
 
   const editGuard = useSettingsDraft(!!editField, editForm, updateField.isPending);
+  const createGuard = useSettingsDraft(createOpen, form, create.isPending);
+  const closeCreate = () => void createGuard.leave(() => { setCreateOpen(false); setForm({ key: "", name: "", type: "TEXT", options: "", isRequired: false }); setCreateError(null); });
   const closeEdit = () => void editGuard.leave(() => { setEditField(null); setEditError(null); });
   return (
     <div className="page project-refinement custom-fields-page data-page">
       <PageHead title={t("fields.title")} actions={canManage && <Button variant="primary"
-        aria-expanded={createOpen} aria-controls="custom-field-create" onClick={() => setCreateOpen(open => !open)}>
-        <Icon name={createOpen ? "x" : "plus"} size={14} />{createOpen ? t("common.collapse") : t("cf.new")}
+        aria-haspopup="dialog" onClick={() => { setCreateError(null); setCreateOpen(true); }}>
+        <Icon name="plus" size={14} />{t("cf.new")}
       </Button>} />
       {editGuard.guard}
-      <DraftNavigationGuard dirty={!!(form.key || form.name || form.options || form.type !== "TEXT" || form.isRequired)} saving={create.isPending} message={t("flows.discardDraft")} />
+      {createGuard.guard}
       {isError && <StateBlock kind="error" title={t("common.loadFailedShort")} action={() => void refetch()} actionLabel={t("common.reload")} />}
 
       <TreeLayout
@@ -171,8 +173,12 @@ export function CustomFieldsPage() {
           />
         )}
       >
-        {canManage && <div id="custom-field-create" hidden={!createOpen} className="card custom-field-compose" style={{ padding: 16, marginBottom: 16 }}>
-          <strong style={{ fontSize: "var(--text-sm)" }}>{t("cf.create")}</strong>
+        {canManage && <Modal open={createOpen} title={t("cf.create")} onClose={closeCreate} footer={<>
+          <Button disabled={create.isPending} onClick={closeCreate}>{t("common.cancel")}</Button>
+          <Button variant="primary" loading={create.isPending} disabled={!form.key.trim() || !form.name.trim() || create.isPending} onClick={() => { setCreateError(null); create.mutate(); }}>{t("cf.create")}</Button>
+        </>}>
+          {createError && <p className="field-error" role="alert">{createError}</p>}
+          <fieldset disabled={create.isPending} className="settings-form-fields">
           <div style={{
             display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
             gap: 12, marginTop: 12, alignItems: "end",
@@ -197,11 +203,8 @@ export function CustomFieldsPage() {
           <p className="muted" style={{ fontSize: "var(--text-xs)", marginBottom: 0 }}>
             {t("cf.keyImmutableHint")}
           </p>
-          <div className="form-actions card-footer-actions">
-            <Button variant="primary" disabled={!form.key || !form.name || create.isPending}
-              onClick={() => create.mutate()}>{t("cf.create")}</Button>
-          </div>
-        </div>}
+          </fieldset>
+        </Modal>}
 
         <TableScroll label={t("fields.title")} resetKey={JSON.stringify([projectId, selectedNodeId])}>
         <table className="card custom-fields-table" style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -241,7 +244,7 @@ export function CustomFieldsPage() {
                 <td data-label={t("common.actions")} style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                   {canManage && <Button size="sm" onClick={() => openEdit(f)}>{t("common.edit")}</Button>}{" "}
                   {canManage && !f.archivedAt && (
-                    <ConfirmButton size="sm" confirmText={t("common.confirmArchive")} onConfirm={() => archive.mutate(f.id)}>{t("cf.archive")}</ConfirmButton>
+                    <Button variant="danger" size="sm" onClick={async () => { if (await confirmDialog(`${t("common.confirmArchive")} ${f.name}`, { danger: true })) archive.mutate(f.id); }}>{t("cf.archive")}</Button>
                   )}
                 </td>
               </tr>
@@ -256,11 +259,14 @@ export function CustomFieldsPage() {
         </TableScroll>
       </TreeLayout>
 
-      <Drawer open={!!editField} title={editField ? `${t("common.edit")} · ${editField.name}` : ""}
-        onClose={closeEdit} width="sm">
+      <Modal open={!!editField} title={editField ? `${t("common.edit")} · ${editField.name}` : ""}
+        onClose={closeEdit} width="sm" footer={<>
+          <Button onClick={closeEdit} disabled={updateField.isPending}>{t("common.cancel")}</Button>
+          <Button variant="primary" loading={updateField.isPending} disabled={updateField.isPending || !editForm.name.trim()} onClick={() => updateField.mutate()}>{t("common.save")}</Button>
+        </>}>
         {editError && <p className="field-error" role="alert">{editError}</p>}
         {editField && (
-          <div style={{ display: "grid", gap: 12 }}>
+          <fieldset disabled={updateField.isPending} className="settings-form-fields" style={{ display: "grid", gap: 12 }}>
             <TextInput label={t("cf.nameLabel")} value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
             <TextInput label={t("cf.keyLabel")} value={editField.key} disabled />
             <TextInput label={t("cf.typeLabel")} value={t(TYPE_LABEL[editField.type] ?? editField.type)} disabled />
@@ -273,13 +279,9 @@ export function CustomFieldsPage() {
               label={t("cf.requiredLabel")} />
             <TextInput label={t("cf.sortOrder")} type="number" value={String(editForm.sortOrder)}
               onChange={(e) => setEditForm({ ...editForm, sortOrder: Number(e.target.value) || 0 })} />
-            <div className="drawer-actions">
-              <Button variant="ghost" onClick={closeEdit} disabled={updateField.isPending}>{t("common.cancel")}</Button>
-              <Button variant="primary" loading={updateField.isPending} disabled={updateField.isPending || !editForm.name.trim()} onClick={() => updateField.mutate()}>{t("common.save")}</Button>
-            </div>
-          </div>
+          </fieldset>
         )}
-      </Drawer>
+      </Modal>
     </div>
   );
 }

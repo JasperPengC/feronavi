@@ -5,12 +5,14 @@
  * 一个请求同时喂列表与未读数（`unreadCount` 内嵌在列表返回体里，见契约），避免两处不一致。
  */
 import { queryKeys } from "../lib/query-keys.ts";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearch } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHead, EmptyState, Loading, ErrorState } from "../components/Page.tsx";
 import { Panel } from "../components/ui/Panel.tsx";
 import { notifications } from "../lib/planning-api.ts";
 import { NotificationAction } from "../components/NotificationAction.tsx";
+import { Icon } from "../components/Icon.tsx";
 import { WorkItemDrawer } from "../components/work-item/DeferredWorkItemDrawer.tsx";
 import { Button } from "../components/ui/Button.tsx";
 import { toast } from "../components/ui/Toast.tsx";
@@ -33,6 +35,8 @@ export function NotificationsPage() {
   const qc = useQueryClient();
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
+  const { item } = useSearch({ strict: false }) as { item?: string };
+  useEffect(() => { if (item) setOpenItemId(item); }, [item]);
 
   const list = useQuery({
     queryKey: queryKeys.notifications(unreadOnly),
@@ -91,10 +95,10 @@ export function NotificationsPage() {
                     </div>
                     {n.body && <p className="notif-body">{n.body}</p>}
                     <div className="notif-actions">
-                      <NotificationAction link={n.link} onOpenWorkItem={setOpenItemId} />
                       {!n.readAt && (
-                        <Button size="sm" variant="ghost" disabled={markRead.isPending || markAll.isPending} onClick={() => markRead.mutate([n.id])}>{t("notif.markRead")}</Button>
+                        <button type="button" className="notification-text-action" disabled={markRead.isPending || markAll.isPending} onClick={() => markRead.mutate([n.id])}><Icon name="check" size={14} />{t("notif.markRead")}</button>
                       )}
+                      <NotificationAction link={n.link} onOpenWorkItem={setOpenItemId} />
                     </div>
                   </div>
                 </li>

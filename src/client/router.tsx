@@ -4,6 +4,7 @@ import type { RouterHistory } from "@tanstack/react-router";
 import { apiGet, ApiError } from "./lib/api.ts";
 import { authNavigationSearch } from "./lib/auth-navigation.ts";
 import { RouteLoadError, RoutePending } from "./components/RouteFeedback.tsx";
+import { useCustomScrollbars } from "./lib/useCustomScrollbars.ts";
 
 const SetupPage = lazyRouteComponent(() => import("./routes/SetupPage.tsx"), "SetupPage");
 const LoginPage = lazyRouteComponent(() => import("./routes/LoginPage.tsx"), "LoginPage");
@@ -22,6 +23,7 @@ const MilestoneDetailPage = lazyRouteComponent(() => import("./routes/MilestoneD
 const CalendarPage = lazyRouteComponent(() => import("./routes/CalendarPage.tsx"), "CalendarPage");
 const TimelinePage = lazyRouteComponent(() => import("./routes/TimelinePage.tsx"), "TimelinePage");
 const WorkbenchPage = lazyRouteComponent(() => import("./routes/WorkbenchPage.tsx"), "WorkbenchPage");
+const AssistantPage = lazyRouteComponent(() => import("./routes/AssistantPage.tsx"), "AssistantPage");
 const TableViewPage = lazyRouteComponent(() => import("./routes/TableViewPage.tsx"), "TableViewPage");
 const WorkflowConfigPage = lazyRouteComponent(() => import("./routes/WorkflowConfigPage.tsx"), "WorkflowConfigPage");
 const ProjectAutomationPage = lazyRouteComponent(() => import("./routes/ProjectAutomationPage.tsx"), "ProjectAutomationPage");
@@ -44,7 +46,12 @@ const PublicIntakePage = lazyRouteComponent(() => import("./routes/PublicIntakeP
 const NotificationsPage = lazyRouteComponent(() => import("./routes/NotificationsPage.tsx"), "NotificationsPage");
 const RoleAdminPage = lazyRouteComponent(() => import("./routes/RoleAdminPage.tsx"), "RoleAdminPage");
 
-const rootRoute = createRootRoute({ component: () => <Outlet /> });
+function RootLayout() {
+  useCustomScrollbars();
+  return <Outlet />;
+}
+
+const rootRoute = createRootRoute({ component: RootLayout });
 
 /** 启动判定：未初始化 → 向导；已初始化且未登录 → 登录页 */
 const indexRoute = createRoute({
@@ -229,7 +236,9 @@ const ideasRoute = createRoute({
   path: "/projects/$projectId/ideas",
   component: IdeasPage,
 });
-const notificationsRoute = createRoute({ getParentRoute: () => appRoute, path: "/notifications", component: NotificationsPage });
+const notificationsRoute = createRoute({ getParentRoute: () => appRoute, path: "/notifications", component: NotificationsPage,
+  validateSearch: (search: Record<string, unknown>): { item?: string } => typeof search.item === "string" ? { item: search.item } : {},
+});
 const intakeRoute = createRoute({ getParentRoute: () => appRoute, path: "/projects/$projectId/intake", component: IntakePage });
 
 const insightRoute = createRoute({
@@ -298,6 +307,13 @@ const workbenchRoute = createRoute({
   component: WorkbenchPage,
 });
 
+const assistantRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/assistant",
+  validateSearch: (search: Record<string, unknown>): { project?: string; conversation?: string } => ({ project: typeof search.project === "string" && search.project ? search.project : undefined, conversation: typeof search.conversation === "string" && search.conversation ? search.conversation : undefined }),
+  component: AssistantPage,
+});
+
 const publicIntakeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/intake/$token",
@@ -306,7 +322,7 @@ const publicIntakeRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute, setupRoute, loginRoute, changePasswordRoute, resetRoute, inviteRoute, publicIntakeRoute,
-  appRoute.addChildren([membersRoute, organizationAdminRoute, roleAdminRoute, changelogRoute, projectsRoute, projectOverviewRoute, issuesRoute, globalIssuesRoute, boardRoute, milestonesRoute, milestoneDetailRoute, calendarRoute, timelineRoute, tableRoute, workflowConfigRoute, projectAutomationRoute, wikiRoute, ideasRoute, insightRoute, activityRoute, importRoute, customFieldsRoute, adminAuditRoute, tokensRoute, systemRoute, settingsRoute, settingsPersonalRoute, settingsIntegrationsRoute, settingsInstanceRoute, portfoliosRoute, portfolioDetailRoute, focusRoute, announcementsRoute, intakeRoute, notificationsRoute, workbenchRoute]),
+  appRoute.addChildren([membersRoute, organizationAdminRoute, roleAdminRoute, changelogRoute, projectsRoute, projectOverviewRoute, issuesRoute, globalIssuesRoute, boardRoute, milestonesRoute, milestoneDetailRoute, calendarRoute, timelineRoute, tableRoute, workflowConfigRoute, projectAutomationRoute, wikiRoute, ideasRoute, insightRoute, activityRoute, importRoute, customFieldsRoute, adminAuditRoute, tokensRoute, systemRoute, settingsRoute, settingsPersonalRoute, settingsIntegrationsRoute, settingsInstanceRoute, portfoliosRoute, portfolioDetailRoute, focusRoute, announcementsRoute, intakeRoute, notificationsRoute, workbenchRoute, assistantRoute]),
 ]);
 
 /**

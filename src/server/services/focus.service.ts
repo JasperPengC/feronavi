@@ -11,6 +11,7 @@ import { db } from "../../db/index.ts";
 import { focusSession, timeBlock } from "../../db/schema.ts";
 import { DomainError } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
+import { publishWorkspaceInvalidation } from "./workspace-events.service.ts";
 
 function assertOwn(actor: Actor, memberId: string) {
   if (memberId !== actor.memberId) throw new DomainError("FORBIDDEN", "只能操作自己的时间块", null);
@@ -61,6 +62,7 @@ export async function createBlock(actor: Actor, input: {
       memberId: actor.memberId, title: input.title, startAt, endAt,
       projectId: input.projectId ?? null, workItemId: input.workItemId ?? null, color: input.color ?? null,
     }).returning();
+    await publishWorkspaceInvalidation({ domain: "focus", resourceType: "TIME_BLOCK", resourceId: row!.id, memberId: actor.memberId });
     return row;
   });
 }
@@ -70,6 +72,19 @@ async function loadOwnBlock(actor: Actor, id: string) {
   if (!b) throw new DomainError("NOT_FOUND", "时间块不存在", null);
   assertOwn(actor, b.memberId);
   return b;
+}
+
+/** 精确读取本人时间块，供授权复核，不受集合分页或日期过滤影响。 */
+export async function getBlock(actor: Actor, id: string) {
+  return loadOwnBlock(actor, id);
+}
+
+/** 精确读取本人历史专注记录，不用当前自然日猜测记录范围。 */
+export async function getSession(actor: Actor, id: string) {
+  const [row] = await db.select().from(focusSession).where(eq(focusSession.id, id)).limit(1);
+  if (!row) throw new DomainError("NOT_FOUND", "专注记录不存在", null);
+  assertOwn(actor, row.memberId);
+  return row;
 }
 
 export async function updateBlock(actor: Actor, id: string, patch: {
@@ -92,6 +107,7 @@ export async function updateBlock(actor: Actor, id: string, patch: {
       ...(patch.workItemId !== undefined ? { workItemId: patch.workItemId } : {}),
       updatedAt: new Date(),
     }).where(eq(timeBlock.id, id)).returning();
+    await publishWorkspaceInvalidation({ domain: "focus", resourceType: "TIME_BLOCK", resourceId: id, memberId: actor.memberId });
     return row;
   });
 }
@@ -99,6 +115,7 @@ export async function updateBlock(actor: Actor, id: string, patch: {
 export async function deleteBlock(actor: Actor, id: string): Promise<void> {
   await loadOwnBlock(actor, id);
   await db.delete(timeBlock).where(eq(timeBlock.id, id));
+  await publishWorkspaceInvalidation({ domain: "focus", resourceType: "TIME_BLOCK", resourceId: id, memberId: actor.memberId });
 }
 
 // ── 今日聚焦 ────────────────────────────────────────────────
@@ -167,6 +184,7 @@ export async function recordFocusSession(actor: Actor, input: {
     target: [focusSession.timeBlockId, focusSession.startedAt],
     set: { endedAt, actualMinutes: minutes, note: input.note ?? null },
   }).returning();
+  await publishWorkspaceInvalidation({ domain: "focus", resourceType: "FOCUS_SESSION", resourceId: row!.id, memberId: actor.memberId });
   return row;
 }
 
@@ -178,6 +196,7 @@ export async function updateFocusSession(actor: Actor, id: string, patch: { note
     throw new DomainError("VALIDATION", "实际时长不能为负", null);
   }
   const [row] = await db.update(focusSession).set(patch).where(eq(focusSession.id, id)).returning();
+  await publishWorkspaceInvalidation({ domain: "focus", resourceType: "FOCUS_SESSION", resourceId: id, memberId: actor.memberId });
   return row;
 }
 

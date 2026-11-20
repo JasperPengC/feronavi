@@ -20,35 +20,47 @@ const page = await ctx.newPage();
 try {
   await page.goto(`${BASE}/login`); await page.waitForTimeout(600);
   await page.evaluate(async () => { await fetch("/api/v1/auth/login", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: "demo", password: "demo-password-12345" }) }); });
-  await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2600);
+  await page.goto(`${BASE}/settings/integrations`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2600);
+  await page.getByRole("tab", { name: "消息与 Webhook", exact: true }).click();
   const section = page.locator(".settings-section", { hasText: "外部集成" });
   await section.scrollIntoViewIfNeeded();
   check("设置页出现「外部集成」区块", (await section.count()) === 1);
 
   // ① 新建
-  await section.getByLabel("名称").fill(NAME);
-  await section.getByLabel("服务地址（https）").fill("https://gitlab.com");
-  await section.getByLabel("访问令牌").fill(SECRET);
-  await section.getByRole("button", { name: "新建集成" }).click();
+  await section.getByRole("button", { name: /添加集成/ }).click();
+  let dialog = page.getByRole("dialog", { name: "新建集成", exact: true });
+  await dialog.getByLabel("名称").fill(NAME);
+  await dialog.getByLabel("服务地址（https）").fill(`https://1.1.1.1/accept-${stamp}`);
+  await dialog.getByLabel("访问令牌").fill(SECRET);
+  await dialog.getByRole("button", { name: "新建集成", exact: true }).click();
   await page.waitForTimeout(1400);
   const row = section.locator(".settings-record-list li", { hasText: NAME });
-  check("新建后列表出现该集成", (await row.count()) === 1);
+  const createdCount = await row.count();
+  const createError = await dialog.locator(".field-error").innerText().catch(() => "");
+  check("新建后列表出现该集成", createdCount === 1, createError);
+  if (createdCount !== 1) throw new Error(`创建集成失败：${createError || "列表未刷新"}`);
   check("令牌只显示「已配置」且页面无明文", (await row.innerText()).includes("令牌已配置") && !(await page.locator("body").innerText()).includes(SECRET));
 
   // ② SSRF：不安全地址的失败原因原样展示，且不新增行
-  await section.getByLabel("名称").fill(`SSRF ${stamp}`);
-  await section.getByLabel("服务地址（https）").fill("http://127.0.0.1:8080");
-  await section.getByLabel("访问令牌").fill("glpat-ssrf");
-  await section.getByRole("button", { name: "新建集成" }).click();
+  await section.getByRole("button", { name: /添加集成/ }).click();
+  dialog = page.getByRole("dialog", { name: "新建集成", exact: true });
+  await dialog.getByLabel("名称").fill(`SSRF ${stamp}`);
+  await dialog.getByLabel("服务地址（https）").fill("http://127.0.0.1:8080");
+  await dialog.getByLabel("访问令牌").fill("glpat-ssrf");
+  await dialog.getByRole("button", { name: "新建集成", exact: true }).click();
   await page.waitForTimeout(1100);
-  const alert = page.locator(".alert-error").last();
+  const alert = dialog.locator(".field-error").last();
   check("不安全地址显示后端拒绝原因", (await alert.count()) > 0 && /不允许|地址|协议|http/i.test(await alert.innerText()), await alert.innerText().catch(() => ""));
   check("SSRF 失败不产生新行", (await section.locator(".settings-record-list li", { hasText: `SSRF ${stamp}` }).count()) === 0);
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  await page.getByRole("dialog", { name: "有未保存的修改。确认放弃修改并关闭？", exact: true })
+    .getByRole("button", { name: "确认", exact: true }).click();
 
   // ③ 编辑改名
   await row.getByRole("button", { name: "编辑" }).click();
-  await section.getByLabel("名称").fill(`${NAME}（改）`);
-  await section.getByRole("button", { name: "保存修改" }).click();
+  dialog = page.getByRole("dialog", { name: "编辑", exact: true });
+  await dialog.getByLabel("名称").fill(`${NAME}（改）`);
+  await dialog.getByRole("button", { name: "保存修改" }).click();
   await page.waitForTimeout(1200);
   check("编辑后名称已更新", (await section.locator(".settings-record-list li", { hasText: `${NAME}（改）` }).count()) === 1);
 

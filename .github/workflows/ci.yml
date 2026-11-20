@@ -54,6 +54,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: 生产依赖漏洞扫描
+        run: pnpm audit --prod --audit-level=low
+      - run: pnpm check:tool-contracts
+      - run: pnpm check:architecture
+      - run: pnpm check:assistant-coverage
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test:coverage
@@ -64,9 +69,23 @@ jobs:
           path: coverage
       - name: 依赖许可证扫描（不兼容即阻断）
         run: |
-          pnpm dlx license-checker-rseidelsohn \
+          pnpm dlx license-checker-rseidelsohn@4.4.2 \
             --failOn "GPL-2.0-only;GPL-2.0;GPL-2.0+;SSPL-1.0;BUSL-1.1;Elastic-2.0" \
             --production
+      - name: 验证 MCP 发布包保留许可证和运行入口
+        working-directory: packages/feronavi-mcp
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import { readFileSync } from 'node:fs';
+          const [archive] = JSON.parse(execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { encoding: 'utf8' }));
+          const paths = archive.files.map(file => file.path);
+          for (const required of ['LICENSE', 'README.md', 'package.json', 'bin/feronavi-mcp.mjs']) assert(paths.includes(required), `Missing ${required}`);
+          assert.equal(JSON.parse(readFileSync('package.json', 'utf8')).license, 'AGPL-3.0-only');
+          assert.equal(readFileSync('LICENSE', 'utf8'), readFileSync('../../LICENSE', 'utf8'));
+          console.log('MCP package license and entrypoint verified');
+          NODE
 
   # ── ③ 集成：真数据库（含分词与向量）+ 迁移 + 种子计数门禁 ────
   integration:
@@ -112,10 +131,28 @@ jobs:
         run: |
           docker exec db psql -U feronavi -d feronavi -tAc "select 1 from pg_extension where extname='vector'" | grep -qx 1
           docker exec db psql -U feronavi -d feronavi -tAc "select 1 from pg_extension where extname='zhparser'" | grep -qx 1
+      - name: 数据库运行库安全修复与XML/JIT/中文向量门禁
+        run: |
+          DB_IMAGE_EXPECT_SUITE=alpine DB_IMAGE_EXPECT_NO_GPG=1 \
+            node scripts/accept-db-image.mjs feronavi-db:ci "$RUNNER_TEMP/db-image-acceptance"
       - run: pnpm test:integration
+      - name: MCP 十套业务门禁及21条原生流程真实HTTP闭环
+        run: pnpm test:mcp-business
+      - name: 助手六套门禁及21条原生流程确认与复读（无真实模型或外部密钥）
+        run: pnpm test:assistant-business
+      - name: 产品整改故障与并发门禁
+        run: pnpm test:product-regressions
       # 浏览器套件另建新库和临时构建目录，测试当前源码编译出的服务。
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
+      - name: 文档CRDT发布与历史版本闭环
+        run: pnpm exec node scripts/run-isolated-test.ts scripts/e2e-crdt-page-revisions.ts
+      - name: 三用户协作与IndexedDB离线恢复
+        run: pnpm accept:crdt-browser
+      - name: 浏览器拒绝IndexedDB后的降级恢复
+        env:
+          CRDT_STORAGE_MODE: localstorage
+        run: pnpm accept:crdt-browser
       - name: 构建生产应用镜像
         uses: docker/build-push-action@v6
         with:
@@ -125,6 +162,59 @@ jobs:
           tags: feronavi-app:ci
           cache-from: type=gha,scope=app
           cache-to: type=gha,scope=app,mode=max
+      - name: 导出本次应用与数据库镜像供OS扫描
+        id: container_os_inputs
+        run: |
+          mkdir -p "$RUNNER_TEMP/container-os-inputs" "$RUNNER_TEMP/trivy-cache" container-vulnerability-reports
+          docker save --output "$RUNNER_TEMP/container-os-inputs/database.tar" feronavi-db:ci
+          docker save --output "$RUNNER_TEMP/container-os-inputs/application.tar" feronavi-app:ci
+      - name: 缓存Trivy漏洞数据库
+        id: trivy_cache
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/trivy-cache
+          key: trivy-os-db-v1-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: trivy-os-db-v1-${{ runner.os }}-
+      - name: 扫描两镜像OS完整漏洞报告（含未修复项）
+        run: |
+          scan_status=0
+          for image in database application; do
+            if docker run --rm \
+              --mount "type=bind,src=$RUNNER_TEMP/container-os-inputs,dst=/input,readonly" \
+              --mount "type=bind,src=$RUNNER_TEMP/trivy-cache,dst=/cache" \
+              --mount "type=bind,src=$GITHUB_WORKSPACE/container-vulnerability-reports,dst=/reports" \
+              aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb \
+              image --input "/input/$image.tar" --pkg-types os --scanners vuln \
+              --cache-dir /cache --timeout 30m --format json --output "/reports/$image.json" --exit-code 0; then
+              echo "OS扫描报告已生成：$image"
+            else
+              echo "OS扫描失败：$image" >&2
+              scan_status=1
+            fi
+          done
+          exit "$scan_status"
+      - name: 保留漏洞数据库缓存（门禁失败时也保存）
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        if: ${{ always() && steps.trivy_cache.outcome == 'success' }}
+        with:
+          path: ${{ runner.temp }}/trivy-cache
+          key: ${{ steps.trivy_cache.outputs.cache-primary-key }}
+      - name: OS漏洞发布门禁（全部HIGH/CRITICAL阻断，含未修复项）
+        if: ${{ !cancelled() && steps.container_os_inputs.outcome == 'success' }}
+        run: |
+          node scripts/check-container-vulnerabilities.mjs \
+            container-vulnerability-reports/database.json \
+            container-vulnerability-reports/application.json \
+            > container-vulnerability-reports/summary.json
+      - name: 始终保留完整OS漏洞报告和门禁统计
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: container-os-vulnerabilities
+          path: container-vulnerability-reports
+          if-no-files-found: error
       - name: 验证镜像中的运行入口与静态文件
         run: docker run --rm --entrypoint node feronavi-app:ci -e "const fs = require('node:fs'); for (const path of ['dist-server/server/server.js', 'dist-server/server/worker.js', 'dist-server/db/seed-data.json', 'dist/index.html', 'drizzle/meta/_journal.json']) fs.accessSync(path)"
       - name: 全新数据卷启动 Compose 应用与独立 worker

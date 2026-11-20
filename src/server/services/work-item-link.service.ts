@@ -84,15 +84,19 @@ export async function listLinks(actor: Actor, workItemId: string) {
   return items;
 }
 
-export async function createLink(actor: Actor, workItemId: string, input: { targetType: string; targetId: string }) {
+/** 创建前与缓存重放前共用来源权限和目标同项目检查。 */
+export async function authorizeContentLinkCreate(actor: Actor, workItemId: string, input: { targetType: string; targetId: string }) {
   const wi = await loadWorkItem(actor, workItemId);
   assertUpdateAny(actor, wi.projectId);
   const type = input.targetType as LinkType;
-  if (!(LINK_TYPES as readonly string[]).includes(type)) {
-    throw new DomainError("VALIDATION", `链接类型只支持 ${LINK_TYPES.join(" / ")}`, { type });
-  }
+  if (!(LINK_TYPES as readonly string[]).includes(type)) throw new DomainError("VALIDATION", "链接类型不合法", { type });
   if (type === "WORK_ITEM" && input.targetId === workItemId) throw new DomainError("VALIDATION", "不能链接到自身", null);
-  const target = await resolveTarget(actor, type, input.targetId, wi.projectId);
+  return resolveTarget(actor, type, input.targetId, wi.projectId);
+}
+
+export async function createLink(actor: Actor, workItemId: string, input: { targetType: string; targetId: string }) {
+  const target = await authorizeContentLinkCreate(actor, workItemId, input);
+  const type = input.targetType as LinkType;
   const dup = (await db.select({ id: workItemLink.id }).from(workItemLink).where(and(
     eq(workItemLink.sourceType, "WORK_ITEM"), eq(workItemLink.sourceId, workItemId),
     eq(workItemLink.targetType, type), eq(workItemLink.targetId, input.targetId),
@@ -104,23 +108,21 @@ export async function createLink(actor: Actor, workItemId: string, input: { targ
   return { id: row!.id, direction: "outgoing", target };
 }
 
-export async function deleteLink(actor: Actor, linkId: string): Promise<void> {
+export async function authorizeContentLinkDelete(actor: Actor, linkId: string): Promise<void> {
   const link = (await db.select().from(workItemLink).where(eq(workItemLink.id, linkId)).limit(1))[0];
   if (!link) throw forbidden();
   const wiId = link.sourceType === "WORK_ITEM" ? link.sourceId : link.targetType === "WORK_ITEM" ? link.targetId : null;
   if (!wiId) throw forbidden();
   const wi = await loadWorkItem(actor, wiId);
   assertUpdateAny(actor, wi.projectId);
+}
+
+export async function deleteLink(actor: Actor, linkId: string): Promise<void> {
+  await authorizeContentLinkDelete(actor, linkId);
   await db.delete(workItemLink).where(eq(workItemLink.id, linkId));
 }
 
-/** 目标删除时的应用层清理（C-15）：两侧都查，避免留下永久孤儿 */
-export async function cleanupLinksFor(type: LinkType, id: string): Promise<void> {
-  await db.delete(workItemLink).where(or(
-    and(eq(workItemLink.sourceType, type), eq(workItemLink.sourceId, id)),
-    and(eq(workItemLink.targetType, type), eq(workItemLink.targetId, id)),
-  ));
-}
+export { cleanupLinksFor } from "../repos/content-link.repo.ts";
 
 /** 想法转工作项时写双向引用（单行双向表达会在删除清理时被漏掉，这里显式两行） */
 export async function createPromoteLinks(workItemId: string, ideaId: string): Promise<void> {

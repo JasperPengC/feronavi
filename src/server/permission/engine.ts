@@ -91,6 +91,11 @@ function scopeCoversGrant(
   }
 }
 
+/** 工作流指定角色也必须覆盖目标资源，不能借用另一项目的同名角色。 */
+export function roleKeysForScope(actor: Actor, res: ResourceScope): ReadonlySet<string> {
+  return new Set(actor.grants.filter((grant) => scopeCoversGrant(grant, res)).map((grant) => grant.roleKey));
+}
+
 /** 是否**任一**授权覆盖资源（导出给旧测试/工具；can() 使用按授权的严格判定） */
 export function scopeCovers(
   actor: Actor,

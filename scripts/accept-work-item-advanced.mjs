@@ -40,6 +40,8 @@ try {
 
   await page.goto(`${BASE}/projects/${pid}/table?item=${a.id}`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(1200);
   const drawer = page.locator(".ui-drawer");
+  await drawer.locator("summary", { hasText: "关联与子项" }).click();
+  await drawer.locator("summary", { hasText: "协作与工时" }).click();
   const body = await drawer.innerText();
   check("详情显示子工作项", body.includes("子工作项") && body.includes(setup.childKey), setup.childKey);
   check("详情显示依赖关系", body.includes("依赖关系") && body.includes("阻塞"), "");

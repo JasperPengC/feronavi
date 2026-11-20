@@ -8,6 +8,16 @@ import { safeOutboundFetch } from "../src/server/lib/safe-fetch.ts";
 beforeEach(() => { transport.lookup.mockResolvedValue([{ address: "1.1.1.1", family: 4 }]); transport.close.mockClear(); transport.options = null; });
 afterEach(() => vi.unstubAllEnvs());
 
+it("模型显式等待预算不被默认15秒截断，同时维持90秒硬上限", async () => {
+  const timeout = vi.spyOn(AbortSignal, "timeout");
+  try {
+    await safeOutboundFetch("https://example.test/api", { timeoutMs: 45_000 }, async () => new Response("ok"));
+    expect(timeout).toHaveBeenCalledWith(45_000);
+    await safeOutboundFetch("https://example.test/api", { timeoutMs: 999_999 }, async () => new Response("ok"));
+    expect(timeout).toHaveBeenCalledWith(90_000);
+  } finally { timeout.mockRestore(); }
+});
+
 it.each(["febf::1", "fe90::1", "::ffff:127.0.0.1", "::ffff:7f00:1", "::ffff:192.168.1.1", "::ffff:c0a8:101", "2001:db8::1", "192.0.0.1", "198.18.0.1"])("拒绝非公网地址 %s", ip => {
   expect(isBlockedAddress(ip)).toBe(true);
 });

@@ -46,10 +46,13 @@ it("工作流从项目一切到项目二时，不沿用项目一选中的工作�
   }, ["work_item:manage_workflow"]);
   fireEvent.click(await screen.findByRole("button", { name: /流程p1b/ }));
   await screen.findByText("状态p1b");
-  await act(async () => router.navigate({ to: "/projects/$projectId/workflow", params: { projectId: "p2" } }));
+  // 导航完成依赖React布局提交；不可在async act回调内等待同一提交。
+  let navigation!: Promise<void>;
+  act(() => { navigation = router.navigate({ to: "/projects/$projectId/workflow", params: { projectId: "p2" } }); });
   await screen.findByRole("button", { name: /流程p2a/ });
   await waitFor(() => expect(screen.queryByText("状态p1b")).toBeNull());
   expect(await screen.findByText("状态p2a")).toBeTruthy();
+  await navigation;
 });
 
 it("邀请注册成功后打开另一个邀请，显示新表单而不是上一次的成功状态", async () => {
@@ -59,9 +62,11 @@ it("邀请注册成功后打开另一个邀请，显示新表单而不是上一�
   fireEvent.change(screen.getByLabelText(/密码/), { target: { value: "StrongPass123!" } });
   fireEvent.click(screen.getByRole("button", { name: t("invite.accept") }));
   await screen.findByText(t("invite.joined"));
-  await act(async () => router.navigate({ to: "/invite/$token", params: { token: "second" } }));
+  let navigation!: Promise<void>;
+  act(() => { navigation = router.navigate({ to: "/invite/$token", params: { token: "second" } }); });
   await waitFor(() => expect(screen.queryByText(t("invite.joined"))).toBeNull());
   expect((await screen.findByLabelText(/用户名/) as HTMLInputElement).value).toBe("");
+  await navigation;
 });
 
 it.each(["integrations", "instance"] as const)("无权限直达 %s 设置时提供受限说明", async (section) => {
@@ -93,8 +98,10 @@ it("需求转换后刷新所有提交筛选和想法列表，说明转换目标"
   await screen.findByText("外部需求", { selector: "strong" });
   await waitFor(() => expect(screen.queryByRole("button", { name: t("it.convert"), exact: true })).toBeNull());
   expect(screen.getByText("已转为想法", { selector: ".tag" })).toBeTruthy();
-  await act(async () => router.navigate({ to: "/projects/$projectId/ideas", params: { projectId: "p1" } }));
+  let navigation!: Promise<void>;
+  act(() => { navigation = router.navigate({ to: "/projects/$projectId/ideas", params: { projectId: "p1" } }); });
   expect(await screen.findByText("外部需求")).toBeTruthy();
+  await navigation;
 });
 
 it("项目集详情英文模式完整翻译指标、状态、空态和返回入口", async () => {

@@ -4,8 +4,9 @@ import { DomainError } from "../../shared/errors.ts";
 import { assertSafeOutboundUrl } from "./url-safety.ts";
 
 /** 用户配置的出站地址：固定校验后的 DNS、拒绝跳转并限制等待时间。 */
-export async function safeOutboundFetch(input: string | URL, init: RequestInit = {}, fetchImpl: typeof fetch = fetch): Promise<Response> {
-  const timeout = AbortSignal.timeout(15_000);
+export async function safeOutboundFetch(input: string | URL, options: RequestInit & { timeoutMs?: number } = {}, fetchImpl: typeof fetch = fetch): Promise<Response> {
+  const { timeoutMs = 15_000, ...init } = options;
+  const timeout = AbortSignal.timeout(Number.isFinite(timeoutMs) ? Math.max(1, Math.min(timeoutMs, 90_000)) : 15_000);
   const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
   signal.throwIfAborted();
   const { url, addresses } = await assertSafeOutboundUrl(String(input), { signal });

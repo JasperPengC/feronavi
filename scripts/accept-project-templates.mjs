@@ -45,7 +45,7 @@ try {
   await page.getByLabel("项目名称").fill(`模板建项目 ${stamp}`);
   await page.getByRole("button", { name: "创建", exact: true }).click();
   await page.waitForTimeout(1800);
-  const notice = await page.locator(".alert-info").last().innerText().catch(() => "");
+  const notice = await page.getByText(/已从模板创建：里程碑/).last().innerText().catch(() => "");
   check("创建后提示初始集数量（1 里程碑/1 迭代/2 工作项）",
     /已从模板创建/.test(notice) && /里程碑 1/.test(notice) && /迭代 1/.test(notice) && /工作项 2/.test(notice), notice);
   check("项目列表出现新项目", (await page.getByText(KEY).count()) > 0);

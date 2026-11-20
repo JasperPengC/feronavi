@@ -1,3 +1,4 @@
+import { bootstrapBusinessEffects } from "./application/bootstrap-business-effects.ts";
 /**
  * Fastify 应用装配
  *
@@ -5,7 +6,7 @@
  * 选 Fastify 而非 Next.js 的原因见 A46 修订 —— MCP 的 Streamable-HTTP
  * transport 需要真实 Node `req`/`res`，Next.js Route Handler 只给 Web 标准对象。
  */
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import "./plugins-types.ts";
 import cookie from "@fastify/cookie";
 import csrf from "@fastify/csrf-protection";
@@ -23,6 +24,7 @@ import { registerImRoutes } from "./routes/im.ts";
 import { registerProjectRoutes } from "./routes/projects.ts";
 import { registerWorkItemRoutes } from "./routes/work-items.ts";
 import { registerSetupRoutes } from "./routes/setup.ts";
+import { registerSetupRestoreRoutes } from "./routes/setup-restore.ts";
 import { registerHealthRoutes } from "./routes/health.ts";
 import { registerApprovalRoutes } from "./routes/approvals.ts";
 import { registerPlanningRoutes } from "./routes/planning.ts";
@@ -52,21 +54,27 @@ import { registerFocusRoutes } from "./routes/focus.ts";
 import { registerPortfolioRoutes } from "./routes/portfolios.ts";
 import { registerPageRoutes } from "./routes/pages.ts";
 import { registerKnowledgeRoutes } from "./routes/knowledge.ts";
+import { registerRagRoutes } from "./routes/rag.ts";
 import { registerAiRoutes } from "./routes/ai.ts";
 import { registerComplianceRoutes } from "./routes/compliance.ts";
+import { registerSystemBackupRoutes } from "./routes/system-backups.ts";
 import { registerTwoFactorRoutes } from "./routes/two-factor.ts";
 import { registerScimRoutes } from "./routes/scim.ts";
 import { registerAutomationRoutes } from "./routes/automation.ts";
 import { registerSlaRoutes } from "./routes/sla.ts";
 import { registerRoleRoutes } from "./routes/roles.ts";
 import { getState as getSetupState } from "./services/setup.service.ts";
+import { isSystemRestoring } from "./services/system-backup/restore-lock.ts";
+import { recoverInterruptedRestores } from "./services/system-backup/restore-recovery.ts";
 
-export async function buildApp(opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
+export async function buildApp(opts: { logger?: boolean | FastifyServerOptions["logger"] } = {}): Promise<FastifyInstance> {
+  await bootstrapBusinessEffects();
   const app = Fastify({
     logger: opts.logger ?? false,
-    // 反向代理后面才信任 X-Forwarded-*（第 5.10 节；默认只信本机）
-    trustProxy: process.env.TRUSTED_PROXY_CIDRS ?? "127.0.0.1",
+    // 默认直连；只有显式配置的反代可以提供来源地址，避免伪造头绕过限速。
+    trustProxy: process.env.TRUSTED_PROXY_CIDRS?.split(",").map((cidr) => cidr.trim()).filter(Boolean) || false,
   });
+  await recoverInterruptedRestores((code) => app.log.error({ code }, "系统恢复清理失败"));
 
   /**
    * ⚠️ multipart **必须真正注册**：此前只有 `plugins-types.ts` 里的类型导入，
@@ -146,12 +154,18 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
     const url = req.url.split("?")[0] ?? "";
     const isSetupPath = url === "/setup" || url.startsWith("/setup/");
     const isSetupApi = url.startsWith("/api/v1/setup/");
+    if (req.method === "GET" && url === "/health") return;
     const isSystemApi = url.startsWith("/api/v1/system/");
     const isAsset = /\.(js|css|map|svg|png|jpg|jpeg|ico|woff2?|ttf|json)$/i.test(url)
       || url.startsWith("/assets/");
 
     let initialized: boolean;
     try {
+      if (await isSystemRestoring()) {
+        const allowed = req.method === "GET" && (url === "/health" || /^\/api\/v1\/setup\/restore\/[0-9a-f-]{36}\/status$/.test(url));
+        if (!allowed) return reply.status(409).send({code:"CONFLICT",message:"系统数据恢复进行中",details:null});
+        return;
+      }
       initialized = (await getSetupState()).initialized;
     } catch {
       return;   // 数据库不可用时不拦
@@ -176,7 +190,8 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
      *    任何一方改动都会静默错位。状态查询是公开且无害的信息，没有必要拦。
      */
     const isStateQuery = url === "/api/v1/setup/state" && req.method === "GET";
-    if (!isStateQuery && (isSetupPath || isSetupApi)) {
+    const isRestoreStatus = req.method === "GET" && /^\/api\/v1\/setup\/restore\/[0-9a-f-]{36}(\/status)?$/.test(url);
+    if (!isStateQuery && !isRestoreStatus && (isSetupPath || isSetupApi)) {
       // 页面入口给用户可恢复的去向；安装 API 仍保持封锁。
       if (isSetupPath && req.method === "GET") return reply.redirect("/login", 302);
       return reply.status(403).send({ code: "FORBIDDEN", message: "本实例已完成初始化", details: null });
@@ -186,6 +201,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await registerHealthRoutes(app);
   await registerApprovalRoutes(app);
   await registerSetupRoutes(app);
+  await registerSetupRestoreRoutes(app);
   await registerAuthRoutes(app);
   await registerMemberRoutes(app);
   await registerOrgStructureRoutes(app);
@@ -218,8 +234,10 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await registerPortfolioRoutes(app);
   await registerPageRoutes(app);
   await registerKnowledgeRoutes(app);
+  await registerRagRoutes(app);
   await registerAiRoutes(app);
   await registerComplianceRoutes(app);
+  await registerSystemBackupRoutes(app);
   // SCIM 的媒体类型、鉴权钩子与错误信封只作用于自身路由。
   await app.register(registerScimRoutes);
   await registerAutomationRoutes(app);

@@ -137,7 +137,7 @@ export function WorkItemEditor({
 
   const memberOptions = [
     { value: "", label: t("wie.unassigned") },
-    ...(members.data ?? []).map((m) => ({ value: m.id, label: `${m.name} @${m.username}` })),
+    ...(members.data ?? []).map((m) => ({ value: m.id, label: m.name || m.username, secondaryLabel: `@${m.username}` })),
   ];
   const disabled = !form.title.trim() || (form.type === "SUBTASK" && !form.parentId) || save.isPending;
   const dirty = !!session.current && JSON.stringify(form) !== JSON.stringify(session.current.initial);

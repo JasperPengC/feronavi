@@ -35,6 +35,7 @@ function globalItems(permissions: string[]): PaletteItem[] {
   const has = (p: string) => permissions.includes(p);
   const items: PaletteItem[] = [
     { id: "workbench", label: t("nav.workbench"), to: "/workbench", keywords: "workbench 工作台 待办", icon: "grid" },
+    { id: "assistant", label: t("nav.assistant"), to: "/assistant", keywords: "assistant rag 知识 助手 问答", icon: "book" },
     { id: "projects", label: t("nav.projects"), to: "/projects", keywords: "projects 项目 全部", icon: "layers" },
     { id: "portfolios", label: t("nav.portfolios"), to: "/portfolios", keywords: "portfolio 项目集 组合", icon: "package" },
     { id: "issues", label: t("issues.title"), hint: t("nav.allProjects"), to: "/issues", keywords: "issue 问题 缺陷 bug", icon: "inbox" },

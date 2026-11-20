@@ -1,14 +1,21 @@
 // @vitest-environment node
 import { beforeEach, expect, it, vi } from "vitest";
 import type { Actor } from "../src/server/permission/actor.ts";
-const fake = vi.hoisted(() => ({ rules: [] as Record<string, unknown>[], writes: [] as Record<string, unknown>[], comments: [] as string[], actor: undefined as unknown, recurse: false }));
+const fake = vi.hoisted(() => ({ rules: [] as Record<string, unknown>[], writes: [] as Record<string, unknown>[], comments: [] as string[], actor: undefined as unknown, recurse: false, itemPage: 0 }));
 vi.mock("../src/db/index.ts", () => ({ db: {
+  transaction: async (run: () => Promise<unknown>) => run(),
   select: () => ({ from: (table: object) => ({ where: () => {
     const rows = "trigger" in table ? fake.rules : [{ id: "w1", projectId: "p1", workflowId: "wf1", title: "work", priority: "HIGH" }];
-    return { then: (resolve: (value: unknown) => unknown) => Promise.resolve(rows).then(resolve), limit: async () => rows };
+    return { for: async () => fake.rules.filter((row) => row.scheduleState), then: (resolve: (value: unknown) => unknown) => Promise.resolve(rows).then(resolve), limit: async () => rows,
+      orderBy: () => ({ limit: async () => fake.itemPage++ === 0 ? rows : [] }) };
   } }) }),
   insert: () => ({ values: (value: Record<string, unknown>) => { fake.writes.push(value); return { returning: async () => [{ id: "new-rule", ...value }] }; } }),
-  update: () => ({ set: (value: Record<string, unknown>) => { fake.writes.push(value); return { where: () => ({ returning: async () => [{ id: "rule", ...value }] }) }; } }),
+  update: () => ({ set: (value: Record<string, unknown>) => { fake.writes.push(value);
+    if ("scheduleState" in value) {
+      const selected = fake.rules.find((row) => row.id === "good");
+      if (selected) selected.scheduleState = value.scheduleState;
+    }
+    return { where: () => ({ returning: async () => [{ id: "rule", ...value }] }) }; } }),
 }, sql: {} }));
 vi.mock("../src/server/repos/project.repo.ts", () => ({ isVisibleTo: async () => true }));
 vi.mock("../src/server/repos/work-item.repo.ts", () => ({ findById: async () => ({ id: "w1", projectId: "p1", workflowId: "wf1", version: 1 }) }));
@@ -23,7 +30,7 @@ vi.mock("../src/server/services/comment.service.ts", () => ({ createComment: asy
 import { createRule, updateRule, runScheduledAutomations, triggerAutomation, runAutomation } from "../src/server/services/automation.service.ts";
 import { databaseContext, type DatabaseContext } from "../src/db/context.ts";
 const actor: Actor = { memberId: "m1", username: "audit", name: "audit", permissions: new Set(["project:update"]), grants: [{ roleKey: "ADMIN", scopeType: "ORG", scopeId: null }], rolePermissions: new Map([["ADMIN", new Set(["project:update"])]]), mustChangePassword: false, locale: "zh-CN", timezone: null, theme: null };
-beforeEach(() => { fake.rules = []; fake.writes = []; fake.comments = []; fake.actor = actor; fake.recurse = false; });
+beforeEach(() => { fake.rules = []; fake.writes = []; fake.comments = []; fake.actor = actor; fake.recurse = false; fake.itemPage = 0; });
 
 it.each([
   { conditions: { all: 123 } }, { actions: [{}] }, { actions: [{ type: "UNKNOWN" }] },

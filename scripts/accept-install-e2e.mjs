@@ -55,9 +55,28 @@ try {
     });
     return { status: r.status, body: await r.json().catch(() => null) };
   });
-  check("新管理员能登录", login.status === 200, JSON.stringify(login.body).slice(0, 100));
+  check("新管理员能登录", login.status === 200, `status=${login.status}`);
 
-  const roles = await page.evaluate(async () => (await (await fetch("/api/v1/roles")).json()).roles ?? []);
+  const restricted = await page.evaluate(async () => ({ me: await fetch("/api/v1/auth/me").then(r => r.json()), rolesStatus: (await fetch("/api/v1/roles")).status }));
+  check("首次管理员必须改密后才能访问业务接口", restricted.me.mustChangePassword === true && restricted.rolesStatus === 403);
+  await page.goto(`${HOST}/change-password`);
+  await page.getByLabel(/^当前密码/).fill("Acceptance-Pass-2026");
+  await page.getByLabel(/^新密码/).fill("Acceptance-Changed-2026");
+  await page.getByLabel(/^确认新密码/).fill("Acceptance-Changed-2026");
+  await page.getByRole("button", { name: "确认修改", exact: true }).click();
+  await page.waitForURL(url => url.pathname === "/login");
+  await page.getByLabel("用户名").fill("accept_admin");
+  await page.getByLabel(/^密码/).fill("Acceptance-Changed-2026");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await page.waitForURL(url => url.pathname !== "/login" && url.pathname !== "/change-password");
+  check("完成首次改密并重新登录", await page.evaluate(async () => (await fetch("/api/v1/auth/me").then(r => r.json())).mustChangePassword === false));
+
+  const roles = await page.evaluate(async () => {
+    const response = await fetch("/api/v1/roles");
+    const body = await response.json();
+    if (!response.ok || !Array.isArray(body.roles)) throw new Error(`角色目录读取失败：${response.status} ${JSON.stringify(body)}`);
+    return body.roles;
+  });
   check("内置 4 个角色已自动补齐", roles.length === 4, JSON.stringify(roles.map((r) => r.key)));
 
   const me = await page.evaluate(async () => (await (await fetch("/api/v1/auth/me")).json()));

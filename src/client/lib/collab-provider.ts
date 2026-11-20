@@ -39,6 +39,7 @@ function operationIdentifier(): string {
 export function useCollabDocument(pageId: string | null, initialContent: string, enabled: boolean, accountId: string) {
   const [content, setContentState] = useState(initialContent);
   const [status, setStatus] = useState<CollabStatus>("idle");
+  const [readyToEdit, setReadyToEdit] = useState(false);
   const [baseRevisionId, setBaseRevisionId] = useState<string | null>(null);
   const [sequence, setSequence] = useState(0);
   const [members, setMembers] = useState<CollabMember[]>([]);
@@ -49,21 +50,16 @@ export function useCollabDocument(pageId: string | null, initialContent: string,
   }
   const pendingRef = useRef(Promise.resolve());
   const outboxRef = useRef<CollabOutbox | null>(null);
-  const desiredContentRef = useRef(initialContent);
+  const hydratedRef = useRef(false);
   const flushRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
-    desiredContentRef.current = initialContent;
-    if (!enabled || status === "ready") return;
-    const doc = docRef.current;
-    if (!doc || !initialContent) return;
-    const text = doc.getText("content");
-    if (text.toString()) return;
-    doc.transact(() => text.insert(0, initialContent), "bootstrap");
-    setContentState(initialContent);
-  }, [enabled, initialContent, status]);
+    if (!enabled) setContentState(initialContent);
+  }, [enabled, initialContent]);
 
   useEffect(() => {
+    hydratedRef.current = false;
+    setReadyToEdit(false);
     if (!enabled || !pageId) {
       setStatus("idle");
       docRef.current?.destroy();
@@ -71,7 +67,8 @@ export function useCollabDocument(pageId: string | null, initialContent: string,
       return;
     }
     let cancelled = false;
-    const clientId = clientIdRef.current.clientId;
+    const outboxId = clientIdRef.current.clientId;
+    const clientId = `${outboxId}.${operationIdentifier()}`;
     const base = `/api/v1/collaboration/rooms/PAGE/${pageId}`;
     const roomKey = `PAGE/${pageId}`;
     const outbox = outboxRef.current ?? (outboxRef.current = createCollabOutbox());
@@ -81,6 +78,7 @@ export function useCollabDocument(pageId: string | null, initialContent: string,
     let hydrating = true;
     let eventSource: EventSource | undefined;
     let roomId: string | null = null;
+    const joinedClients = new Set<string>();
 
     const refreshMembers = async () => {
       const response = await apiGet<{ members: CollabMember[] }>(base);
@@ -94,7 +92,6 @@ export function useCollabDocument(pageId: string | null, initialContent: string,
       setBaseRevisionId(state.baseRevisionId);
       setSequence(state.sequence);
       if (state.stateBase64) Y.applyUpdate(doc, decode(state.stateBase64), "remote");
-      if (!text.toString() && initialContent) text.insert(0, initialContent, "bootstrap");
       setContentState(text.toString());
     };
 
@@ -115,7 +112,12 @@ export function useCollabDocument(pageId: string | null, initialContent: string,
     const sendEntry = async (entry: Awaited<ReturnType<CollabOutbox["list"]>>[number]) => {
       let lastError: unknown;
       for (let attempt = 0; attempt < 4; attempt++) {
+        if (cancelled) return;
         try {
+          if (!joinedClients.has(entry.clientId)) {
+            await apiPost(`${base}/join`, { clientId: entry.clientId });
+            joinedClients.add(entry.clientId);
+          }
           await apiPost(`${base}/updates`, {
             clientId: entry.clientId,
             operationId: entry.operationId,
@@ -135,8 +137,11 @@ export function useCollabDocument(pageId: string | null, initialContent: string,
     const queueEntry = (entry: Awaited<ReturnType<CollabOutbox["list"]>>[number], persist: boolean): Promise<void> => {
       if (queuedOperations.has(entry.operationId)) return pendingRef.current;
       queuedOperations.add(entry.operationId);
+      // 持久化不能等待前一条网络请求，否则快速连续输入后关页会丢掉后续编辑。
+      const stored = persist ? outbox.put(entry) : Promise.resolve();
+      void stored.catch(() => {});
       const operation = pendingRef.current.catch(() => {}).then(async () => {
-        if (persist) await outbox.put(entry);
+        await stored;
         await sendEntry(entry);
         if (!cancelled) setStatus("ready");
       }).catch((error: unknown) => {
@@ -147,27 +152,37 @@ export function useCollabDocument(pageId: string | null, initialContent: string,
       return operation;
     };
     flushRef.current = async () => {
-      await pendingRef.current;
+      if (!hydratedRef.current) throw new Error("协作文档尚未连接，请等待连接后保存");
+      await pendingRef.current.catch(() => {});
+      await flushPersisted();
       const update = Y.encodeStateAsUpdate(doc);
       await queueEntry({ roomKey, clientId, operationId: operationIdentifier(), updateBase64: encode(update), createdAt: Date.now() }, true);
     };
-    let replaying = false;
-    const flushPersisted = async () => {
-      if (replaying) return;
-      replaying = true;
-      try {
-        const entries = await outbox.list(roomKey, clientId);
+    let replaying: Promise<void> | null = null;
+    const flushPersisted = (): Promise<void> => {
+      if (replaying) return replaying;
+      replaying = (async () => {
+        const entries = await outbox.list(roomKey, outboxId);
         for (const entry of entries) {
+          if (cancelled) return;
           Y.applyUpdate(doc, decode(entry.updateBase64), "outbox");
           await queueEntry(entry, false);
         }
         if (entries.length) {
-          desiredContentRef.current = text.toString();
           setContentState(text.toString());
         }
-      } finally { replaying = false; }
+      })().finally(() => { replaying = null; });
+      return replaying;
     };
-    const onOnline = () => { void flushPersisted().catch(() => {}); };
+    const synchronize = async () => {
+      if (cancelled || hydrating) return;
+      await apiPost(`${base}/join`, { clientId });
+      await flushPersisted();
+      await refresh();
+      await refreshMembers();
+      if (!cancelled) { hydratedRef.current = true; setReadyToEdit(true); setStatus("ready"); }
+    };
+    const onOnline = () => { void synchronize().catch(() => { if (!cancelled) setStatus("error"); }); };
     const onUpdate = (update: Uint8Array, origin: unknown) => {
       setContentState(text.toString());
       if (hydrating || origin === "remote" || origin === "bootstrap" || origin === "outbox") return;
@@ -180,24 +195,30 @@ export function useCollabDocument(pageId: string | null, initialContent: string,
       }, true).catch(() => {});
     };
     doc.on("update", onUpdate);
+    if (typeof EventSource !== "undefined") {
+      eventSource = new EventSource("/api/v1/events", { withCredentials: true });
+      eventSource.addEventListener("open", onOnline);
+      eventSource.addEventListener("collab.update", (event) => { void applyRemoteState(event as MessageEvent); });
+      eventSource.addEventListener("collab.published", (event) => { void applyRemoteState(event as MessageEvent); });
+      eventSource.addEventListener("collab.presence", () => { void refreshMembers().catch(() => {}); });
+    }
 
     void (async () => {
       try {
         setStatus("joining");
         await apiPost(`${base}/join`, { clientId });
+        joinedClients.add(clientId);
+        if (cancelled) return;
         await refresh();
         await refreshMembers();
         await flushPersisted();
+        if (cancelled) return;
         hydrating = false;
-        if (desiredContentRef.current !== text.toString()) applyTextValue(text, desiredContentRef.current);
-        if (typeof EventSource !== "undefined") {
-          eventSource = new EventSource("/api/v1/events", { withCredentials: true });
-          eventSource.addEventListener("collab.update", (event) => { void applyRemoteState(event as MessageEvent); });
-          eventSource.addEventListener("collab.published", (event) => { void applyRemoteState(event as MessageEvent); });
-          eventSource.addEventListener("collab.presence", () => { void refreshMembers(); });
-        }
+        hydratedRef.current = true;
+        setReadyToEdit(true);
         setStatus("ready");
       } catch {
+        if (cancelled) return;
         hydrating = false;
         setStatus("error");
       }
@@ -209,6 +230,7 @@ export function useCollabDocument(pageId: string | null, initialContent: string,
     }, 20_000);
     return () => {
       cancelled = true;
+      hydratedRef.current = false;
       flushRef.current = async () => {};
       window.clearInterval(heartbeat);
       eventSource?.close();
@@ -221,14 +243,13 @@ export function useCollabDocument(pageId: string | null, initialContent: string,
   }, [accountId, enabled, pageId]);
 
   const setContent = useCallback((next: string) => {
-    desiredContentRef.current = next;
-    setContentState(next);
     const doc = docRef.current;
-    if (!doc) return;
+    if (!doc || !hydratedRef.current) return;
+    setContentState(next);
     const text = doc.getText("content");
     doc.transact(() => applyTextValue(text, next), "local");
   }, []);
 
   const flush = useCallback(async () => { await flushRef.current(); }, []);
-  return { content, status, baseRevisionId, sequence, members, setContent, flush };
+  return { content, status, readyToEdit, baseRevisionId, sequence, members, setContent, flush };
 }

@@ -18,6 +18,7 @@ import { Checkbox } from "../components/Checkbox.tsx";
 import { toast } from "../components/ui/Toast.tsx";
 import { TextInput } from "../components/ui/TextInput.tsx";
 import { apiGet } from "../lib/api.ts";
+import { useCan } from "../lib/actor.ts";
 import { relativeTime } from "../lib/time.ts";
 import { Panel } from "../components/ui/Panel.tsx";
 import { Icon } from "../components/Icon.tsx";
@@ -54,6 +55,7 @@ function ItemRow({ it, onOpen }: { it: { id: string; key: string; title: string;
 
 export function WorkbenchPage() {
   useLocale();   // 订阅语言，切换即时生效
+  const canCreateProject = useCan("project:create");
   const qc = useQueryClient();
   const [newTitle, setNewTitle] = useState("");
   const [newDue, setNewDue] = useState("");
@@ -205,7 +207,11 @@ export function WorkbenchPage() {
             <div className="workbench-project-list">
               {projectsQ.isLoading && <LoadingBlock compact />}
               {projectsQ.isError && <StateBlock kind="error" title={tr("common.loadFailedShort")} action={() => void projectsQ.refetch()} actionLabel={tr("common.reload")} />}
-              {projectsQ.isSuccess && projectsQ.data.items.length === 0 && <p className="muted">{tr("projects.empty")}</p>}
+              {projectsQ.isSuccess && projectsQ.data.items.length === 0 && <div className="workbench-project-empty">
+                <strong>{tr("projects.empty")}</strong>
+                <p className="muted">{tr(canCreateProject ? "projects.emptyHint" : "workbench.joinProjectHint")}</p>
+                <Link className="btn btn-secondary" to="/projects">{tr(canCreateProject ? "workbench.createProject" : "workbench.browseProjects")}</Link>
+              </div>}
               {(projectsQ.data?.items ?? []).slice(0, 6).map((p) => (
                 <div key={p.id} className="workbench-project-row row-hover">
                   <div className="row-title">

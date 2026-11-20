@@ -1,4 +1,5 @@
-import "./_env.ts";   // 环境预设必须最先加载（服务模块在导入时即读环境变量）
+import "./_env.ts";
+import { confirmedTestArgs } from "./lib/mcp-test-confirmation.ts";   // 环境预设必须最先加载（服务模块在导入时即读环境变量）
 /** 计划实体创建自检（第十三期收口）：抽取服务后修掉的**授权缺口** + 计划写工具 */
 import { db, sql } from "../src/db/index.ts";
 import { member, role, roleAssignment, project, milestone, iteration, release, module as moduleT, workItem, apiToken, idempotencyKey, auditEntry, activityEntry, notification, subscription, timeLog, workItemCollaborator, workItemRelation, memberPreference } from "../src/db/schema.ts";
@@ -78,7 +79,7 @@ try {
     const res = await fetch(`${BASE}/api/v1/mcp`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${rw.token}` },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: confirmedTestArgs(name, args) } }),
     });
     const j = (await res.json()) as { result?: { content?: { text: string }[]; isError?: boolean } };
     let data: Record<string, unknown> | null = null;
@@ -104,7 +105,7 @@ try {
   const deniedRes = await fetch(`${BASE}/api/v1/mcp`, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${memberTok.token}` },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "plan.createMilestone", arguments: { projectId: pid, name: "成员建的" } } }),
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "plan.createMilestone", arguments: { projectId: pid, name: "成员建的", userConfirmed: true } } }),
   });
   const deniedBody = (await deniedRes.json()) as { result?: { isError?: boolean; content?: { text: string }[] } };
   const deniedData = JSON.parse(deniedBody.result?.content?.[0]?.text ?? "{}");

@@ -12,6 +12,23 @@ function Example({ searchable = false }: { searchable?: boolean }) {
 }
 
 describe("统一下拉交互", () => {
+  it("身份选项区分姓名和账号，按账号搜索且占位提示不可选择", () => {
+    const change = vi.fn();
+    render(<Select ariaLabel="成员" value="" onChange={change} searchable placeholder="选择成员" options={[
+      { value: "", label: "选择成员" },
+      { value: "m1", label: "研发成员", secondaryLabel: "@engineering-account" },
+      { value: "m2", label: "测试成员", secondaryLabel: "@quality-account" },
+    ]} />);
+    fireEvent.click(screen.getByRole("button", { name: "成员" }));
+    expect(screen.queryByRole("option", { name: "选择成员" })).toBeNull();
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "engineering-account" } });
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+    expect(screen.getByText("@engineering-account").className).toBe("select-option-secondary");
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+    expect(change).toHaveBeenCalledWith("m1");
+  });
+
   it("表单进入禁用状态时关闭已打开的浮层", () => {
     const { rerender } = render(<fieldset><Example /></fieldset>);
     fireEvent.click(screen.getByRole("button", { name: "选择项目" }));

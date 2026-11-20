@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
 const shell = readFileSync("src/client/routes/AppShell.tsx", "utf8");
+const shellCss = readFileSync("src/client/styles/shell.css", "utf8");
+const pagesCss = readFileSync("src/client/styles/pages.css", "utf8");
 const router = readFileSync("src/client/router.tsx", "utf8");
 
 describe("主导航结构", () => {
@@ -22,5 +24,12 @@ describe("主导航结构", () => {
     expect(shell).toMatch(/navItem\("\/admin\/roles"/);
     expect(router).toMatch(/path:\s*"\/admin\/roles"/);
     expect(router).toContain("RoleAdminPage");
+  });
+
+  it("超宽屏业务表面限制为 1920px 并居中", () => {
+    expect(shellCss).toMatch(/\.shell-content\.content-shell\s*>\s*\.page\s*\{[^}]*max-width:\s*1920px/s);
+    expect(shellCss).toMatch(/\.shell-content\.content-shell\s*>\s*\.page\s*\{[^}]*margin-inline:\s*auto/s);
+    expect(pagesCss).toMatch(/\.shell-content\.content-shell\s*>\s*\.page\.settings-page\s*\{\s*max-width:\s*1920px\s*!important;\s*\}/);
+    expect(pagesCss).not.toMatch(/\.shell-content\.content-shell\s*>\s*\.page\.settings-page\s*\{\s*max-width:\s*none\s*!important;\s*\}/);
   });
 });

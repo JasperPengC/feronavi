@@ -6,15 +6,28 @@
  */
 import { useEffect } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { invalidateCommentQueries, invalidateWorkItemQueries, queryKeys } from "./query-keys.ts";
+import { invalidateCommentQueries, invalidateResourceBatch, invalidateResourceQueries, invalidateWorkspaceBatch, invalidateWorkItemQueries, queryKeys } from "./query-keys.ts";
+import { parseResourceInvalidation, parseWorkspaceInvalidation, type ResourceInvalidation, type WorkspaceInvalidation } from "../../shared/resource-events.ts";
 
 /** data.id 是工作项事件的资源 id；评论事件必须使用 targetType/targetId。 */
 export function invalidateFor(qc: QueryClient, event: string, data: Record<string, unknown>): void {
   switch (event) {
+    case "workspace.invalidated": {
+      const value = parseWorkspaceInvalidation(data);
+      if (value) void invalidateWorkspaceBatch(qc, [value]);
+      break;
+    }
+    case "resource.invalidated": {
+      const scope = parseResourceInvalidation(data);
+      if (scope) void invalidateResourceQueries(qc, scope);
+      break;
+    }
     case "workitem.changed":
     case "workitem.transitioned":
     case "workitem.assigned":
-      void invalidateWorkItemQueries(qc, typeof data.id === "string" ? data.id : undefined);
+      if (typeof data.projectId === "string" && typeof data.id === "string") {
+        void invalidateResourceQueries(qc, { domain: "workitem", projectId: data.projectId, resourceType: "WORK_ITEM", resourceId: data.id });
+      } else void invalidateWorkItemQueries(qc, typeof data.id === "string" ? data.id : undefined);
       break;
     case "comment.created":
       void invalidateCommentQueries(qc, typeof data.targetType === "string" ? data.targetType : undefined,
@@ -24,6 +37,7 @@ export function invalidateFor(qc: QueryClient, event: string, data: Record<strin
       void qc.invalidateQueries({ queryKey: queryKeys.presence() });
       break;
     case "notification.new":
+    case "notification.changed":
       qc.setQueriesData({ queryKey: queryKeys.notifications() }, (old: { items: unknown[]; unreadCount: number } | undefined) =>
         old ? { ...old, unreadCount: (data.unreadCount as number) ?? old.unreadCount } : old);
       void qc.invalidateQueries({ queryKey: queryKeys.notifications() });
@@ -37,7 +51,7 @@ export function invalidateFor(qc: QueryClient, event: string, data: Record<strin
 }
 
 /** 挂在主应用壳：登录后常驻订阅 */
-export function useEvents(enabled: boolean): void {
+export function useEvents(enabled: boolean, accountId?: string): void {
   const qc = useQueryClient();
   useEffect(() => {
     if (!enabled) return;
@@ -51,15 +65,44 @@ export function useEvents(enabled: boolean): void {
     } catch {
       return;
     }
+    let active = true;
+    es.addEventListener("open", () => { if (active) void qc.invalidateQueries(); });
+    const pending = new Map<string, ResourceInvalidation>();
+    const pendingWorkspace = new Map<string, WorkspaceInvalidation>();
+    let flushTimer: ReturnType<typeof setTimeout> | undefined;
+    const flush = () => {
+      if (!active) return;
+      if (pending.size) void invalidateResourceBatch(qc, [...pending.values()]);
+      if (pendingWorkspace.size) void invalidateWorkspaceBatch(qc, [...pendingWorkspace.values()]);
+      pending.clear(); pendingWorkspace.clear(); flushTimer = undefined;
+    };
     const onMsg = (ev: MessageEvent) => {
+      if (!active) return;
       try {
         const data = JSON.parse(ev.data as string) as Record<string, unknown>;
+        const workspace = ev.type === "workspace.invalidated" ? parseWorkspaceInvalidation(data) : null;
+        if (workspace) {
+          pendingWorkspace.set(`${workspace.domain}:${workspace.resourceType}:${workspace.resourceId}`, workspace);
+          flushTimer ??= setTimeout(flush, 50);
+          return;
+        }
+        const scope = ev.type === "resource.invalidated" ? parseResourceInvalidation(data)
+          : ev.type.startsWith("workitem.") && typeof data.id === "string" && typeof data.projectId === "string"
+            ? { domain: "workitem" as const, projectId: data.projectId, resourceType: "WORK_ITEM", resourceId: data.id }
+            : ev.type.startsWith("comment.") && typeof data.targetType === "string" && typeof data.targetId === "string" && typeof data.projectId === "string"
+              ? { domain: "comment" as const, projectId: data.projectId, resourceType: data.targetType, resourceId: data.targetId } : null;
+        if (scope) {
+          pending.set(`${scope.domain}:${scope.resourceType}:${scope.resourceId}`, scope);
+          flushTimer ??= setTimeout(flush, 50);
+          return;
+        }
+        if (ev.type === "dropped") { pending.clear(); pendingWorkspace.clear(); clearTimeout(flushTimer); flushTimer = undefined; }
         invalidateFor(qc, ev.type || "message", data);
       } catch { /* 单条坏数据不终结订阅 */ }
     };
-    for (const t of ["notification.new", "workitem.changed", "workitem.transitioned", "workitem.assigned", "comment.created", "presence", "dropped"]) {
+    for (const t of ["workspace.invalidated", "resource.invalidated", "notification.new", "notification.changed", "workitem.changed", "workitem.transitioned", "workitem.assigned", "comment.created", "presence", "dropped"]) {
       es.addEventListener(t, onMsg as EventListener);
     }
-    return () => es.close();
-  }, [qc, enabled]);
+    return () => { active = false; clearTimeout(flushTimer); pending.clear(); pendingWorkspace.clear(); es.close(); };
+  }, [qc, enabled, accountId]);
 }

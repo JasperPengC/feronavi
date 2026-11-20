@@ -30,7 +30,7 @@ try {
   const projects = await page.evaluate(async () => (await (await fetch("/api/v1/projects")).json()).items);
   const pid = projects[0].id;
   await page.goto(`${BASE}/projects/${pid}/issues`, { waitUntil: "domcontentloaded" });
-  await page.getByText("近 14 天缺陷趋势", { exact: true }).waitFor({ timeout: 15_000 });
+  await page.locator(".issues-table tbody tr").first().waitFor({ timeout: 15_000 });
 
   // ① 未筛选导出：应覆盖当前表格中的全部行（全量匹配，而不是当前页截断）
   const tableRows = await page.locator(".page tbody tr").count();
@@ -47,7 +47,8 @@ try {
   check("未筛选导出覆盖表格全部行", tableRows > 0 && rowsAll.length - 1 === tableRows, `表格=${tableRows} 导出=${rowsAll.length - 1}`);
 
   // ② S2 筛选导出：全量匹配且每行 severity=S2
-  await page.locator('.page .toolbar [aria-label="严重度"]').click();
+  await page.getByRole("button", { name: "筛选", exact: true }).click();
+  await page.getByRole("button", { name: "严重度", exact: true }).click();
   await page.getByRole("option", { name: "S2", exact: true }).click();
   await page.waitForTimeout(900);
   const [download] = await Promise.all([
@@ -60,7 +61,7 @@ try {
 
   // 全局问题总览导出（项目筛选同款）
   await page.goto(`${BASE}/issues`, { waitUntil: "domcontentloaded" });
-  await page.getByText("近 14 天缺陷趋势", { exact: true }).waitFor({ timeout: 15_000 });
+  await page.locator(".issues-table tbody tr").first().waitFor({ timeout: 15_000 });
   const [download2] = await Promise.all([
     page.waitForEvent("download", { timeout: 30_000 }),
     page.getByRole("button", { name: "导出全部筛选结果", exact: true }).click(),

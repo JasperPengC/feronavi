@@ -14,6 +14,7 @@ import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 import { recordBusinessEvent } from "./event-log.ts";
+import { businessEffects } from "./business-effects.ts";
 
 export const FIELD_TYPES = ["TEXT", "NUMBER", "DATE", "SINGLE_SELECT", "MULTI_SELECT", "PERSON"] as const;
 export type FieldType = (typeof FIELD_TYPES)[number];
@@ -179,60 +180,76 @@ function validateOne(def: typeof customFieldDef.$inferSelect, v: unknown): void 
   }
 }
 
+/** 只检查当前资源授权，不消费或重验幂等请求的版本号。 */
+export async function assertValuesWritable(actor: Actor, workItemId: string) {
+  const [wi] = await db.select().from(workItem).where(eq(workItem.id, workItemId)).limit(1);
+  if (!wi || wi.deletedAt) throw forbidden();
+  await assertProjectVisible(actor, wi.projectId);
+  const ctx: PermissionContext = { memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId };
+  const allowed = can(actor, "work_item:update_own", { projectId: wi.projectId, createdBy: wi.reporterId }, ctx)
+    || can(actor, "work_item:update_any", { projectId: wi.projectId, createdBy: wi.reporterId }, ctx);
+  if (!allowed) throw forbidden();
+  return wi;
+}
+
 /**
  * 写：整批替换。校验链 = 定义存在且同项目 → 类型 → 必填/状态必填。
  * 未提供的字段视为"不改动"（保留原值），显式传 null 才是清空。
  */
-export async function setValues(actor: Actor, workItemId: string, patch: Record<string, unknown>) {
-  const wi = await db.select().from(workItem).where(eq(workItem.id, workItemId)).limit(1);
-  if (!wi[0] || wi[0].deletedAt) throw forbidden();
-  await assertProjectVisible(actor, wi[0].projectId);
+export async function setValues(actor: Actor, workItemId: string, patch: Record<string, unknown>, expectedVersion?: number) {
+  await db.transaction(async (tx) => {
+    if (expectedVersion !== undefined) {
+      const locked = await tx.update(workItem).set({ version: sql`${workItem.version} + 1` })
+        .where(and(eq(workItem.id, workItemId), eq(workItem.version, expectedVersion), isNull(workItem.deletedAt)))
+        .returning({ id: workItem.id });
+      if (!locked.length) throw new DomainError("VERSION_CONFLICT", "工作项已被其他操作修改，请重新读取后重试", { expectedVersion });
+    }
+    const wi = await assertValuesWritable(actor, workItemId);
 
-  const ctx: PermissionContext = { memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId };
-  const allowed = can(actor, "work_item:update_own", { projectId: wi[0].projectId, createdBy: wi[0].reporterId }, ctx)
-    || can(actor, "work_item:update_any", { projectId: wi[0].projectId, createdBy: wi[0].reporterId }, ctx);
-  if (!allowed) throw forbidden();
+    const defs = await tx.select().from(customFieldDef).where(eq(customFieldDef.projectId, wi.projectId));
+    const byId = new Map(defs.map((d) => [d.id, d]));
+    const cur = await tx.select().from(customFieldValue).where(eq(customFieldValue.workItemId, workItemId)).limit(1);
+    const merged = { ...((cur[0]?.values ?? {}) as Record<string, unknown>) };
 
-  const defs = await db.select().from(customFieldDef).where(eq(customFieldDef.projectId, wi[0].projectId));
-  const byId = new Map(defs.map((d) => [d.id, d]));
-  const cur = await db.select().from(customFieldValue).where(eq(customFieldValue.workItemId, workItemId)).limit(1);
-  const merged = { ...((cur[0]?.values ?? {}) as Record<string, unknown>) };
-
-  for (const [defId, v] of Object.entries(patch)) {
-    const def = byId.get(defId);
-    if (!def) throw new DomainError("VALIDATION", "字段不存在或不属于该项目", { defId });
-    if (def.archivedAt) throw new DomainError("VALIDATION", `字段「${def.name}」已归档，不能再写`, { fieldKey: def.key });
-    validateOne(def, v);
-    if (v === null) delete merged[defId];
-    else merged[defId] = v;
-  }
+    for (const [defId, v] of Object.entries(patch)) {
+      const def = byId.get(defId);
+      if (!def) throw new DomainError("VALIDATION", "字段不存在或不属于该项目", { defId });
+      if (def.archivedAt) throw new DomainError("VALIDATION", `字段「${def.name}」已归档，不能再写`, { fieldKey: def.key });
+      validateOne(def, v);
+      if (v === null) delete merged[defId];
+      else merged[defId] = v;
+    }
 
   // 必填校验（含按状态必填）：读当前状态 key
   // 本文件的 sql 来自 drizzle-orm（构造器），必须经 db.execute —— 与其它服务里的
   // postgres.js 客户端不同名同形，本项目已因此踩坑四次，改动前先看导入来源。
-  const stRows = await db.execute(sql`
-    select key from workflow_state where id = ${wi[0].statusId} limit 1
-  `) as unknown as { key: string }[];
-  const stRow = stRows;
-  const statusKey = stRow[0]?.key ?? null;
+    const stRows = await tx.execute(sql`
+      select key from workflow_state where id = ${wi.statusId} limit 1
+    `) as unknown as { key: string }[];
+    const statusKey = stRows[0]?.key ?? null;
 
-  for (const def of defs) {
-    if (def.archivedAt) continue;
-    const has = merged[def.id] !== undefined && merged[def.id] !== null
-      && !(Array.isArray(merged[def.id]) && (merged[def.id] as unknown[]).length === 0);
-    const states = (def.requiredStates ?? []) as string[];
-    const requiredNow = def.isRequired || (statusKey !== null && states.includes(statusKey));
-    if (requiredNow && !has) {
-      throw new DomainError("VALIDATION",
-        `字段「${def.name}」为必填${states.length ? `（当前状态 ${statusKey}）` : ""}`,
-        { fieldKey: def.key, required: true });
+    for (const def of defs) {
+      if (def.archivedAt) continue;
+      const has = merged[def.id] !== undefined && merged[def.id] !== null
+        && !(Array.isArray(merged[def.id]) && (merged[def.id] as unknown[]).length === 0);
+      const states = (def.requiredStates ?? []) as string[];
+      const requiredNow = def.isRequired || (statusKey !== null && states.includes(statusKey));
+      if (requiredNow && !has) {
+        throw new DomainError("VALIDATION",
+          `字段「${def.name}」为必填${states.length ? `（当前状态 ${statusKey}）` : ""}`,
+          { fieldKey: def.key, required: true });
+      }
     }
-  }
 
-  await db.insert(customFieldValue).values({ workItemId, values: merged as object })
-    .onConflictDoUpdate({
-      target: customFieldValue.workItemId,
-      set: { values: merged as object, updatedAt: new Date() },
-    });
+    await tx.insert(customFieldValue).values({ workItemId, values: merged as object })
+      .onConflictDoUpdate({
+        target: customFieldValue.workItemId,
+        set: { values: merged as object, updatedAt: new Date() },
+      });
+    await businessEffects().deliverWebhook("work_item.updated", {
+      id: workItemId, key: wi.key, projectId: wi.projectId, version: wi.version,
+      actorId: actor.memberId, changedFields: ["customFields"],
+    }, wi.projectId);
+  });
   return getValues(actor, workItemId);
 }

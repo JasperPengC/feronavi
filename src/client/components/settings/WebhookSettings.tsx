@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiDelete, apiGet, apiPost, ApiError } from "../../lib/api.ts";
 import { t, useLocale } from "../../i18n/index.ts";
 import { Button } from "../ui/Button.tsx";
-import { ConfirmButton } from "../ui/ConfirmButton.tsx";
+import { Modal } from "../ui/Modal.tsx";
+import { confirmDialog } from "../Dialog.tsx";
 import { TextInput } from "../ui/TextInput.tsx";
 import { SettingsListState, SettingsSection } from "./SettingsSection.tsx";
 import type { FeedbackHandlers } from "./types.ts";
 import { settingsCopy } from "./copy.ts";
+import { Icon } from "../Icon.tsx";
 
 type WebhookEndpoint = { id: string; name: string; url: string; events: string[]; isActive: boolean };
 type DeliveryRow = {
@@ -20,7 +22,7 @@ const INITIAL_FORM: WebhookForm = { name: "", url: "", events: "work_item.create
 
 import { useSettingsDraft } from "./SettingsDraft.tsx";
 
-export function WebhookSettings({ onSuccess, onError }: FeedbackHandlers) {
+export function WebhookSettings({ onSuccess, onError, compact = false }: FeedbackHandlers & { compact?: boolean }) {
   const locale = useLocale();
   const qc = useQueryClient();
   const list = useQuery({
@@ -29,6 +31,9 @@ export function WebhookSettings({ onSuccess, onError }: FeedbackHandlers) {
     retry: false,
   });
   const [form, setForm] = useState<WebhookForm>(INITIAL_FORM);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const formId = useId();
   const [secret, setSecret] = useState<string | null>(null);
   const [openDeliveries, setOpenDeliveries] = useState<string | null>(null);
   const deliveries = useQuery({
@@ -53,10 +58,12 @@ export function WebhookSettings({ onSuccess, onError }: FeedbackHandlers) {
     onSuccess: async (result) => {
       setSecret(result.secret);
       setForm(INITIAL_FORM); draft.markSaved(INITIAL_FORM);
+      setFormOpen(false);
+      setFormError(null);
       onSuccess(t("se.webhookCreated"));
       await qc.invalidateQueries({ queryKey: ["webhooks"] });
     },
-    onError: (error) => onError(error instanceof ApiError ? error.message : t("se.webhookCreateFailed")),
+    onError: (error) => setFormError(error instanceof ApiError ? error.message : t("se.webhookCreateFailed")),
   });
   const remove = useMutation({
     mutationFn: (id: string) => apiDelete(`/api/v1/webhooks/${id}`),
@@ -68,15 +75,25 @@ export function WebhookSettings({ onSuccess, onError }: FeedbackHandlers) {
   });
   const set = <K extends keyof WebhookForm>(key: K, value: WebhookForm[K]) => setForm((current) => ({ ...current, [key]: value }));
 
-  const draft = useSettingsDraft(true, form, create.isPending);
+  const draft = useSettingsDraft(formOpen, form, create.isPending);
+  const requestClose = () => void draft.leave(() => {
+    setFormOpen(false);
+    setForm(INITIAL_FORM);
+    setFormError(null);
+  });
+  const canCreate = !!form.name.trim() && !!form.url.trim()
+    && form.events.split(",").some(value => value.trim()) && !create.isPending;
   return (
-    <SettingsSection title={t("set.webhook")} description={t("se.whSign")}
-      footer={<Button variant="primary" disabled={!form.name.trim() || !form.url.trim() || !form.events.trim() || create.isPending} onClick={() => create.mutate()}>{t("se.newWebhook")}</Button>}>
+    <SettingsSection variant={compact ? "row" : "card"} leading={compact && <Icon name="send" size={18} />}
+      title={compact ? "Webhook" : t("set.webhook")} description={compact ? t("se.messagingWebhookDesc") : t("se.whSign")}
+      status={compact && list.data?.endpoints.length === 0 ? t("se.messagingUnconfigured") : undefined}
+      actions={<Button size="sm" variant={compact ? "ghost" : "primary"} aria-label={compact ? `${t("common.add")} Webhook` : t("se.newWebhook")} aria-haspopup="dialog"
+        onClick={() => setFormOpen(true)}><Icon name="plus" size={14} />{compact ? t("common.add") : t("se.newWebhook")}</Button>}>
       {secret && <div className="alert alert-info" role="status">{t("se.signSecret")}<code className="mono settings-secret">{secret}</code></div>}
       {draft.guard}
       {list.isLoading && <SettingsListState>{t("common.loading")}</SettingsListState>}
       {list.isError && <SettingsListState tone="error" action={<Button size="sm" onClick={() => void list.refetch()}>{t("common.reload")}</Button>}>{settingsCopy(locale, "webhookLoadFailed")}</SettingsListState>}
-      {list.data && list.data.endpoints.length === 0 && <SettingsListState>{t("se.noWebhooks")}</SettingsListState>}
+      {!compact && list.data && list.data.endpoints.length === 0 && <SettingsListState>{t("se.noWebhooks")}</SettingsListState>}
       {!!list.data?.endpoints.length && (
         <ul className="settings-record-list">
           {list.data.endpoints.map((endpoint) => (
@@ -90,7 +107,7 @@ export function WebhookSettings({ onSuccess, onError }: FeedbackHandlers) {
               <Button size="sm" variant="ghost" onClick={() => setOpenDeliveries(openDeliveries === endpoint.id ? null : endpoint.id)}>
                 {t("se.webhookDeliveries")}
               </Button>
-              <ConfirmButton size="sm" disabled={remove.isPending} onConfirm={() => remove.mutate(endpoint.id)}>{t("common.delete")}</ConfirmButton>
+              <Button size="sm" variant="danger" disabled={remove.isPending} onClick={async () => { if (await confirmDialog(`${t("common.confirmDelete")} ${endpoint.name}`, { danger: true })) remove.mutate(endpoint.id); }}>{t("common.delete")}</Button>
               {openDeliveries === endpoint.id && (
                 <div className="settings-deliveries" role="region" aria-label={t("se.webhookDeliveries")}>
                   {deliveries.isLoading && <SettingsListState>{t("common.loading")}</SettingsListState>}
@@ -120,15 +137,28 @@ export function WebhookSettings({ onSuccess, onError }: FeedbackHandlers) {
           ))}
         </ul>
       )}
-      <div className="settings-fields settings-fields--two">
-        <TextInput className="settings-field settings-field--span-two" label={t("set.webhookName")} placeholder={t("set.webhookName")}
+      <Modal open={formOpen} title={t("se.newWebhook")} onClose={requestClose}
+        footer={<>
+          <Button disabled={create.isPending} onClick={requestClose}>{t("common.cancel")}</Button>
+          <Button form={formId} type="submit" variant="primary" disabled={!canCreate} loading={create.isPending}>{t("common.create")}</Button>
+        </>}>
+      <form id={formId} aria-label={t("se.newWebhook")}
+        onSubmit={event => { event.preventDefault(); if (canCreate) { setFormError(null); create.mutate(); } }}>
+        <p className="settings-webhook-help">{t("se.whSign")}</p>
+        {formError && <p className="field-error" role="alert">{formError}</p>}
+        <fieldset disabled={create.isPending} className="settings-form-fields">
+        <div className="settings-fields settings-fields--two">
+        <TextInput className="settings-field" label={t("set.webhookName")} placeholder={t("set.webhookName")} required
           value={form.name} aria-label={t("set.webhookNameLabel")} onChange={(event) => set("name", event.target.value)} />
-        <TextInput className="settings-field settings-field--span-two" label={t("set.webhookUrlLabel")} type="url"
-          placeholder="https://example.com/hook" value={form.url} aria-label={t("set.webhookUrlLabel")}
-          onChange={(event) => set("url", event.target.value)} />
-        <TextInput className="settings-field settings-field--span-two" label={t("set.webhookEvents")} placeholder={t("set.webhookEvents")}
+        <TextInput className="settings-field" label={t("set.webhookEvents")} placeholder={t("set.webhookEvents")} required
           value={form.events} aria-label={t("set.webhookEventsLabel")} onChange={(event) => set("events", event.target.value)} />
-      </div>
+        <TextInput className="settings-field settings-field--span-two" label={t("set.webhookUrlLabel")} type="url"
+          placeholder="https://example.com/hook" value={form.url} aria-label={t("set.webhookUrlLabel")} required
+          onChange={(event) => set("url", event.target.value)} />
+        </div>
+        </fieldset>
+      </form>
+      </Modal>
     </SettingsSection>
   );
 }

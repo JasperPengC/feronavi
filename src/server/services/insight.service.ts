@@ -18,6 +18,7 @@ import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 import { recordBusinessEvent } from "./event-log.ts";
+import { publishWorkspaceInvalidation } from "./workspace-events.service.ts";
 
 function hasOrg(actor: Actor): boolean {
   return actor.grants.some((g) => g.scopeType === "ORG");
@@ -239,6 +240,7 @@ export async function createDashboard(actor: Actor, input: { name: string; proje
     actor, action: "insight.dashboard_created", targetType: "DASHBOARD", targetId: row!.id, projectId: input.projectId ?? null,
     ...(input.projectId ? { summary: `${actor.name} 创建了洞察看板「${input.name}」` } : {}),
   });
+  await publishWorkspaceInvalidation({ domain: "dashboard", resourceType: "DASHBOARD", resourceId: row!.id, projectId: row!.projectId });
   return row;
 }
 
@@ -264,6 +266,7 @@ export async function updateDashboard(actor: Actor, id: string, patch: { name?: 
     actor, action: "insight.dashboard_updated", targetType: "DASHBOARD", targetId: id, projectId: d.projectId,
     ...(d.projectId ? { summary: `${actor.name} 更新了洞察看板「${row!.name}」` } : {}),
   });
+  await publishWorkspaceInvalidation({ domain: "dashboard", resourceType: "DASHBOARD", resourceId: id, projectId: d.projectId });
   return row;
 }
 
@@ -275,6 +278,7 @@ export async function deleteDashboard(actor: Actor, id: string): Promise<void> {
     actor, action: "insight.dashboard_deleted", targetType: "DASHBOARD", targetId: id, projectId: d.projectId,
     ...(d.projectId ? { summary: `${actor.name} 删除了洞察看板「${d.name}」` } : {}),
   });
+  await publishWorkspaceInvalidation({ domain: "dashboard", resourceType: "DASHBOARD", resourceId: id, projectId: d.projectId });
 }
 
 export async function listWidgets(actor: Actor, dashboardId: string) {
@@ -297,6 +301,7 @@ export async function addWidget(actor: Actor, dashboardId: string, input: { type
     actor, action: "insight.widget_added", targetType: "DASHBOARD_WIDGET", targetId: row!.id, projectId: d.projectId,
     ...(d.projectId ? { summary: `${actor.name} 在看板「${d.name}」添加了挂件（${input.type}）` } : {}),
   });
+  await publishWorkspaceInvalidation({ domain: "dashboard", resourceType: "DASHBOARD", resourceId: dashboardId, projectId: d.projectId });
   return row;
 }
 
@@ -310,6 +315,7 @@ export async function updateWidget(actor: Actor, id: string, patch: { type?: str
     actor, action: "insight.widget_updated", targetType: "DASHBOARD_WIDGET", targetId: id, projectId: d.projectId,
     ...(d.projectId ? { summary: `${actor.name} 更新了看板「${d.name}」的挂件` } : {}),
   });
+  await publishWorkspaceInvalidation({ domain: "dashboard", resourceType: "DASHBOARD", resourceId: w.dashboardId, projectId: d.projectId });
   return row;
 }
 
@@ -323,6 +329,7 @@ export async function deleteWidget(actor: Actor, id: string): Promise<void> {
     actor, action: "insight.widget_deleted", targetType: "DASHBOARD_WIDGET", targetId: id, projectId: d.projectId,
     ...(d.projectId ? { summary: `${actor.name} 删除了看板「${d.name}」的挂件` } : {}),
   });
+  await publishWorkspaceInvalidation({ domain: "dashboard", resourceType: "DASHBOARD", resourceId: w.dashboardId, projectId: d.projectId });
 }
 
 /** 挂件数据：详情端点带上"每个挂件当前的数据"，避免前端为每个挂件各打一次 */

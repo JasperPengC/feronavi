@@ -43,6 +43,7 @@ export function LoginPage() {
   const [ldapId, setLdapId] = useState("");
   const [ldapMode, setLdapMode] = useState(false);
   const [totpCode, setTotpCode] = useState("");
+  const [twoFactorRequired, setTwoFactorRequired] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -109,7 +110,7 @@ export function LoginPage() {
       if (ldapMode) {
         await apiPost("/api/v1/auth/ldap/login", { idpId: ldapId, username, password, totpCode: totpCode || undefined });
       } else {
-        await apiPost("/api/v1/auth/login", { username, password, remember });
+        await apiPost("/api/v1/auth/login", { username, password, remember, totpCode: totpCode || undefined });
       }
       await qc.invalidateQueries({ queryKey: ["actor"] });
       const me = await qc.fetchQuery({
@@ -127,6 +128,8 @@ export function LoginPage() {
       // ⚠️ 后端保证「用户名不存在」与「密码错误」返回**完全相同**的响应，
       //    前端也不要区分 —— 区分就等于把枚举接口暴露给攻击者
       setError(err instanceof ApiError ? err.message : t("login.failed"));
+      if (err instanceof ApiError && (err.details as { twoFactorRequired?: boolean } | null)?.twoFactorRequired)
+        setTwoFactorRequired(true);
     } finally {
       setBusy(false);
     }
@@ -178,10 +181,11 @@ export function LoginPage() {
               onChange={(e) => setUsername(e.target.value)} required autoFocus />
             <TextInput id="password" label={t("login.password")} type="password" value={password}
               autoComplete="current-password" onChange={(e) => setPassword(e.target.value)} required />
-            {ldapMode ? (
-              <TextInput id="totp" label={t("login.ldapTotp")} value={totpCode} autoComplete="one-time-code"
-                onChange={(e) => setTotpCode(e.target.value)} hint={t("login.ldapTotpHint")} />
-            ) : (
+            {(ldapMode || twoFactorRequired) && (
+              <TextInput id="totp" label={t(ldapMode ? "login.ldapTotp" : "login.totp")} value={totpCode} autoComplete="one-time-code" inputMode="numeric"
+                onChange={(e) => setTotpCode(e.target.value)} hint={t(ldapMode ? "login.ldapTotpHint" : "login.totpHint")} />
+            )}
+            {!ldapMode && (
               <div className="auth-form-row">
                 <Checkbox checked={remember} onChange={setRemember} label={t("login.remember")} />
               </div>

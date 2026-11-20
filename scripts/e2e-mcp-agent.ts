@@ -3,7 +3,7 @@ import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { spawn } from "node:child_process";
-import { Writable } from "node:stream";
+import { pathToFileURL } from "node:url";
 import { and, eq } from "drizzle-orm";
 import { db, sql } from "../src/db/index.ts";
 import {
@@ -30,18 +30,14 @@ const finalPageTitle = `${marker} 项目联调记录`;
 const finalPageContent = `# ${marker}\n\n由真实 Codex 客户端创建并更新。`;
 const targetComment = `${marker} 评论写入并复读验证`;
 const mcpMetrics: { toolName: string; success?: boolean; errorCode?: string }[] = [];
-const logStream = new Writable({
-  write(chunk, _encoding, callback) {
-    try {
-      const row = JSON.parse(String(chunk)) as { mcpCall?: { toolName?: string; success?: boolean; errorCode?: string } };
-      if (row.mcpCall?.toolName) mcpMetrics.push(row.mcpCall as { toolName: string; success?: boolean; errorCode?: string });
-    } catch { /* 仅收集结构化 MCP 调用指标。 */ }
-    callback();
-  },
-});
+// 完整跨业务验收包含数十次真实模型往返；给慢速provider可配置、仍有上限的总预算。
+const agentTimeoutMs = Number(process.env.MCP_AGENT_TIMEOUT_MS ?? 1_200_000);
+if (!Number.isInteger(agentTimeoutMs) || agentTimeoutMs < 60_000 || agentTimeoutMs > 1_800_000) {
+  throw new Error("MCP_AGENT_TIMEOUT_MS_INVALID");
+}
 
 await ensureInitialized();
-const app = await buildApp({ logger: { level: "info", stream: logStream } });
+const app = await buildApp({ logger: false });
 let appStarted = false;
 let tempDir: string | undefined;
 let tokenId: string | undefined;
@@ -60,6 +56,7 @@ const codexErrorItemFields: string[] = [];
 const codexErrorItemFlags = new Set<string>();
 let codexFinalCategory = "unknown";
 let codexDiagnosticFlags: string[] = [];
+let codexTimedOut = false;
 
 try {
   await app.listen({ port: Number(process.env.PORT ?? 3980), host: "127.0.0.1" });
@@ -94,7 +91,7 @@ try {
     "workitem.create", "workitem.assign", "workitem.update", "workitem.get", "workitem.transition",
     "workitem.comment", "workitem.comments", "page.create", "page.get", "page.update",
     "meta.capabilities", "meta.tool", "project.context", "workitem.list", "workitem.children",
-    "plan.createIteration", "plan.getIteration", "plan.updateIteration", "plan.listIterations",
+    "plan.createIteration", "plan.getIteration", "plan.updateIteration", "plan.listIterations", "plan.listReleases", "plan.listMilestones", "plan.listModules", "customField.definitions",
     "plan.completeIteration", "plan.archiveIteration", "plan.unarchiveIteration",
     "plan.createRelease", "plan.getRelease", "plan.completeRelease", "plan.archiveRelease", "plan.unarchiveRelease",
     "idea.submit", "idea.list", "idea.get", "idea.update", "idea.vote", "idea.promote",
@@ -107,6 +104,8 @@ try {
   const bridgePath = resolve("packages/feronavi-mcp/bin/feronavi-mcp.mjs");
   const bridgeLauncherPath = join(tempDir, "feronavi-bridge.mjs");
   const bridgeSecretPath = join(tempDir, "bridge-secret.json");
+  const tracePath = join(tempDir, "mcp-trace.jsonl");
+  const traceModule = pathToFileURL(resolve("scripts/lib/mcp-agent-trace.mjs")).href;
   await writeFile(bridgeSecretPath, JSON.stringify({ url: process.env.BASE, token: createdToken.token }), { mode: 0o600 });
   await chmod(bridgeSecretPath, 0o600);
   await writeFile(bridgeLauncherPath, [
@@ -114,13 +113,16 @@ try {
     `const secret = JSON.parse(readFileSync(${JSON.stringify(bridgeSecretPath)}, "utf8"));`,
     "process.env.FERONAVI_URL = secret.url;",
     "process.env.FERONAVI_TOKEN = secret.token;",
+    `process.env.FERONAVI_TEST_MCP_TRACE = ${JSON.stringify(tracePath)};`,
+    'process.env.FERONAVI_TEST_MCP_ENDPOINT = `${secret.url.replace(/\\/+$/, "")}/api/v1/mcp`;',
     ...(process.env.MCP_BRIDGE_PACKAGE ? [
       'const { spawn } = await import("node:child_process");',
+      `process.env.NODE_OPTIONS = [process.env.NODE_OPTIONS, ${JSON.stringify('--import=' + traceModule)}].filter(Boolean).join(" ");`,
       `const child = spawn("npx", ${JSON.stringify(["--yes", "--cache", join(tempDir, "npm-cache"), "--package", process.env.MCP_BRIDGE_PACKAGE, "--", "feronavi-mcp"])}, { stdio: "inherit", env: process.env });`,
       'for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => child.kill(signal));',
       'child.on("error", () => { process.stderr.write("npx bridge failed to start\\n"); process.exitCode = 1; });',
       'child.on("exit", code => { process.exitCode = code ?? 1; });',
-    ] : [`await import(${JSON.stringify(bridgePath)});`]),
+    ] : [`await import(${JSON.stringify(traceModule)});`, `await import(${JSON.stringify(bridgePath)});`]),
     "",
   ].join("\n"), { mode: 0o600 });
   await chmod(bridgeLauncherPath, 0o600);
@@ -144,6 +146,9 @@ try {
   const otherServers = [...globalConfig.matchAll(/^\[mcp_servers\.([A-Za-z0-9_-]+)\]\s*$/gmu)].map((match) => match[1]!).filter((name) => name !== "feronavi");
   const args = [
     "exec", "--ephemeral", "--json", "--dangerously-bypass-approvals-and-sandbox", "--disable", "shell_tool", "--skip-git-repo-check", "-C", tempDir,
+    "-c", "features.plugins=false", "-c", "features.apps=false", "-c", "features.hooks=false",
+    "-c", "skills.include_instructions=false", "-c", "skills.bundled.enabled=false", "-c", "project_doc_max_bytes=0",
+    "-c", 'developer_instructions="这是隔离的业务 MCP 验收。全程中文，禁止远程推送、发布和外部消息，禁止读取或输出凭据。只使用本次启用的 Feronavi MCP 工具完成用户已确认的测试步骤。无需读取本机规则或开发技能。"',
     ...otherServers.flatMap((name) => ["-c", `mcp_servers.${name}.enabled=false`]),
     "-c", `mcp_servers.feronavi.command=${JSON.stringify(process.execPath)}`,
     "-c", `mcp_servers.feronavi.args=${JSON.stringify([bridgeLauncherPath])}`,
@@ -168,13 +173,20 @@ try {
   child.stderr.on("data", (chunk) => {
     if (stderrForClassification.length < 128_000) stderrForClassification += String(chunk).slice(0, 128_000 - stderrForClassification.length);
   });
-  const timeout = setTimeout(() => child.kill("SIGTERM"), 600_000);
+  // 外层runner另留两分钟收集分类诊断、检查持久化结果和清理临时资源。
+  const timeout = setTimeout(() => { codexTimedOut = true; child.kill("SIGTERM"); }, agentTimeoutMs);
   try {
     codexExitCode = await new Promise<number>((resolveExit, reject) => {
       child.once("error", reject);
       child.once("close", (code) => resolveExit(code ?? 1));
     });
   } finally { clearTimeout(timeout); }
+  const traceLines = (await readFile(tracePath, "utf8").catch(() => "")).trim().split(/\r?\n/u).filter(Boolean);
+  for (const line of traceLines) {
+    const metric = JSON.parse(line) as { toolName: string; success: boolean; errorCode?: string };
+    mcpMetrics.push(metric);
+    console.log(`MCP ${metric.toolName}: ${metric.success ? "OK" : metric.errorCode ?? "unknown"}`);
+  }
   codexStderrLength = stderrForClassification.length;
   codexDiagnostic = /auth|not logged|sign.?in|api.?key|401/iu.test(stderrForClassification) ? "auth"
     : /mcp|server|config|spawn|permission|tool/iu.test(stderrForClassification) ? "mcp_or_permission"
@@ -189,6 +201,7 @@ try {
       codexEventCount++;
       if (!codexEventTypes.includes(event.type)) codexEventTypes.push(event.type);
       if (event.item?.type && !codexItemTypes.includes(event.item.type)) codexItemTypes.push(event.item.type);
+      if (event.type === "error") codexErrorText += JSON.stringify(event).slice(0, 16_000);
       if (event.item?.type === "error") {
         for (const key of Object.keys(event.item)) if (!codexErrorItemFields.includes(key)) codexErrorItemFields.push(key);
         const fields = JSON.stringify(event.item);
@@ -212,8 +225,12 @@ try {
       }
     } catch { /* 仅保留事件类型和最终答复长度，不输出原始事件。 */ }
   }
-  const diagnosticSource = `${stdout}\n${stderrForClassification}\n${codexErrorText}`;
+  // 成功工具输出里的 UUID、正文可能包含 429/401，不能用业务数据诊断 provider。
+  const diagnosticSource = `${stderrForClassification}\n${codexErrorText}`;
   codexDiagnosticFlags = [
+    codexTimedOut ? "acceptance_timeout" : "",
+    /\b429\b|too many requests|rate.?limit|concurrency limit/iu.test(diagnosticSource) ? "provider_rate_limit" : "",
+    /stream disconnected|connection closed|unexpected eof/iu.test(diagnosticSource) ? "provider_stream_interrupted" : "",
     /FERONAVI_URL/iu.test(diagnosticSource) ? "url_env_mentioned" : "",
     /FERONAVI_TOKEN/iu.test(diagnosticSource) ? "token_env_mentioned" : "",
     /ENOENT|No such file/iu.test(diagnosticSource) ? "command_missing" : "",
@@ -225,6 +242,9 @@ try {
     /untrusted|approval required|permission denied/iu.test(diagnosticSource) ? "trust_or_permission" : "",
   ].filter(Boolean);
   if (!codexEventCount && codexExitCode !== 0) codexDiagnostic = "no_json_events";
+  else if (codexTimedOut) codexDiagnostic = "acceptance_timeout";
+  else if (codexDiagnosticFlags.includes("provider_rate_limit")) codexDiagnostic = "provider_rate_limit";
+  else if (codexDiagnosticFlags.includes("provider_stream_interrupted")) codexDiagnostic = "provider_stream_interrupted";
   else if (codexDiagnosticFlags.length) codexDiagnostic = "mcp_start_or_config";
   stdout = "";
   stderrForClassification = "";
@@ -291,7 +311,8 @@ try {
   verify(`Codex 联调链路异常（${code}）`, false);
 } finally {
   if (process.env.CODEX_ACCEPT_REPORT) {
-    await writeFile(process.env.CODEX_ACCEPT_REPORT, JSON.stringify({ checks, mcpMetrics, codexFinalText, codexDiagnosticFlags }, null, 2));
+    await writeFile(process.env.CODEX_ACCEPT_REPORT, JSON.stringify({ checks, mcpMetrics, codexFinalText, codexExitCode,
+      codexTimedOut, agentTimeoutMs, codexDiagnostic, codexDiagnosticFlags }, null, 2));
   }
   if (appStarted) await app.close();
   if (tempDir) await rm(tempDir, { recursive: true, force: true });

@@ -1,165 +1,269 @@
-/**
- * SSE 事件流（W5，REST 7c）
- *
- * 协议要点：
- *   - `text/event-stream`，每条事件带 `id: <cursor>`，客户端 Last-Event-ID 即游标
- *   - 心跳注释行（:ping）每 25s 一条，防代理与负载均衡掐空闲连接
- *   - 积压 > 100 条（客户端消费太慢）→ 发 `dropped` 后**主动断开**，逼客户端全量刷新
- *   - 断开时机：客户端 abort 或服务端 shutdown；不遗留监听器
- */
-import type { FastifyInstance } from "fastify";
+/** Database-authorized, bounded SSE signals. Reconnection deliberately refreshes snapshots. */
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import "../plugins-types.ts";
 import { DomainError } from "../../shared/errors.ts";
 import {
-  subscribe, replaySince, BACKLOG_LIMIT, type SseEvent,
+  subscribe,
+  subscribeRecovery,
+  replaySince,
+  BACKLOG_LIMIT,
+  type SseEvent,
 } from "../services/events.service.ts";
+import {
+  currentEventIdentity,
+  eventReadable,
+  type EventCredential,
+  type EventIdentity,
+} from "../services/events-access.ts";
 import type { Actor } from "../permission/actor.ts";
+import { closeRealtimeRedis } from "../services/realtime-redis.ts";
 import * as presence from "../services/presence.service.ts";
 
 declare module "fastify" {
-  interface FastifyRequest { actor?: Actor }
+  interface FastifyRequest {
+    actor?: Actor;
+  }
 }
-
 export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
-  const actorOf = (req: { actor?: Actor }): Actor => {
-    if (!req.actor) throw new DomainError("FORBIDDEN", "未登录或会话已失效", null);
-    return req.actor;
+  const shutdown = new Set<() => void>();
+  const presenceCleanup = new Set<Promise<void>>();
+  app.addHook("onClose", async () => {
+    await closeRealtimeRedis();
+  });
+  app.addHook("preClose", async () => {
+    for (const close of shutdown) close();
+    await Promise.all(presenceCleanup);
+  });
+  const credentialOf = async (
+    req: FastifyRequest,
+  ): Promise<EventCredential> => {
+    const bearer = /^Bearer (\S+)$/i.exec(req.headers.authorization ?? "")?.[1];
+    const credential = {
+      memberId: req.actor?.memberId ?? "",
+      sessionToken: req.sessionToken,
+      bearer,
+      ip: req.ip,
+    };
+    // This route remains session authenticated; Bearer-only access is not silently introduced.
+    if (!credential.memberId || !credential.sessionToken)
+      throw new DomainError("FORBIDDEN", "未登录或会话已失效", null);
+    credential.bearer = undefined;
+    try {
+      await currentEventIdentity(credential);
+      return credential;
+    } catch {
+      throw new DomainError("FORBIDDEN", "未登录或会话已失效", null);
+    }
   };
-
+  const fingerprint = (identity: EventIdentity) =>
+    JSON.stringify(identity, (_key, value) =>
+      value instanceof Set
+        ? [...value].sort()
+        : value instanceof Map
+          ? [...value]
+              .map(([key, values]) => [
+                key,
+                values instanceof Set ? [...values].sort() : values,
+              ])
+              .sort(([a], [b]) => String(a).localeCompare(String(b)))
+          : value,
+    );
+  async function projectCurrent(
+    credential: EventCredential,
+    events: SseEvent[],
+  ): Promise<SseEvent[]> {
+    let identity = await currentEventIdentity(credential);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const before = fingerprint(identity);
+      const visible: SseEvent[] = [];
+      for (const event of events)
+        if (await eventReadable(identity, event)) visible.push(event);
+      const latest = await currentEventIdentity(credential);
+      // Always project again with the newly loaded actor after resource awaits. If authorization
+      // changes while projecting that complete batch, retry it (bounded); never return old items.
+      if (attempt > 0 && before === fingerprint(latest)) return visible;
+      identity = latest;
+    }
+    throw new Error(
+      "Event authorization changed during projection; refresh required",
+    );
+  }
   app.get("/api/v1/events", async (req, reply) => {
-    const actor = actorOf(req);
+    const credential = await credentialOf(req);
+    const identity = await currentEventIdentity(credential);
     const rawLastEventId = req.headers["last-event-id"];
-    const lastEventId = typeof rawLastEventId === "string" && /^\d+$/u.test(rawLastEventId)
-      ? Number(rawLastEventId)
-      : null;
+    const lastEventId = typeof rawLastEventId === "string" && /^\d+$/u.test(rawLastEventId) && Number.isSafeInteger(Number(rawLastEventId))
+      ? Number(rawLastEventId) : null;
+    let replaying = lastEventId !== null;
+    const duringReplay: SseEvent[] = [];
     reply.raw.writeHead(200, {
       "content-type": "text/event-stream",
       "cache-control": "no-cache",
       connection: "keep-alive",
-      "x-accel-buffering": "no",          // 提示反代不缓冲（nginx 配置里也已关）
+      "x-accel-buffering": "no",
     });
-    let closed = false;
-    let blocked = false;
-    let replaying = lastEventId !== null;
+    let closed = false,
+      blocked = false,
+      running = false;
     const pending: SseEvent[] = [];
-    const duringReplay: SseEvent[] = [];
     let finish!: () => void;
-    const disconnected = new Promise<void>((resolve) => { finish = resolve; });
-
-    const writeEvent = (e: SseEvent) => {
-      // write(false) 的当前帧已经进入 Node 缓冲；只排队后续事件，drain 时不能重发它。
-      blocked = !reply.raw.write(`id: ${e.id}\nevent: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`);
-    };
-
-    const send = (e: SseEvent) => {
-      if (closed || (e.memberId !== null && e.memberId !== actor.memberId)) return;
-      if (replaying) {
-        duringReplay.push(e);
-        if (duringReplay.length > BACKLOG_LIMIT) {
-          cleanup();
-          reply.raw.end(`event: dropped\ndata: {}\nid: ${e.id}\n\n`);
-        }
-        return;
-      }
-      if (blocked) {
-        pending.push(e);
-        if (pending.length > BACKLOG_LIMIT) {
-          // 只统计真正尚未写出的事件；快速消费者不会因累计事件数超过阈值掉线。
-          cleanup();
-          reply.raw.end(`event: dropped\ndata: {}\nid: ${e.id}\n\n`);
-        }
-        return;
-      }
-      writeEvent(e);
-    };
-
-    const drain = () => {
-      if (closed) return;
-      blocked = false;
-      while (!blocked && pending.length > 0) writeEvent(pending.shift()!);
-    };
-
-    const unsubscribe = subscribe(send);
-    const heartbeat = setInterval(() => {
-      if (!closed) {
-        void presence.touchPresence(actor.memberId);
-        if (!blocked) blocked = !reply.raw.write(":ping\n\n");
-      }
-    }, 25_000);
-
+    const disconnected = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    let presenceReady: Promise<void> = Promise.resolve();
     function cleanup() {
       if (closed) return;
       closed = true;
       clearInterval(heartbeat);
       unsubscribe();
+      unsubscribeRecovery();
       pending.length = 0;
+      duringReplay.length = 0;
       reply.raw.off("drain", drain);
       reply.raw.off("close", cleanup);
       reply.raw.off("error", cleanup);
       req.raw.off("aborted", cleanup);
-      void presence.presenceDisconnected(actor.memberId);
-      finish();
+      shutdown.delete(close);
+      const task = presenceReady
+        .then(() => presence.presenceDisconnected(credential.memberId))
+        .catch(() => {});
+      presenceCleanup.add(task);
+      void task.finally(() => {
+        presenceCleanup.delete(task);
+        finish();
+      });
     }
+    function close() {
+      cleanup();
+      reply.raw.end();
+    }
+    function drop() {
+      cleanup();
+      // 清除 EventSource 过期游标，避免下一次重连重复 dropped。
+      reply.raw.end("event: dropped\ndata: {}\nid:\n\n");
+    }
+    async function pump() {
+      if (running || closed || blocked || replaying) return;
+      running = true;
+      try {
+        while (!closed && !blocked && pending.length) {
+          const event = pending.shift()!;
+          const visible = await projectCurrent(credential, [event]);
+          if (closed) return;
+          if (visible.length)
+            blocked = !reply.raw.write(
+              `id: ${event.id}\nevent: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`,
+            );
+        }
+      } catch (error) {
+        if (
+          error instanceof DomainError &&
+          (error.code === "FORBIDDEN" || error.code === "NOT_FOUND")
+        )
+          close();
+        else drop();
+      } finally {
+        running = false;
+      }
+    }
+    function enqueue(event: SseEvent) {
+      if (
+        closed ||
+        (event.memberId !== null && event.memberId !== credential.memberId)
+      )
+        return;
+      if (replaying) {
+        duringReplay.push(event);
+        if (duringReplay.length > BACKLOG_LIMIT) drop();
+        return;
+      }
+      pending.push(event);
+      if (pending.length > BACKLOG_LIMIT) {
+        drop();
+        return;
+      }
+      void pump();
+    }
+    function drain() {
+      if (closed) return;
+      blocked = false;
+      void pump();
+    }
+    const unsubscribe = subscribe(enqueue);
+    const unsubscribeRecovery = subscribeRecovery(() => {
+      void (async () => {
+        await currentEventIdentity(credential);
+        if (closed) return;
+        drop();
+      })().catch(close);
+    });
+    let heartbeatRunning = false;
+    const heartbeat = setInterval(() => {
+      if (closed || heartbeatRunning) return;
+      heartbeatRunning = true;
+      void (async () => {
+        const identity = await currentEventIdentity(credential);
+        if (closed) return;
+        await presence.touchPresence(credential.memberId, identity.actor);
+        if (!closed && !blocked) blocked = !reply.raw.write(":ping\n\n");
+      })()
+        .catch(close)
+        .finally(() => {
+          heartbeatRunning = false;
+        });
+    }, 25000);
     reply.raw.on("drain", drain);
     reply.raw.once("close", cleanup);
     reply.raw.once("error", cleanup);
     req.raw.once("aborted", cleanup);
-    // 初始 comment 行：确认连接已建立（部分客户端要收到首字节才 resolve）
+    shutdown.add(close);
     blocked = !reply.raw.write(":ok\n\n");
+    presenceReady = presence.presenceConnected(identity.actor).catch(() => {});
     if (lastEventId !== null) {
-      const replay = await replaySince(lastEventId, actor.memberId);
+      const replay = await replaySince(lastEventId, credential.memberId);
       if (closed) return;
-      if (replay.gone) {
-        cleanup();
-        reply.raw.end(`event: dropped\ndata: {}\nid: ${lastEventId}\n\n`);
-        return;
-      }
-      let delivered = lastEventId;
-      for (const item of replay.items) {
-        if (closed) return;
-        delivered = Math.max(delivered, item.id);
-        writeEvent({ ...item, memberId: null });
-      }
+      if (replay.gone || replay.hasMore) { drop(); return; }
+      // 实时帧只在历史帧之后进入同一授权队列，内部 scope 不进入 SSE 帧。
+      const replayCursor = replay.nextCursor ?? Math.max(lastEventId, ...replay.items.map(item => item.id));
+      const buffered = duringReplay.splice(0).filter(event => event.id > replayCursor);
       replaying = false;
-      for (const event of duringReplay.splice(0)) {
-        if (event.id > delivered) send(event);
-      }
-    }
-    // presence：先订阅再标记在线，这样自己也能收到自己的 online 事件（首屏状态一致）
-    void presence.presenceConnected(actor);
-    // ⚠️ 客户端断开时**必须让 handler 返回**：返回 promise 永不 resolve 的话，
-    //    app.close() 会一直等待 inflight 请求 —— 测试进程挂起、finally 清理全部
-    //    跳过（实测踩到，残留滚雪球）。连接关闭 → cleanup → resolve。
+      for (const event of replay.items) enqueue({ ...event, memberId: credential.memberId });
+      for (const event of buffered) enqueue(event);
+    } else if (rawLastEventId !== undefined) { drop(); return; }
     await disconnected;
   });
-
-  /**
-   * 在线成员列表（Round 48）：SSE 是"变更信号"，首屏仍需要一个可查询的初始快照 ——
-   * 规范 7c 只列了事件；该 GET 是补充（前端首屏 + 运维排查都靠它）。
-   */
   app.get("/api/v1/presence", async (req) => {
-    actorOf(req);
+    await credentialOf(req);
     const members = await presence.listOnline();
     return { online: members, count: members.length };
   });
-
-  /** 断线补取：`?since=<cursor>`（REST 7c） */
   app.post("/api/v1/events/replay", async (req, reply) => {
-    const actor = actorOf(req);
-    const q = req.query as { since?: string };
-    const since = Number(q.since);
-    if (!Number.isFinite(since) || since < 0) {
-      throw new DomainError("VALIDATION", "since 必须是非负数字游标", null);
-    }
-    const r = await replaySince(since, actor.memberId);
-    if (r.gone) {
-      // ⚠️ 规范 7c 明确要求 **410 Gone**（不是 409）—— 告知客户端
-      // 「这个 cursor 永远补不回来了，只能全量刷新」。
-      // CONFLICT(409) 表示可重试的冲突，语义不对，所以这里绕开统一映射。
+    const credential = await credentialOf(req);
+    const since = Number((req.query as { since?: string }).since);
+    if (!Number.isSafeInteger(since) || since < 0)
+      throw new DomainError("VALIDATION", "since 必须是非负整数游标", null);
+    const result = await replaySince(since, credential.memberId);
+    if (result.gone)
       return reply.status(410).send({
-        code: "CONFLICT", message: "事件窗口已过期，请全量刷新", details: null,
+        code: "CONFLICT",
+        message: "事件窗口已过期，请全量刷新",
+        details: null,
+      });
+    try {
+      const visible = await projectCurrent(credential, result.items.map(event => ({ ...event, memberId: credential.memberId })));
+      const items = visible.map(({ id, event, data }) => ({ id, event, data }));
+      return { items, hasMore: result.hasMore, nextCursor: result.nextCursor };
+    } catch (error) {
+      if (
+        error instanceof DomainError &&
+        (error.code === "FORBIDDEN" || error.code === "NOT_FOUND")
+      )
+        throw error;
+      return reply.status(410).send({
+        code: "CONFLICT",
+        message: "事件无法可靠补取，请全量刷新",
+        details: null,
       });
     }
-    return { items: r.items, hasMore: r.hasMore };
   });
 }

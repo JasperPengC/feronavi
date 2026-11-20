@@ -16,8 +16,8 @@ try {
   projectId = await page.evaluate(async () => (await (await fetch("/api/v1/projects")).json()).items[0]?.id);
 
   const routes = [
-    "/workbench", "/projects", `/projects/${projectId}`, "/issues", "/members", "/settings", "/system",
-    "/portfolios", "/focus", "/announcements", "/notifications", "/changelog", "/tokens",
+    "/workbench", "/projects", `/projects/${projectId}`, "/issues", "/members", "/settings/personal", "/settings/integrations", "/settings/instance", "/system",
+    "/portfolios", "/announcements", "/notifications", "/changelog", "/tokens",
     "/admin/organization", "/admin/roles", "/admin/audit",
     `/projects/${projectId}/board`, `/projects/${projectId}/table`, `/projects/${projectId}/milestones`,
     `/projects/${projectId}/calendar`, `/projects/${projectId}/timeline`, `/projects/${projectId}/wiki`,
@@ -55,40 +55,48 @@ try {
   check("所有页面无横向溢出", overflow.length === 0, JSON.stringify(overflow));
   check("所有页面卡片无相互重叠", overlaps.length === 0, JSON.stringify(overlaps.slice(0, 3)));
 
-  // 问题追踪：两行结构化筛选，导出右对齐
+  // 问题追踪：状态与搜索分组，额外筛选按需打开；导出在列表标题行右侧。
   await page.goto(`${BASE}/issues`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(1200);
   const filter = await page.evaluate(() => {
-    const bar = document.querySelector(".issues-filterbar");
-    const rows = document.querySelectorAll(".issues-filterbar .issues-filter-row");
-    const exp = [...document.querySelectorAll(".issues-filterbar button")].find((b) => b.textContent?.includes("导出全部筛选结果"));
-    const br = bar?.getBoundingClientRect(); const er = exp?.getBoundingClientRect();
-    return { rows: rows.length, rightGap: br && er ? Math.round(br.right - er.right) : null, exportInRow: exp?.closest(".issues-filter-row") ? true : false };
+    const head = document.querySelector(".issues-list-head");
+    const exp = [...head?.querySelectorAll("button") ?? []].find((b) => b.textContent?.includes("导出全部筛选结果"));
+    const hr = head?.getBoundingClientRect(), er = exp?.getBoundingClientRect();
+    return { status: document.querySelectorAll(".issues-filterbar .issues-filter-row").length,
+      search: document.querySelectorAll(".issues-filterbar .issues-search-row").length,
+      rightGap: hr && er ? Math.round(hr.right - er.right) : null,
+      exportInHead: !!exp && !!hr && er.top >= hr.top && er.bottom <= hr.bottom };
   });
-  check("问题追踪筛选区为两行结构化布局", filter.rows === 2, JSON.stringify(filter));
-  check("导出按钮在筛选行内且右对齐（不再单独换行）", filter.exportInRow && filter.rightGap !== null && filter.rightGap >= 0 && filter.rightGap <= 20, JSON.stringify(filter));
+  check("问题追踪筛选区含状态与搜索分组", filter.status === 1 && filter.search === 1, JSON.stringify(filter));
+  check("导出按钮在列表标题行内且右对齐", filter.exportInHead && filter.rightGap !== null && filter.rightGap >= 0 && filter.rightGap <= 20, JSON.stringify(filter));
+  await page.getByRole("button", { name: "筛选", exact: true }).click();
+  await page.getByRole("button", { name: "严重度", exact: true }).waitFor();
   const rowHeights = await page.evaluate(() => {
-    const els = [...document.querySelectorAll(".issues-filter-row .ui-segmented-item, .issues-filter-row .select-trigger, .issues-filter-row .input")]
+    const els = [...document.querySelectorAll(".issues-filterbar .ui-segmented-item, .issues-filterbar .select-trigger, .issues-filterbar .input")]
       .filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
-    return [...new Set(els.map((el) => Math.round(el.getBoundingClientRect().height)))].sort((a, b) => a - b);
+    return { heights: [...new Set(els.map((el) => Math.round(el.getBoundingClientRect().height)))].sort((a, b) => a - b),
+      expected: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--control-height")), count: els.length };
   });
-  check("问题筛选行控件高度一致（32px）", rowHeights.length === 1 && rowHeights[0] === 32, JSON.stringify(rowHeights));
+  check("问题筛选控件高度遵循当前 control-height", rowHeights.count > 4 && rowHeights.heights.length === 1 && rowHeights.heights[0] === rowHeights.expected, JSON.stringify(rowHeights));
 
-  // 成员：目录前置到团队负载之前
+  // 成员：默认显示目录，负荷直接在成员行展示，邀请与团队各有独立标签页。
   await page.goto(`${BASE}/members`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(1200);
   const members = await page.evaluate(() => {
     const dir = document.querySelector(".members-directory")?.getBoundingClientRect();
-    const load = document.querySelector(".members-load-panel")?.getBoundingClientRect();
-    return { dirY: dir ? Math.round(dir.y) : null, loadY: load ? Math.round(load.y) : null };
+    const header = document.querySelector(".members-table thead")?.getBoundingClientRect();
+    return { dirY: dir ? Math.round(dir.y) : null, headerBottom: header?.bottom,
+      selectedTab: document.querySelector('[role="tab"][aria-selected="true"]')?.textContent,
+      tabs: [...document.querySelectorAll('[role="tab"]')].map((el) => el.textContent),
+      loads: document.querySelectorAll(".members-table tbody .members-load-inline").length };
   });
-  check("成员目录前置到团队负载之前", members.dirY !== null && members.loadY !== null && members.dirY < members.loadY, JSON.stringify(members));
-  check("成员目录表头在首屏可见", members.dirY !== null && members.dirY < 900, JSON.stringify(members));
-  // 设置页：按个人/集成/组织三组分区，组标题存在
-  await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(1600);
-  const groups = await page.evaluate(() => ({
-    count: document.querySelectorAll(".settings-group").length,
-    titles: [...document.querySelectorAll(".settings-group-head h2")].map((x) => x.textContent),
-  }));
-  check("设置页按三组分区（个人/集成/组织）", groups.count === 3 && groups.titles.length === 3, JSON.stringify(groups));
+  check("成员页默认目录并展示行内负荷，邀请与团队独立分区", members.selectedTab === "成员目录" && members.loads > 0 && members.tabs.join(",") === "成员目录,邀请,团队", JSON.stringify(members));
+  check("成员目录表头在首屏可见", members.dirY !== null && members.dirY >= 0 && members.headerBottom <= 950, JSON.stringify(members));
+  const groups = [];
+  for (const area of ["personal", "integrations", "instance"]) {
+    await page.goto(`${BASE}/settings/${area}`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("tab").first().waitFor();
+    groups.push({ area, title: await page.locator(".page h1").innerText(), tabs: await page.getByRole("tab").count(), panels: await page.getByRole("tabpanel").count() });
+  }
+  check("设置按三条路由分区且每页只显示选中标签内容", groups.length === 3 && new Set(groups.map((group) => group.title)).size === 3 && groups.every((group) => group.tabs >= 3 && group.panels === 1), JSON.stringify(groups));
   await page.screenshot({ path: "/tmp/layout-audit-settings.png" });
 
   // 项目列表整行可点进项目概览
@@ -102,7 +110,11 @@ try {
   await page.getByLabel("搜索标题或编号").fill("zzz-不存在-" + Date.now());
   await page.waitForTimeout(900);
   const empty = page.locator(".ui-state-empty");
-  check("问题空态提供下一步动作（换筛选/登记）", (await empty.count()) === 1 && (await empty.innerText()).includes("登记问题"), (await empty.innerText()).slice(0, 80));
+  await empty.waitFor();
+  check("筛选空态提供清除筛选动作", (await empty.count()) === 1 && await empty.getByRole("button", { name: "清除筛选", exact: true }).isVisible(), (await empty.innerText()).slice(0, 80));
+  await empty.getByRole("button", { name: "清除筛选", exact: true }).click();
+  await page.locator(".issues-table tbody tr").first().waitFor();
+  check("清除筛选后恢复问题列表并清空搜索", await page.getByLabel("搜索标题或编号").inputValue() === "" && await page.locator(".issues-table tbody tr").count() > 0);
 
   await page.goto(`${BASE}/members`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(1000);
   await page.screenshot({ path: "/tmp/layout-audit-members.png" });

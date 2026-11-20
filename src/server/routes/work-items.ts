@@ -7,10 +7,6 @@ import {
   createWorkItemSchema, updateWorkItemSchema, listWorkItemsQuerySchema, boardQuerySchema,
 } from "../../shared/schemas/work-item.ts";
 import * as wiService from "../services/work-item.service.ts";
-import * as projectRepo from "../repos/project.repo.ts";
-import { db } from "../../db/index.ts";
-import { workItem, workflowState } from "../../db/schema.ts";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { Actor } from "../permission/actor.ts";
 
 declare module "fastify" {
@@ -39,8 +35,6 @@ export async function registerWorkItemRoutes(app: FastifyInstance): Promise<void
     const actor = actorOf(req);
     const { projectId } = req.params as { projectId: string };
     const q = listWorkItemsQuerySchema.parse(req.query);
-    const wi = await wiService.createWorkItem;   // 仅为类型引用，不用
-    void wi;
 
     // ── 视图分发（文档 REST 6 节：同一端点，?view= 投影）────────
     // 看板是唯一例外（独立端点 /board，形状不同）。
@@ -65,36 +59,7 @@ export async function registerWorkItemRoutes(app: FastifyInstance): Promise<void
       return svc.timeline(actor, projectId, t.dateFrom ?? new Date().toISOString().slice(0, 8) + "01", t.dateTo ?? new Date().toISOString().slice(0, 10));
     }
 
-    const conds = [eq(workItem.projectId, projectId), isNull(workItem.deletedAt)];
-    if (q.statusKey) {
-      // 按状态 key 过滤：先查该状态 id
-      const st = await db.select({ id: workflowState.id }).from(workflowState)
-        .where(eq(workflowState.key, q.statusKey));
-      if (st.length === 0) return { items: [], page: q.page, pageSize: q.pageSize, total: 0 };
-      conds.push(sql`${workItem.statusId} in ${sql.raw(`(${st.map((s) => `'${s.id}'`).join(",")})`)}`);
-    }
-    if (q.type) conds.push(eq(workItem.type, q.type));
-    if (q.assigneeId) conds.push(eq(workItem.assigneeId, q.assigneeId));
-    if (q.q) {
-      // ⚠️ 走中文检索（chinese_zh 配置）—— 这是切片判据 A11 的落点
-      conds.push(sql`${workItem.id} in (
-        select id from work_item
-        where to_tsvector('chinese_zh', coalesce(title,'') || ' ' || coalesce(description,''))
-              @@ plainto_tsquery('chinese_zh', ${q.q})
-      )`);
-    }
-
-    const items = await db.select({
-      id: workItem.id, key: workItem.key, number: workItem.number, type: workItem.type,
-      title: workItem.title, statusId: workItem.statusId, assigneeId: workItem.assigneeId,
-      priority: workItem.priority, dueDate: workItem.dueDate, version: workItem.version,
-      projectId: workItem.projectId, createdAt: workItem.createdAt, updatedAt: workItem.updatedAt,
-    }).from(workItem).where(and(...conds))
-      .orderBy(q.sort === "updated" ? desc(workItem.updatedAt) : desc(workItem.createdAt))
-      .limit(q.pageSize).offset((q.page - 1) * q.pageSize);
-
-    void projectRepo;
-    return { items, page: q.page, pageSize: q.pageSize, total: items.length };
+    return wiService.listWorkItems(actor, projectId, q);
   });
 
   // ── 详情 ──────────────────────────────────────────────────

@@ -71,6 +71,36 @@ beforeEach(() => {
   vi.stubGlobal("scrollTo", () => {});
 });
 
+describe("账户菜单中的在线人数", () => {
+  it.each([
+    ["😀临时成员", "demo", "😀"],
+    ["👩🏽‍💻研发成员", "dev", "👩🏽‍💻"],
+    ["   ", "🙂fallback", "🙂"],
+    ["", "", "?"],
+  ])("账户 %s 的触发器和菜单头像使用完整首字及回退", async (name, username, initial) => {
+    const { responses } = renderNavigation();
+    responses["/api/v1/auth/me"] = { ...actor, name, username };
+    const trigger = await screen.findByRole("button", { name: "账户菜单" });
+    expect(trigger.textContent).toBe(initial);
+    fireEvent.click(trigger);
+    const menu = screen.getByRole("menu", { name: "账户菜单" });
+    expect(menu.querySelector(".shell-user-menu-avatar")?.textContent).toBe(initial);
+  });
+
+  it("在账户菜单中仍能查询完整在线人数", async () => {
+    mockMobileViewport(true);
+    const { responses } = renderNavigation();
+    responses["/api/v1/presence"] = {
+      online: Array.from({ length: 50 }, (_, i) => ({ memberId: `m${i}`, name: `成员${i}`, username: `member${i}`, lastSeen: 123 })),
+      count: 50,
+    };
+    fireEvent.click(await screen.findByRole("button", { name: "账户菜单" }));
+    const menu = screen.getByRole("menu", { name: "账户菜单" });
+    expect(await within(menu).findByText("50 人在线")).toBeTruthy();
+    expect(within(menu).getByRole("menuitem", { name: "个人偏好" })).toBeTruthy();
+  });
+});
+
 describe("命令面板的键盘和搜索状态", () => {
   it("组合框宣读当前选项，Tab 在搜索框与关闭操作间循环，Esc 归还焦点", async () => {
     const { router } = renderNavigation();

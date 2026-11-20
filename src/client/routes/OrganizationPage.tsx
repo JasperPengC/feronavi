@@ -13,8 +13,9 @@ import { apiDelete, apiGet, apiPatch, apiPost, ApiError } from "../lib/api.ts";
 import { useActor } from "../lib/actor.ts";
 import { PageHead } from "../components/Page.tsx";
 import { Button } from "../components/ui/Button.tsx";
-import { ConfirmButton } from "../components/ui/ConfirmButton.tsx";
+import { confirmDialog } from "../components/Dialog.tsx";
 import { Panel } from "../components/ui/Panel.tsx";
+import { Modal } from "../components/ui/Modal.tsx";
 import { Drawer } from "../components/ui/Drawer.tsx";
 import { TextInput } from "../components/ui/TextInput.tsx";
 import { TextArea } from "../components/ui/TextArea.tsx";
@@ -160,7 +161,7 @@ export function OrganizationPage() {
                   {selectedDept && <>
                     <Button size="sm" onClick={() => setDraft({ mode: "create", name: "", parentId: selectedDept.id })}>{t("org.addChild")}</Button>
                     <Button size="sm" onClick={() => setDraft({ mode: "edit", id: selectedDept.id, name: selectedDept.name, parentId: selectedDept.parentId ?? "" })}>{t("common.edit")}</Button>
-                    <ConfirmButton size="sm" confirmText={t("common.confirmArchive")} onConfirm={() => archiveDept(selectedDept.id)}>{t("common.archive")}</ConfirmButton>
+                    <Button variant="danger" size="sm" onClick={async () => { if (await confirmDialog(`${t("common.confirmArchive")} ${selectedDept.name}`, { danger: true })) archiveDept(selectedDept.id); }}>{t("common.archive")}</Button>
                   </>}
                 </div>
                 <div className="org-detail-toolbar">
@@ -196,7 +197,7 @@ export function OrganizationPage() {
                       {visiblePositions.map((p) => (
                         <tr key={p.id}><td className="table-primary" data-label={t("org.name")}>{p.name}</td><td data-label={t("org.code")} className="mono">{p.code ?? "—"}</td><td data-label={t("org.department")}>{p.departmentName ?? "—"}</td><td className="table-number" data-label={t("org.memberCount")}>{p.memberCount}</td><td style={{ textAlign: "right" }}>
                           <Button size="sm" variant="ghost" onClick={() => setPosDraft({ mode: "edit", id: p.id, name: p.name, code: p.code ?? "", departmentId: p.departmentId ?? "", description: p.description ?? "" })}>{t("common.edit")}</Button>
-                          <ConfirmButton size="sm" confirmText={t("common.confirmArchive")} onConfirm={() => archivePos(p.id)}>{t("common.archive")}</ConfirmButton>
+                          <Button variant="danger" size="sm" onClick={async () => { if (await confirmDialog(`${t("common.confirmArchive")} ${p.name}`, { danger: true })) archivePos(p.id); }}>{t("common.archive")}</Button>
                         </td></tr>
                       ))}
                       {visiblePositions.length === 0 && <tr><td colSpan={5} className="muted" style={{ padding: 24, textAlign: "center" }}>{t("org.noPositionsInDept")}</td></tr>}
@@ -232,30 +233,34 @@ export function OrganizationPage() {
             </div>
           </Drawer>
 
-          <Drawer open={!!draft} onClose={() => void deptGuard.leave(() => { setDraft(null); setError(null); })} title={draft?.mode === "create" ? t("org.addDepartment") : t("org.editDepartment")}>
+          <Modal open={!!draft} onClose={() => void deptGuard.leave(() => { setDraft(null); setError(null); })} title={draft?.mode === "create" ? t("org.addDepartment") : t("org.editDepartment")} width="sm" footer={<>
+            <Button disabled={busy} onClick={() => void deptGuard.leave(() => { setDraft(null); setError(null); })}>{t("common.cancel")}</Button>
+            <Button variant="primary" loading={busy} disabled={busy || !draft?.name.trim()} onClick={saveDept}>{t("common.save")}</Button>
+          </>}>
             {error && <p className="field-error" role="alert">{error}</p>}
             {draft && (
-              <div style={{ display: "grid", gap: 10 }}>
+              <fieldset disabled={busy} className="settings-form-fields" style={{ display: "grid", gap: 10 }}>
                 <TextInput label={t("org.name")} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
                 <Select label={t("org.parent")} ariaLabel={t("org.parent")} value={draft.parentId} onChange={(v) => setDraft({ ...draft, parentId: v })} searchable
                   options={deptOptions.filter((o) => o.value !== draft.id)} />
-                <Button variant="primary" loading={busy} disabled={busy || !draft.name.trim()} onClick={saveDept}>{t("common.save")}</Button>
-              </div>
+              </fieldset>
             )}
-          </Drawer>
+          </Modal>
 
-          <Drawer open={!!posDraft} onClose={() => void positionGuard.leave(() => { setPosDraft(null); setError(null); })} title={posDraft?.mode === "create" ? t("org.addPosition") : t("org.editPosition")}>
+          <Modal open={!!posDraft} onClose={() => void positionGuard.leave(() => { setPosDraft(null); setError(null); })} title={posDraft?.mode === "create" ? t("org.addPosition") : t("org.editPosition")} width="sm" footer={<>
+            <Button disabled={busy} onClick={() => void positionGuard.leave(() => { setPosDraft(null); setError(null); })}>{t("common.cancel")}</Button>
+            <Button variant="primary" loading={busy} disabled={busy || !posDraft?.name.trim()} onClick={savePos}>{t("common.save")}</Button>
+          </>}>
             {error && <p className="field-error" role="alert">{error}</p>}
             {posDraft && (
-              <div style={{ display: "grid", gap: 10 }}>
+              <fieldset disabled={busy} className="settings-form-fields" style={{ display: "grid", gap: 10 }}>
                 <TextInput label={t("org.name")} value={posDraft.name} onChange={(e) => setPosDraft({ ...posDraft, name: e.target.value })} />
                 <TextInput label={t("org.code")} value={posDraft.code} onChange={(e) => setPosDraft({ ...posDraft, code: e.target.value })} hint={t("org.codeHint")} />
                 <Select label={t("org.department")} ariaLabel={t("org.department")} value={posDraft.departmentId} onChange={(v) => setPosDraft({ ...posDraft, departmentId: v })} searchable options={deptOptions} />
                 <TextArea label={t("org.description")} rows={2} value={posDraft.description} onChange={(e) => setPosDraft({ ...posDraft, description: e.target.value })} />
-                <Button variant="primary" loading={busy} disabled={busy || !posDraft.name.trim()} onClick={savePos}>{t("common.save")}</Button>
-              </div>
+              </fieldset>
             )}
-          </Drawer>
+          </Modal>
         </>
       )}
     </div>

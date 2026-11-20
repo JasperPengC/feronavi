@@ -86,7 +86,7 @@ it("收起规则配置后草稿仍受保护，重新展开保留输入", async (
 it.each([
   ["触发时机", () => select("触发时机", "工作项更新"), () => select("触发时机", "工作项创建")],
   ["条件值", () => select("条件值", "高"), () => select("条件值", "紧急")],
-  ["动作成员", () => select("动作 1 成员", "张三 (zhangsan)"), () => select("动作 1 成员", "选择成员")],
+  ["动作成员", () => select("动作 1 成员", "张三 @zhangsan"), () => select("动作 1 成员", "未指派")],
   ["启用状态", () => fireEvent.click(screen.getByRole("checkbox", { name: "启用", exact: true })), () => fireEvent.click(screen.getByRole("checkbox", { name: "启用", exact: true }))],
 ] as const)("自动化仅修改%s也阻止离开，恢复原值后可直接离开", async (_label, edit, revert) => {
   const page = await mount(); edit();
@@ -138,7 +138,7 @@ it("SLA 保存后使用保留日历作为基线，再只改节假日仍受保护
 
 it("保存规则只清理规则草稿，另一个 SLA 草稿继续阻止离开", async () => {
   const page = await mount(); tab("SLA 策略"); change("解决时限（分钟）", "240");
-  tab("自动化规则"); change("规则名称", "紧急指派"); select("动作 1 成员", "张三 (zhangsan)");
+  tab("自动化规则"); change("规则名称", "紧急指派"); select("动作 1 成员", "张三 @zhangsan");
   fireEvent.click(screen.getByRole("button", { name: "创建规则", exact: true }));
   await screen.findByText("紧急指派"); page.leave(); await page.expectBlocked();
   tab("SLA 策略"); expect((screen.getByLabelText("解决时限（分钟）") as HTMLInputElement).value).toBe("240");

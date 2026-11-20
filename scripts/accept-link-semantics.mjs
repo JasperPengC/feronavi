@@ -5,7 +5,7 @@ import "./_env.ts";
  * 用户要求：「跳转用 <Link>/<a>（可中键新开、可复制 URL、读屏为链接）；提交/删除/开关/弹窗等动作用 <button>」。
  * 这个脚本守的是**真实渲染出来的标签与 href**：
  *   ① 侧栏导航项必须是真链接（<a href>），不是按钮；
- *   ② 账户菜单里的「设置」必须是链接（此前是 button + navigate，本轮修掉）；
+ *   ② 账户菜单里的「个人偏好」必须是链接（此前是 button + navigate，本轮修掉）；
  *   ③ 账户菜单里的「退出登录」必须是按钮（动作，不是跳转）；
  *   ④ 顶栏面包屑链接是真链接；
  *   ⑤ 全站扫描：`<button>` 上不应出现「看起来是站内跳转」的显式路径跳转（本轮人工审计为 0）。
@@ -49,9 +49,9 @@ try {
     const items = [...document.querySelectorAll('.shell-user-menu [role="menuitem"], .shell-user-menu a, .shell-user-menu button')];
     return items.map((el) => ({ tag: el.tagName.toLowerCase(), href: el.getAttribute("href"), text: (el.textContent || "").trim() }));
   });
-  const settings = menu.find((x) => x.text.includes("设置"));
+  const settings = menu.find((x) => x.text.includes("个人偏好"));
   const logout = menu.find((x) => x.text.includes("退出") || x.text.includes("注销") || x.text.includes("登出"));
-  check("账户菜单「设置」是真链接（可中键/复制地址）", !!settings && settings.tag === "a" && settings.href === "/settings", JSON.stringify(settings));
+  check("账户菜单「个人偏好」是真链接（可中键/复制地址）", !!settings && settings.tag === "a" && settings.href === "/settings/personal", JSON.stringify(settings));
   check("账户菜单「退出登录」是按钮（动作）", !!logout && logout.tag === "button", JSON.stringify(logout));
   await page.screenshot({ path: "/tmp/accept-link-semantics-menu.png" });
 

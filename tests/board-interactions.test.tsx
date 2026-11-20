@@ -22,6 +22,57 @@ const extra = { ...first, id: "w2", key: "P-2", number: 2, title: "搜索命中�
 beforeEach(() => { setLocale("zh-CN"); vi.stubGlobal("scrollTo", vi.fn()); vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} })); });
 afterEach(() => { cleanup(); clients.splice(0).forEach((qc) => qc.clear()); vi.unstubAllGlobals(); });
 
+function renderBoardReply(reply: (url: URL) => Response | Promise<Response>) {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), "http://localhost");
+    const p = url.pathname;
+    if (p.endsWith("/auth/me")) return json({ memberId: "m1", username: "demo", name: "测试", permissions: [], locale: "zh-CN", dataScopes: [], mustChangePassword: false });
+    if (p.endsWith("/projects")) return json({ items: [] });
+    if (p.endsWith("/notifications")) return json({ items: [], unreadCount: 0 });
+    if (p.endsWith("/system/status")) return json({ ok: true });
+    if (p.endsWith("/work-items/board")) return reply(url);
+    return json({});
+  }));
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } }); clients.push(qc);
+  const router = makeRouter(createMemoryHistory({ initialEntries: ["/projects/p1/board"] }));
+  render(<QueryClientProvider client={qc}><RouterProvider router={router} /></QueryClientProvider>);
+}
+
+const emptyBoard = { columns: [{ stateKey: "todo", name: "待开始", category: "NOT_STARTED", color: "info", items: [], count: 0 }], total: 0 };
+
+it("空看板保留状态列，只显示紧凑提示而不叠加整页空态", async () => {
+  renderBoardReply(() => json(emptyBoard));
+  await screen.findByText("暂无数据");
+  expect(document.querySelector('[data-state-key="todo"]')).toBeTruthy();
+  expect(document.querySelector(".ui-state-empty")).toBeNull();
+  expect(screen.getAllByRole("button", { name: "新建工作项" })).toHaveLength(2);
+});
+
+it("无匹配提示可以清除筛选，恢复空项目提示及工作流列", async () => {
+  renderBoardReply(() => json(emptyBoard));
+  fireEvent.change(await screen.findByRole("textbox", { name: "搜索编号/标题" }), { target: { value: "未命中" } });
+  await screen.findByText("没有匹配项");
+  const clear = screen.getAllByRole("button", { name: "清除筛选" }).at(-1)!;
+  fireEvent.click(clear);
+  await screen.findByText("暂无数据");
+  expect((screen.getByRole("textbox", { name: "搜索编号/标题" }) as HTMLInputElement).value).toBe("");
+  expect(document.querySelector('[data-state-key="todo"]')).toBeTruthy();
+  expect(document.querySelector(".ui-state-empty")).toBeNull();
+});
+
+it("刷新失败时只显示错误反馈，不继续显示缓存中的旧看板", async () => {
+  let fail = false;
+  renderBoardReply(() => fail
+    ? new Response(JSON.stringify({ error: { code: "TEST", message: "读取失败" } }), { status: 500, headers: { "content-type": "application/json" } })
+    : json({ columns: [{ ...emptyBoard.columns[0], items: [first], count: 1 }], total: 1 }));
+  await screen.findByRole("button", { name: first.title });
+  fail = true;
+  fireEvent.click(screen.getByRole("button", { name: "刷新", exact: true }));
+  await screen.findByRole("alert");
+  expect(screen.queryByRole("button", { name: first.title })).toBeNull();
+  expect(document.querySelector(".board-columns")).toBeNull();
+});
+
 it("服务端搜索和优先级带入下一页，追加卡片仍可移动并更新目标列", async () => {
   let moved = false;
   const writes: unknown[] = [];
@@ -93,4 +144,51 @@ it("切换筛选后，旧加载更多请求不能把卡片追加到新结果", a
   await act(async () => { finishOldPage?.(json({ items: [extra], count: 2 })); });
   expect(screen.queryByRole("button", { name: extra.title })).toBeNull();
   expect(screen.getByRole("button", { name: current.title })).toBeTruthy();
+});
+
+it("移动失败回滚后在看板内保留错误，允许刷新和关闭", async () => {
+  renderBoardReply(() => json({ columns: [
+    { ...emptyBoard.columns[0], items: [first], count: 1 },
+    { stateKey: "done", name: "已完成", category: "DONE", color: "success", items: [], count: 0 },
+  ], total: 1 }));
+  const previous = globalThis.fetch;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input).includes("/transition") && init?.method === "POST") {
+      return new Response(JSON.stringify({ code: "FORBIDDEN", message: "当前没有流转权限" }), { status: 403, headers: { "content-type": "application/json" } });
+    }
+    return previous(input, init);
+  }));
+  await screen.findByRole("button", { name: first.title });
+  await act(async () => { gesture.end({ active: { id: first.id }, over: { id: "done" } }); });
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("当前没有流转权限");
+  expect(within(alert).getByRole("button", { name: "重新载入" })).toBeTruthy();
+  expect(within(document.querySelector('[data-state-key="todo"]') as HTMLElement).getByRole("button", { name: first.title })).toBeTruthy();
+  fireEvent.click(within(alert).getByRole("button", { name: "关闭" }));
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("补填字段提交失败时保留抽屉、输入和可读错误", async () => {
+  renderBoardReply(() => json({ columns: [
+    { ...emptyBoard.columns[0], items: [first], count: 1 },
+    { stateKey: "done", name: "已完成", category: "DONE", color: "success", items: [], count: 0 },
+  ], total: 1 }));
+  const previous = globalThis.fetch;
+  let attempts = 0;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input).includes("/transition") && init?.method === "POST") {
+      attempts++;
+      return new Response(JSON.stringify(attempts === 1
+        ? { code: "BLOCKED_BY_PREREQUISITE", message: "请补充说明", details: { requiredFields: ["resolution"] } }
+        : { code: "INTERNAL", message: "暂时无法保存，请重试" }), { status: attempts === 1 ? 409 : 500, headers: { "content-type": "application/json" } });
+    }
+    return previous(input, init);
+  }));
+  await screen.findByRole("button", { name: first.title });
+  await act(async () => { gesture.end({ active: { id: first.id }, over: { id: "done" } }); });
+  const drawer = await screen.findByRole("dialog");
+  fireEvent.change(within(drawer).getByLabelText("resolution"), { target: { value: "已确认处理方案" } });
+  fireEvent.click(within(drawer).getByRole("button", { name: "提交" }));
+  expect((await within(drawer).findByRole("alert")).textContent).toContain("暂时无法保存");
+  expect((within(drawer).getByLabelText("resolution") as HTMLTextAreaElement).value).toBe("已确认处理方案");
 });

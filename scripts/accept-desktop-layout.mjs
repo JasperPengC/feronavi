@@ -2,7 +2,7 @@ import "./_env.ts";
 /**
  * PC 桌面布局验收（Round 104）
  * 常见桌面视口 + 浏览器缩放近似（125%/150% 的 CSS 视口）：
- * 1280/1366/1440/1920/2560、1152/1024/960；检查横向溢出、卡片重叠、侧栏/外壳、超宽屏内容上限。
+ * 1280/1366/1440/1920/2560、1152/1024/960；检查横向溢出、卡片重叠、侧栏/外壳、超宽屏主体全宽。
  */
 import { chromium } from "playwright";
 const BASE = process.env.BASE;
@@ -40,20 +40,23 @@ try {
           if (Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left) > 2 && Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top) > 2) overlap++;
         }
         const pageEl = document.querySelector(".page");
+        const contentEl = document.querySelector(".shell-content");
         const cs = pageEl ? getComputedStyle(pageEl) : null;
+        const contentStyle = contentEl ? getComputedStyle(contentEl) : null;
         return {
           overflow: document.documentElement.scrollWidth > innerWidth + 2,
           overlap,
           sidebar: !!document.querySelector(".shell-sidebar"),
           menuButton: !!document.querySelector(".shell-menu-button") && getComputedStyle(document.querySelector(".shell-menu-button")).display !== "none",
           pageWidth: pageEl ? Math.round(pageEl.getBoundingClientRect().width) : 0,
+          availableWidth: contentEl ? Math.round(contentEl.getBoundingClientRect().width - parseFloat(contentStyle.paddingLeft) - parseFloat(contentStyle.paddingRight)) : 0,
           maxWidth: cs?.maxWidth ?? "",
         };
       });
       if (state.overflow || state.overlap > 0) { ok = false; check(`${label} ${route}`, false, JSON.stringify(state)); }
       if (width >= 1280 && !state.sidebar) { ok = false; check(`${label} ${route} 侧栏存在`, false); }
       if (width >= 1280 && state.menuButton) { ok = false; check(`${label} ${route} 不应出现移动汉堡`, false); }
-      if (width === 2560 && state.pageWidth > 1920) { ok = false; check(`${label} ${route} 内容宽度上限`, false, String(state.pageWidth)); }
+      if (width === 2560 && Math.abs(state.pageWidth - state.availableWidth) > 2) { ok = false; check(`${label} ${route} 主体占满可用宽度`, false, JSON.stringify(state)); }
     }
     check(`${label}：9 个页面无溢出/重叠，桌面外壳正确`, ok);
   }
@@ -63,9 +66,10 @@ try {
   const wide = await page.evaluate(() => {
     const el = document.querySelector(".page"); const content = document.querySelector(".shell-content");
     const r = el.getBoundingClientRect(); const c = content.getBoundingClientRect();
-    return { width: Math.round(r.width), leftGap: Math.round(r.left - c.left), rightGap: Math.round(c.right - r.right) };
+    const style = getComputedStyle(content);
+    return { width: Math.round(r.width), availableWidth: Math.round(c.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)), leftGap: Math.round(r.left - c.left), rightGap: Math.round(c.right - r.right) };
   });
-  check("2560 超宽屏内容居中且不超过 1920px", wide.width <= 1920 && wide.leftGap > 50 && Math.abs(wide.leftGap - wide.rightGap) <= 2, JSON.stringify(wide));
+  check("2560 超宽屏主体占满可用宽度并保留对称留白", wide.width > 1920 && Math.abs(wide.width - wide.availableWidth) <= 2 && wide.leftGap > 0 && Math.abs(wide.leftGap - wide.rightGap) <= 2, JSON.stringify(wide));
   await page.screenshot({ path: "/tmp/pc-ultrawide-workbench.png" });
   // 1024/960 缩放近似：移动外壳应可用（汉堡能打开侧栏）
   for (const [label, width, height] of [["1024×640", 1024, 640], ["960×600", 960, 600]]) {

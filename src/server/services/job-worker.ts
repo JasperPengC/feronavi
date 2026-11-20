@@ -11,6 +11,8 @@ export interface JobWorkerOptions {
   keepAlive?: boolean;
   onRun?: (stats: Awaited<ReturnType<typeof runJobWorkerOnce>>) => void;
   onError?: (error: unknown) => void;
+  onPollStart?: () => void;
+  onPollComplete?: () => void;
 }
 
 export function startJobWorker(opts: JobWorkerOptions): { stop: () => Promise<void>; runOnce: () => ReturnType<typeof runJobWorkerOnce> } {
@@ -20,7 +22,9 @@ export function startJobWorker(opts: JobWorkerOptions): { stop: () => Promise<vo
   const run = (): Promise<Stats> => {
     if (stopped) return Promise.resolve({ claimed: 0, succeeded: 0, failed: 0, unknown: 0 });
     if (inFlight) return inFlight;
+    opts.onPollStart?.();
     inFlight = runJobWorkerOnce(undefined, 10, () => !stopped).then(stats => {
+      opts.onPollComplete?.();
       if (stats.claimed > 0) opts.onRun?.(stats);
       return stats;
     }).finally(() => { inFlight = null; });

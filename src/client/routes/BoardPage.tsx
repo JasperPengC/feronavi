@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "../components/ui/Toast.tsx";
-import { DndContext, DragOverlay, PointerSensor, KeyboardSensor, useSensor, useSensors, useDraggable, useDroppable } from "@dnd-kit/core";
+import { DndContext, DragOverlay, PointerSensor, KeyboardSensor, pointerWithin, closestCenter, useSensor, useSensors, useDraggable, useDroppable } from "@dnd-kit/core";
 import { apiGet, apiPost, ApiError } from "../lib/api.ts";
 import { WorkItemViewHeader } from "../components/project/WorkItemViewHeader.tsx";
 import { Drawer } from "../components/ui/Drawer.tsx";
@@ -81,7 +81,7 @@ function Card({ item, onOpen }: { item: BoardItem; onOpen: (id: string) => void 
       </button>
       {item.priority && (
         <div className="muted" style={{ fontSize: "var(--text-xs)" }}>
-          优先级 {PRIORITY_LABEL[item.priority] ? t(PRIORITY_LABEL[item.priority]!) : item.priority}
+          {t("common.priority")} {PRIORITY_LABEL[item.priority] ? t(PRIORITY_LABEL[item.priority]!) : item.priority}
         </div>
       )}
     </div>
@@ -133,6 +133,7 @@ export function BoardPage() {
   const [needFields, setNeedFields] = useState<{ itemId: string; version: number; toStateKey: string; fields: string[] } | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [keyword, setKeyword] = useState("");
   const [prioFilter, setPrioFilter] = useState("");
@@ -189,6 +190,7 @@ export function BoardPage() {
 
   /** 从某列移除并插入目标列（乐观更新） */
   async function move(itemId: string, toStateKey: string, version: number, fields?: Record<string, unknown>) {
+    setActionError(null);
     const prev = qc.getQueryData<{ columns: BoardColumn[] }>(boardKey);
     if (prev) {
       const found = flat.find((i) => i.id === itemId);
@@ -224,22 +226,24 @@ export function BoardPage() {
       toast.info(t("board.statusUpdated"));
       await invalidateWorkItemQueries(qc, itemId);
       void updated;
+      return true;
     } catch (e) {
       // 回滚：用服务端数据重新拉取，避免本地状态与服务端分叉
       await qc.invalidateQueries({ queryKey: boardKey });
       if (e instanceof ApiError) {
         if (e.code === "VERSION_CONFLICT") {
-          toast.error(t("board.conflictRefresh"));
+          setActionError(t("board.conflictRefresh"));
         } else if (e.requiredFields.length > 0) {
           setNeedFields({ itemId, version, toStateKey, fields: e.requiredFields });
           setFieldValues({});
-          return;
+          return false;
         } else {
-          toast.error(e.message);
+          setActionError(e.message);
         }
       } else {
-        toast.error(t("board.actionFailed"));
+        setActionError(t("board.actionFailed"));
       }
+      return false;
     }
   }
 
@@ -247,8 +251,7 @@ export function BoardPage() {
     mutationFn: async () => {
       if (!needFields) return;
       const fields = Object.fromEntries(needFields.fields.map((f) => [f, fieldValues[f] ?? ""]));
-      await move(needFields.itemId, needFields.toStateKey, needFields.version, fields);
-      setNeedFields(null);
+      if (await move(needFields.itemId, needFields.toStateKey, needFields.version, fields)) setNeedFields(null);
     },
   });
 
@@ -273,7 +276,7 @@ export function BoardPage() {
         return { ...prev, [stateKey]: [...existing, ...r.items.filter((i) => !seen.has(i.id))] };
       });
     } catch (e) {
-      if (boardScopeRef.current === requestScope && pageRequests.current[stateKey] === request) toast.error(e instanceof ApiError ? e.message : t("common.loadFailedShort"));
+      if (boardScopeRef.current === requestScope && pageRequests.current[stateKey] === request) setActionError(e instanceof ApiError ? e.message : t("common.loadFailedShort"));
     } finally {
       if (pageRequests.current[stateKey] === request) {
         delete pageRequests.current[stateKey];
@@ -307,13 +310,13 @@ export function BoardPage() {
       el.removeEventListener("scroll", updateScrollState);
       observer?.disconnect();
     };
-  }, [laneBy, filteredColumns.length, updateScrollState]);
+  }, [laneBy, filteredColumns.length, flat.length, isLoading, isError, updateScrollState]);
   const scrollBoard = (direction: -1 | 1) => {
     boardScrollRef.current?.scrollBy({ left: direction * 360, behavior: "smooth" });
   };
 
   return (
-    <div className={`page project-refinement board-root${activeId ? " is-dragging" : ""}`}>
+    <div className={`page workspace-page project-refinement board-root${activeId ? " is-dragging" : ""}`}>
       <WorkItemViewHeader projectId={projectId!} active="board"
         onCreate={() => setCreateOpen(true)}
         onRefresh={() => void qc.invalidateQueries({ queryKey: boardKey })} />
@@ -328,25 +331,37 @@ export function BoardPage() {
             options={[{ value: "none", label: t("board.groupNone") }, { value: "priority", label: t("board.groupPriority") }]} />
           {(q || prioFilter) && <Button size="sm" variant="ghost" onClick={() => { setQ(""); setPrioFilter(""); }}>{t("board.clearFilters")}</Button>}
         </div>
-        <div className="board-scroll-controls" role="group" aria-label={t("board.horizontalScroll")}>
+        {!isLoading && !isError && (laneBy === "none" || !flat.length) && <div className="board-scroll-controls" role="group" aria-label={t("board.horizontalScroll")}>
           <Button size="sm" variant="ghost" iconOnly disabled={!canScrollLeft} aria-label={t("board.scrollLeft")}
             onClick={() => scrollBoard(-1)}><Icon name="chevron-left" /></Button>
           <Button size="sm" variant="ghost" iconOnly disabled={!canScrollRight} aria-label={t("board.scrollRight")}
             onClick={() => scrollBoard(1)}><Icon name="chevron-right" /></Button>
-        </div>
+        </div>}
       </div>
+      {actionError && !needFields && <div className="board-action-error alert-error" role="alert">
+        <span>{actionError}</span>
+        <Button size="sm" variant="ghost" onClick={() => void refetch()}>{t("common.reload")}</Button>
+        <Button size="sm" variant="ghost" onClick={() => setActionError(null)}>{t("common.close")}</Button>
+      </div>}
       {isLoading && <StateBlock kind="loading" title={t("common.loading")} />}
       {isError && <StateBlock kind="error" title={t("common.loadFailedShort")} description={error instanceof ApiError ? error.message : undefined}
         action={() => void refetch()} actionLabel={t("common.reload")} />}
-      {!isLoading && !isError && !flat.length && <StateBlock kind="empty" title={keyword || prioFilter ? t("common.noMatches") : t("common.noData")}
-        action={keyword || prioFilter ? () => { setQ(""); setKeyword(""); setPrioFilter(""); } : undefined} actionLabel={t("board.clearFilters")} />}
-      {laneBy === "priority" && mergedColumns.some((col) => col.items.length < col.count) && <div className="toolbar">
+      {!isLoading && !isError && !columns.length && <StateBlock kind="empty" title={t("common.noData")} />}
+      {!isLoading && !isError && columns.length > 0 && !flat.length && <div className="board-empty-notice" role="status">
+        <Icon name="inbox" size={16} />
+        <span>{keyword || prioFilter ? t("common.noMatches") : t("common.noData")}</span>
+        {keyword || prioFilter
+          ? <Button size="sm" variant="ghost" onClick={() => { setQ(""); setKeyword(""); setPrioFilter(""); }}>{t("board.clearFilters")}</Button>
+          : <Button size="sm" variant="ghost" onClick={() => setCreateOpen(true)}><Icon name="plus" size={14} />{t("wie.create")}</Button>}
+      </div>}
+      {!isLoading && !isError && laneBy === "priority" && mergedColumns.some((col) => col.items.length < col.count) && <div className="toolbar">
         {mergedColumns.filter((col) => col.items.length < col.count).map((col) => <Button key={col.stateKey} size="sm" loading={loadingColumn === col.stateKey}
           onClick={() => void loadMore(col.stateKey, col.items.length)}>{col.name} · {t("board.loadMore", { n: col.count - col.items.length })}</Button>)}
       </div>}
 
-      <DndContext
+      {!isLoading && !isError && columns.length > 0 && <DndContext
         sensors={sensors}
+        collisionDetection={(args) => args.pointerCoordinates ? pointerWithin(args) : closestCenter(args)}
         onDragStart={(e) => setActiveId(String(e.active.id))}
         onDragCancel={() => setActiveId(null)}
         onDragEnd={(e) => {
@@ -359,8 +374,8 @@ export function BoardPage() {
           void move(itemId, over, item.version);
         }}
       >
-        {laneBy === "none" ? (
-          <div ref={boardScrollRef} className="board-columns">
+        {laneBy === "none" || !flat.length ? (
+          <div ref={boardScrollRef} className="board-columns" data-custom-scroll>
             {filteredColumns.map((c) => <Column key={c.stateKey} col={c} activeId={activeId} onOpen={setSelectedId}
               onLoadMore={() => void loadMore(c.stateKey, c.items.length)} loadingMore={loadingColumn === c.stateKey} />)}
           </div>
@@ -374,7 +389,7 @@ export function BoardPage() {
                   <div className="board-lane-head">
                     <span className={`status-pill ${lane === "URGENT" || lane === "HIGH" ? "dot-red" : lane === "MEDIUM" ? "dot-blue" : "dot-green"}`}>{lane ? t(PRIORITY_LABEL[lane]!) : t("board.noPriority")}</span>
                   </div>
-                  <div className="board-columns board-lane-columns">
+                  <div className="board-columns board-lane-columns" data-custom-scroll>
                     {laneColumns.map((c) => (
                       <Column key={`${c.stateKey}-${lane || "none"}`} col={c} activeId={activeId} onOpen={setSelectedId}
                         dropId={`${c.stateKey}::${lane || "none"}`} showTotal={false} />
@@ -393,10 +408,11 @@ export function BoardPage() {
             </div>
           ) : null}
         </DragOverlay>
-      </DndContext>
+      </DndContext>}
 
       <Drawer open={!!needFields} title={t("board.needFields")} onClose={() => !retryWithFields.isPending && setNeedFields(null)}>
         <p className="muted" style={{ fontSize: "var(--text-sm)", marginTop: 0 }}>{t("board.needFieldsHint")}</p>
+        {actionError && <p className="alert-error" role="alert">{actionError}</p>}
         {needFields?.fields.map((f) => (
           <TextArea key={f} id={`f-${f}`} label={f} rows={3} value={fieldValues[f] ?? ""}
             onChange={(e) => setFieldValues({ ...fieldValues, [f]: e.target.value })} />

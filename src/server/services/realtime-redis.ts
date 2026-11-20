@@ -12,6 +12,7 @@ import Redis from "ioredis";
 type Client = InstanceType<typeof Redis>;
 let commandClient: Client | null = null;
 let initialized = false;
+const subscribers = new Set<Client>();
 
 export function realtimeRedis(): Client | null {
   if (!initialized) {
@@ -29,7 +30,9 @@ export function realtimeRedis(): Client | null {
           connectTimeout: 5_000,
           retryStrategy: (times) => Math.min(times * 200, 3000),
         });
-        commandClient.on("error", () => { /* 可丢，不刷日志 */ });
+        commandClient.on("error", () => {
+          /* 可丢，不刷日志 */
+        });
       } catch {
         commandClient = null;
       }
@@ -48,7 +51,10 @@ export function realtimeSubscriber(): Client | null {
       maxRetriesPerRequest: null,
       retryStrategy: (times) => Math.min(times * 200, 3000),
     });
-    sub.on("error", () => { /* 可丢，不刷日志 */ });
+    sub.on("error", () => {
+      /* 可丢，不刷日志 */
+    });
+    subscribers.add(sub);
     return sub;
   } catch {
     return null;
@@ -57,9 +63,13 @@ export function realtimeSubscriber(): Client | null {
 
 /** 测试/关停用：断开连接（仅本进程创建的实例） */
 export async function closeRealtimeRedis(): Promise<void> {
-  for (const c of [commandClient]) {
-    if (c) await c.quit().catch(() => {});
+  for (const c of [commandClient, ...subscribers]) {
+    if (c) {
+      c.removeAllListeners("message");
+      c.disconnect();
+    }
   }
+  subscribers.clear();
   commandClient = null;
   initialized = false;
 }

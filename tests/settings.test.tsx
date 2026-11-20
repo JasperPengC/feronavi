@@ -66,6 +66,7 @@ describe("个人设置页", () => {
     });
     renderAt("/settings/integrations");
     fireEvent.click(await screen.findByRole("tab", { name: "消息与 Webhook" }));
+    fireEvent.click(await screen.findByRole("button", { name: "添加 Webhook" }));
     expect(await screen.findByText(/sha256=<hex>/)).toBeTruthy();
   });
 
@@ -165,7 +166,7 @@ describe("个人设置页", () => {
     // Round 98：危险操作需要二次确认
     fireEvent.click(screen.getByRole("button", { name: "删除" }));
     expect(fetchMock.mock.calls.some(([input, init]) => String(input).includes(webhookId) && init?.method === "DELETE")).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "确认删除？" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认" }));
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([input, init]) => String(input).includes(webhookId) && init?.method === "DELETE")).toBe(true);
     });
@@ -211,6 +212,7 @@ describe("设置页权限边界", () => {
     await waitFor(() => expect(screen.getByLabelText("LLM Base URL")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
     fireEvent.click(screen.getByRole("tab", { name: "消息与 Webhook" }));
+    fireEvent.click(await screen.findByRole("button", { name: "添加 Webhook" }));
     await waitFor(() => expect(screen.getByLabelText("Webhook 名称")).toBeTruthy());
     expect(screen.queryByLabelText("SMTP 主机")).toBeNull();
     const requested = fetchMock.mock.calls.map(([input]) => String(input));

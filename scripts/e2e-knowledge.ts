@@ -61,13 +61,18 @@ try {
   ok("**无 key 时检索仍可用**（退化为关键词）", kw.mode === "keyword" && kw.hits.length >= 1, JSON.stringify(kw).slice(0, 90));
   ok("检索提示写明退化原因", /未配置 AI/.test(kw.note ?? ""), String(kw.note));
 
+  await settingService.putSettings({ "ai.limitTokensPerMonth": 0 });
+  const quotaSafe = await knowledge.reindexPage(admin, pg!.id, "FULL", { skipEmbedding: true, activate: false });
+  ok("safe恢复关键词重建不受已超embedding配额阻断", quotaSafe.failed === 0 && quotaSafe.inserted === 3 && quotaSafe.embedded === 0, JSON.stringify(quotaSafe));
+  await db.delete(setting).where(eq(setting.key, "ai.limitTokensPerMonth"));
+
   // ── 可重入 ──
   const idx2 = await knowledge.reindexPage(admin, pg!.id);
   ok("同内容再索引：0 新增、3 复用（可重入）", idx2.inserted === 0 && idx2.reused === 3, JSON.stringify(idx2));
   const idx3 = await knowledge.reindexPage(admin, pg!.id, "FULL");
   ok("FULL 模式强制重建", idx3.inserted === 3, JSON.stringify(idx3));
   const chunkCount = await sql<{ n: number }[]>`select count(*)::int as n from page_chunk where page_id = ${pg!.id}`;
-  ok("库内切片数不被 FULL 重复膨胀（每次换代各存一份）", chunkCount[0]!.n >= 3 && chunkCount[0]!.n <= 9, String(chunkCount[0]!.n));
+  ok("四次重建各保留完整三切片快照，当前预览只有三片", chunkCount[0]!.n === 12 && (await knowledge.listPageChunks(admin, pg!.id)).chunks.length === 3, String(chunkCount[0]!.n));
 
   // ── 生效代：只有成功才切换 ──
   const gen1 = idx3.activeGeneration;

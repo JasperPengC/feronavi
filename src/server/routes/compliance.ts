@@ -46,7 +46,7 @@ export async function registerComplianceRoutes(app: FastifyInstance): Promise<vo
   app.get("/api/v1/me/data-export", async (req, reply) => {
     const actor = actorOf(req);
     const { exportMemberData, EXPORT_SCHEMA_VERSION } = await import("../services/data-export.service.ts");
-    const data = await exportMemberData(actor.memberId);
+    const data = await exportMemberData(actor.memberId, actor);
     return reply
       .header("content-type", "application/json; charset=utf-8")
       .header("content-disposition", "attachment; filename=\"feronavi-my-data.json\"")
@@ -54,7 +54,7 @@ export async function registerComplianceRoutes(app: FastifyInstance): Promise<vo
       .send(JSON.stringify(data, null, 2));
   });
 
-  /** 异步全量导出（Round 46）：POST 入队 → GET /system/exports/:id 下载（权限均 setting:manage） */
+  /** 兼容合规导出：POST 入队 → GET /system/exports/:id 下载；系统迁移使用 /system/backups。 */
   app.post("/api/v1/system/exports", { onRequest: app.csrfProtection }, async (req, reply) => {
     const actor = actorOf(req);
     const { can } = await import("../permission/engine.ts");
@@ -96,7 +96,7 @@ export async function registerComplianceRoutes(app: FastifyInstance): Promise<vo
       .send(buf);
   });
 
-  /** 全量数据导出（setting:manage；同步 JSON，响应头标注 schemaVersion 与导出模式） */
+  /** 兼容合规导出（setting:manage；同步脱敏 JSON），不作为系统迁移入口。 */
   app.get("/api/v1/system/exports/inline", async (req, reply) => {
     const actor = actorOf(req);
     const { fullExport, FULL_EXPORT_SCHEMA_VERSION } = await import("../services/full-export.service.ts");

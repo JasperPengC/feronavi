@@ -23,6 +23,7 @@ try {
   }, pid);
   check("真实浏览器发起知识检索 200", search.status === 200, JSON.stringify(search.body?.mode));
   await page.goto(`${BASE}/system`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(2600);
+  await page.getByRole("tab", { name: "运维", exact: true }).click();
   const text = await page.locator(".card", { hasText: "运维状态" }).innerText();
   check("系统页显示知识检索与近 30 天查询", text.includes("知识检索") && text.includes("近 30 天查询"), text.split("\n").find((l) => l.includes("知识检索")) ?? "");
   const after = await page.evaluate(async () => (await fetch("/api/v1/system/operations", { credentials: "same-origin" })).json());

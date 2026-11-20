@@ -23,8 +23,12 @@ import { Button } from "../components/ui/Button.tsx";
 import { TextInput } from "../components/ui/TextInput.tsx";
 import { timeZoneOptions } from "../components/timezones.ts";
 import { ThemeToggle } from "./ThemeToggle.tsx";
+import { SetupRestoreFlow } from "../components/setup/SetupRestoreFlow.tsx";
+import { SetupDataDirectory } from "../components/setup/SetupDataDirectory.tsx";
+import { SetupDatabaseSummary, type SetupDatabaseInfo } from "../components/setup/SetupDatabaseSummary.tsx";
 
-interface PrecheckItem { key: string; ok: boolean; message: string }
+interface PrecheckItem { key: string; ok: boolean; message: string; path?: string }
+type SetupMode = "choose" | "create" | "restore";
 
 /** 步骤标题 / 说明走词典键（在组件内取，语言切换即时生效） */
 const STEP_KEYS = ["su.stepCheck", "su.dbLabel", "su.stepAdmin", "su.stepOrg", "su.stepIntegrations", "su.stepDone"];
@@ -34,6 +38,7 @@ export function SetupPage() {
   useLocale();   // 向导发生在还没有账号时，语言只能靠本地选择
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
+  const [setupMode, setSetupMode] = useState<SetupMode>("choose");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -41,11 +46,7 @@ export function SetupPage() {
   const [items, setItems] = useState<PrecheckItem[]>([]);
   const [precheckLoading, setPrecheckLoading] = useState(true);
   // 第 2 步
-  const [dbInfo, setDbInfo] = useState<null | {
-    ok: boolean; current?: boolean; host?: string; database?: string; user?: string; maskedUrl?: string;
-    version?: string; major?: number; compatible?: boolean; recommended?: boolean; error?: string;
-    extensions?: { vector: boolean; zhparser: boolean; pgTrgm: boolean };
-  }>(null);
+  const [dbInfo, setDbInfo] = useState<SetupDatabaseInfo | null>(null);
   const [dbLoading, setDbLoading] = useState(false);
   const [dbMode, setDbMode] = useState<"current" | "external">("current");
   const [dbForm, setDbForm] = useState({ host: "", port: "5432", database: "", user: "", password: "", ssl: "prefer" });
@@ -110,6 +111,18 @@ export function SetupPage() {
   const stepTitles = STEP_KEYS.map((k) => tr(k));
   const stepDescriptions = STEP_DESC_KEYS.map((k) => tr(k));
 
+  if (setupMode === "restore") {
+    return (
+      <div className="setup-page">
+        <header className="setup-topbar">
+          <div className="product-mark setup-brand"><BrandMark className="brand-mark" /><strong>{tr("app.name")}</strong><span className="setup-brand-tag">{tr("app.tagline")}</span></div>
+          <div className="public-display-controls"><LocaleSwitcher menu /><ThemeToggle syncPreference={false} /></div>
+        </header>
+        <main className="setup-main"><div className="setup-frame setup-restore-frame"><SetupRestoreFlow onBack={() => setSetupMode("choose")} /></div></main>
+      </div>
+    );
+  }
+
   async function submit() {
     setError(null);
     setBusy(true);
@@ -133,7 +146,7 @@ export function SetupPage() {
   }
 
   const canNext =
-    (step === 1 && precheckOk) ||
+    (step === 1 && precheckOk && setupMode === "create") ||
     (step === 2 && dbMode === "current") ||
     (step === 3 && admin.username.length >= 3 && admin.email.includes("@") && passwordOk && admin.name.length > 0) ||
     (step === 4 && org.name.trim().length > 0) ||
@@ -189,12 +202,24 @@ export function SetupPage() {
                         <span className="setup-check-mark" aria-hidden="true">
                           <Icon name={i.ok ? "check" : "x"} size={13} />
                         </span>
-                        <span>{i.message}</span>
+                        {i.key === "dataDir" && i.path
+                          ? <SetupDataDirectory path={i.path} ok={i.ok} />
+                          : <span>{i.message}</span>}
                       </li>
                     ))}
                   </ul>
                   {!precheckLoading && !precheckOk && (
                     <div className="alert" style={{ marginTop: 16 }}>{tr("su.checkFailed")}</div>
+                  )}
+                  {!precheckLoading && precheckOk && setupMode === "choose" && (
+                    <div className="setup-mode-choice" role="radiogroup" aria-label={tr("su.modeTitle")}>
+                      <button type="button" role="radio" aria-checked="false" className="setup-mode-card" onClick={() => { setSetupMode("create"); setStep(2); }}>
+                        <strong>{tr("su.modeCreate")}</strong><span>{tr("su.modeCreateHint")}</span>
+                      </button>
+                      <button type="button" role="radio" aria-checked="false" className="setup-mode-card" onClick={() => setSetupMode("restore")}>
+                        <strong>{tr("su.modeRestore")}</strong><span>{tr("su.modeRestoreHint")}</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
@@ -224,32 +249,7 @@ export function SetupPage() {
                   {dbMode === "current" && <div className="alert setup-note">{tr("su.dbNoEmbedded")}</div>}
                   {dbLoading && <p className="muted">{tr("common.loading")}</p>}
                   {dbMode === "current" && dbInfo && !dbInfo.ok && <p className="field-error" role="alert">{dbInfo.error ?? tr("su.dbLoadFailed")}</p>}
-                  {dbMode === "current" && dbInfo?.ok && (
-                    <div className="setup-db-card" style={{ marginTop: 12 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <span className="setup-db-name">{tr("su.dbCurrent")}</span>
-                        <span className={`tag ${dbInfo.compatible ? "tag-success" : "tag-danger"}`} title={dbInfo.version}>
-                          {dbInfo.version?.match(/^PostgreSQL\s+[\d.]+/u)?.[0] || dbInfo.version || "PostgreSQL"}
-                        </span>
-                        <span className="muted mono">{dbInfo.maskedUrl}</span>
-                      </div>
-                      <dl className="setup-db-facts">
-                        <div><dt>{tr("su.dbHost")}</dt><dd className="mono">{dbInfo.host} / {dbInfo.database}</dd></div>
-                        <div><dt>{tr("su.dbUser")}</dt><dd className="mono">{dbInfo.user}</dd></div>
-                        <div><dt>{tr("su.dbExtensions")}</dt><dd className="setup-ext-list">
-                          <span className={dbInfo.extensions?.vector ? "tag tag-success" : "tag tag-warning"}>pgvector {dbInfo.extensions?.vector ? "✓" : "×"}</span>
-                          <span className={dbInfo.extensions?.zhparser ? "tag tag-success" : "tag tag-warning"}>zhparser {dbInfo.extensions?.zhparser ? "✓" : "×"}</span>
-                          <span className={dbInfo.extensions?.pgTrgm ? "tag tag-success" : "tag tag-warning"}>pg_trgm {dbInfo.extensions?.pgTrgm ? "✓" : "×"}</span>
-                        </dd></div>
-                      </dl>
-                      <p className="muted" style={{ margin: "10px 0 0", fontSize: "var(--text-xs)", lineHeight: 1.6 }}>
-                        <strong>{tr("su.dbVersionRequirement")}</strong>
-                        {dbInfo.compatible ? tr("su.dbVersionOk") : tr("su.dbVersionBad")}
-                        {!dbInfo.extensions?.vector && <> · {tr("su.dbVectorImpact")}</>}
-                        {!dbInfo.extensions?.zhparser && <> · {tr("su.dbZhparserImpact")}</>}
-                      </p>
-                    </div>
-                  )}
+                  {dbMode === "current" && dbInfo?.ok && <SetupDatabaseSummary info={dbInfo} />}
 
                   {dbMode === "external" && (
                     <p className="muted" style={{ marginTop: 8, fontSize: "var(--text-xs)" }}>
@@ -429,7 +429,7 @@ export function SetupPage() {
               {step === 2 && dbMode === "external" && (
                 <span className="setup-actions-note">{tr("su.dbModeNextBlocked")}</span>
               )}
-              <Button disabled={step === 1 || busy} onClick={() => { setError(null); setStep(step - 1); }}>
+              <Button disabled={step === 1 || busy || (step === 1 && setupMode === "choose")} onClick={() => { setError(null); setStep(step - 1); }}>
                 {tr("su.prev")}
               </Button>
               <span className="setup-actions-spacer" />

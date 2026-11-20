@@ -8,7 +8,7 @@
  *   3 `activity_entry.summary` 是**预渲染中文文案**（前端不拼装）
  */
 import { and, desc, eq, gte, ilike, like, lte, sql, type SQL } from "drizzle-orm";
-import { DomainError } from "../../shared/errors.ts";
+import { DomainError, SYSTEM_RESTORE_ERROR_CODES } from "../../shared/errors.ts";
 import { db } from "../../db/index.ts";
 import { activityEntry, auditEntry, member } from "../../db/schema.ts";
 import { forbidden } from "../../shared/errors.ts";
@@ -31,6 +31,7 @@ export function sanitizeChanges(input: unknown): Record<string, unknown> | null 
   const src = input as Record<string, unknown>;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(src)) {
+    if (k === "errorCode" && typeof v === "string" && (SYSTEM_RESTORE_ERROR_CODES as readonly string[]).includes(v)) { out[k] = v; continue; }
     if (!CHANGES_ALLOWED.has(k)) continue;
     // 值也过一遍：长文本（>200 字符）一律截断为占位，防止正文/姓名混进来
     if (typeof v === "string" && v.length > 200) { out[k] = "<redacted>"; continue; }

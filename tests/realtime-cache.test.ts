@@ -54,11 +54,11 @@ describe("业务事件与页面缓存", () => {
     qc.clear();
   });
 
-  it("通知立即同步铃铛及过滤列表的未读数，并标记正文待刷新", () => {
+  it.each(["notification.new", "notification.changed"])("%s立即同步铃铛及过滤列表的未读数，并标记正文待刷新", event => {
     const qc = new QueryClient();
     const keys = [["notifications"], ["notifications", false], ["notifications", true]];
     for (const key of keys) qc.setQueryData(key, { items: [{ id: "n1" }], unreadCount: 1 });
-    invalidateFor(qc, "notification.new", { id: "n2", unreadCount: 2 });
+    invalidateFor(qc, event, { id: "n2", unreadCount: 2 });
     for (const key of keys) {
       expect(qc.getQueryData(key)).toEqual({ items: [{ id: "n1" }], unreadCount: 2 });
       expect(qc.getQueryState(key)?.isInvalidated).toBe(true);

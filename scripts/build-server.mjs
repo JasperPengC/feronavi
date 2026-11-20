@@ -16,3 +16,5 @@ execFileSync(process.execPath, [join(root, "node_modules/typescript/bin/tsc"), "
 const seedTarget = join(outDir, "db/seed-data.json");
 await mkdir(dirname(seedTarget), { recursive: true });
 await copyFile(join(root, "src/db/seed-data.json"), seedTarget);
+// 版本校验与导出使用明确的构建布局，不依赖运行cwd或构建目录的父目录。
+await copyFile(join(root, "package.json"), join(outDir, "package.json"));
