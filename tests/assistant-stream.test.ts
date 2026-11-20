@@ -7,9 +7,12 @@ const frame = (type: string, data: object) => `event: ${type}\r\ndata: ${JSON.st
 const final = { conversation: { id: "conversation" }, message: { requestId: "request", status: "completed" } };
 function response(text: string, chunkSize = 1) {
   const bytes = new TextEncoder().encode(text);
-  return new Response(new ReadableStream({ start(controller) {
-    for (let i = 0; i < bytes.length; i += chunkSize) controller.enqueue(bytes.slice(i, i + chunkSize));
-    controller.close();
+  let offset = 0;
+  // 按读取需求供给分块，避免预置数万个单字节对象拖慢流队列。
+  return new Response(new ReadableStream({ pull(controller) {
+    if (offset >= bytes.length) { controller.close(); return; }
+    controller.enqueue(bytes.slice(offset, offset + chunkSize));
+    offset += chunkSize;
   } }), { headers: { "content-type": "text/event-stream" } });
 }
 it("逐字节UTF8与CRLF分块不破坏中文，reset按顺序交付且result之前可见delta", async () => {
@@ -29,10 +32,14 @@ it("缺少result的断流与服务端error都不能当完成", async () => {
   expect(events).toEqual(["error"]);
 });
 it("事件名不符和超限帧拒绝交付", async () => {
+  const onEvent = vi.fn();
   vi.stubGlobal("fetch", async () => response('event: delta\ndata: {"type":"reset"}\n\n'));
-  await expect(streamAssistantMessage("/stream", {}, () => {})).rejects.toThrow();
-  vi.stubGlobal("fetch", async () => response(frame("delta", { text: "x".repeat(70_000) })));
-  await expect(streamAssistantMessage("/stream", {}, () => {})).rejects.toThrow();
+  await expect(streamAssistantMessage("/stream", {}, onEvent)).rejects.toThrow("Invalid assistant event");
+  for (const chunkSize of [200_000, 1]) {
+    vi.stubGlobal("fetch", async () => response(frame("delta", { text: "x".repeat(70_000) }), chunkSize));
+    await expect(streamAssistantMessage("/stream", {}, onEvent)).rejects.toThrow("Assistant event limit exceeded");
+  }
+  expect(onEvent).not.toHaveBeenCalled();
 });
 it("恰好达到帧限额时，整块与逐字节CRLF分块都能交付", async () => {
   const text = "x".repeat(65_536 - (frame("delta", { text: "" }).length - 4));
