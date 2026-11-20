@@ -149,21 +149,41 @@ Chinese and English interfaces, light and dark themes, and email, IM, webhooks a
 
 ## Get started
 
-With Docker Compose installed, run these commands from the source root to build and start a new instance from the current checkout:
+With Docker Compose installed, download the Compose file and start a new instance. No Node.js installation or source compilation is required:
 
 ```bash
+mkdir feronavi && cd feronavi
+curl -fL https://raw.githubusercontent.com/JasperPengC/feronavi/v0.2.0/compose.yaml -o compose.yaml
+
 # First installation: create a local database password
 (umask 077; test -e .env || echo "DB_PASSWORD=$(openssl rand -hex 24)" > .env)
 
-docker compose -f compose.yaml -f compose.source.yaml up -d --build
-docker compose -f compose.yaml -f compose.source.yaml ps
+docker compose pull
+docker compose up -d --wait
+docker compose ps
 ```
 
-Once the services are ready, open [http://127.0.0.1:3000/setup](http://127.0.0.1:3000/setup) to create your organization and administrator. The first build compiles database extensions and can take some time.
+Once the services are ready, open [http://127.0.0.1:3000/setup](http://127.0.0.1:3000/setup) to create your organization and administrator.
 
-> This branch's collaboration updates have not yet been released as prebuilt images. Use the source build above to try them.
+The defaults pull `ghcr.io/feronavi/feronavi-app:0.2.0` and `ghcr.io/feronavi/feronavi-db:16-0.2.0`. This release's prebuilt images support and have been validated on **Linux x86-64 (amd64)**. Other architectures have not completed validation.
 
 For production, put the instance behind an HTTPS reverse proxy. Before upgrading an existing instance, back up the database and data volume and review the database image's migration requirements.
+
+<details>
+<summary>Build from source</summary>
+
+To modify the source, clone this release into a separate directory and build it:
+
+```bash
+git clone --branch v0.2.0 --depth 1 https://github.com/JasperPengC/feronavi.git feronavi-source
+cd feronavi-source
+(umask 077; test -e .env || echo "DB_PASSWORD=$(openssl rand -hex 24)" > .env)
+docker compose -f compose.yaml -f compose.source.yaml up -d --build --wait
+```
+
+The first build compiles database extensions and can take some time. For an existing instance, keep its directory, project name and data volumes. Set `FERONAVI_VERSION` and `FERONAVI_DB_VERSION` explicitly in `.env` when upgrading.
+
+</details>
 
 For your first project, start here:
 

@@ -19,7 +19,34 @@ export interface PlatformChangelogEntry {
 
 export const PLATFORM_CHANGELOG: PlatformChangelogEntry[] = [
   {
-    version: "v6.18",
+    version: "v0.2.0",
+    date: "2026-11-20",
+    title: "多人协作，与 Agent 一起推进项目",
+    kind: "feature",
+    summary: "文档支持多人同时编辑与断网恢复，业务操作、MCP 和知识助手共享权限、版本校验与实时更新。",
+    highlights: [
+      "文档正文通过 Yjs 合并并发修改，离线编辑恢复后自动同步",
+      "多人、跨标签与跨服务实例同步；版本历史可查看、可回滚",
+      "MCP 与内置助手支持业务查询、确认写入、幂等执行和冲突反馈",
+      "补齐附件、导入、审批、通知及备份恢复的业务协作流程",
+      "提供固定版本的 Docker 镜像，无需本机编译即可部署",
+    ],
+  },
+  {
+    version: "v0.1.0",
+    date: "2026-11-18",
+    title: "Feronavi 首次开源发布",
+    kind: "feature",
+    summary: "将项目管理、团队文档、知识问答与 Agent 操作集成到可自托管的平台。",
+    highlights: [
+      "工作项、看板、里程碑、迭代与项目文档",
+      "内置 RAG 知识助手、流式回答和资料引用",
+      "MCP Server、npx 客户端入口与 RAG OpenAPI",
+      "账号权限、审计、站内通知与自托管部署",
+    ],
+  },
+  {
+    version: "开发预览 6.18",
     date: "2026-10-31",
     title: "管理页面布局调整",
     kind: "design",
@@ -32,7 +59,7 @@ export const PLATFORM_CHANGELOG: PlatformChangelogEntry[] = [
     ],
   },
   {
-    version: "v6.17",
+    version: "开发预览 6.17",
     date: "2026-10-30",
     title: "大项目看板加载优化",
     kind: "performance",
@@ -45,7 +72,7 @@ export const PLATFORM_CHANGELOG: PlatformChangelogEntry[] = [
     ],
   },
   {
-    version: "v6.16",
+    version: "开发预览 6.16",
     date: "2026-10-30",
     title: "邀请、附件与排期更新",
     kind: "feature",
@@ -58,7 +85,7 @@ export const PLATFORM_CHANGELOG: PlatformChangelogEntry[] = [
     ],
   },
   {
-    version: "v6.15",
+    version: "开发预览 6.15",
     date: "2026-10-30",
     title: "工作项编辑与公开需求收集",
     kind: "feature",
@@ -71,7 +98,7 @@ export const PLATFORM_CHANGELOG: PlatformChangelogEntry[] = [
     ],
   },
   {
-    version: "v6.14",
+    version: "开发预览 6.14",
     date: "2026-10-28",
     title: "工作区布局调整",
     kind: "design",

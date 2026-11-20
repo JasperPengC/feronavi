@@ -13,7 +13,7 @@
 
 services:
   app:
-    image: ghcr.io/${FERONAVI_GH_OWNER:-feronavi}/feronavi-app:${FERONAVI_VERSION:-latest}
+    image: ghcr.io/${FERONAVI_GH_OWNER:-feronavi}/feronavi-app:${FERONAVI_VERSION:-0.2.0}
     # build:
     #   context: .
     #   dockerfile: Dockerfile
@@ -50,7 +50,7 @@ services:
 
   worker:
     # 与 app 同镜像、不同入口 —— 避免两套依赖漂移
-    image: ghcr.io/${FERONAVI_GH_OWNER:-feronavi}/feronavi-app:${FERONAVI_VERSION:-latest}
+    image: ghcr.io/${FERONAVI_GH_OWNER:-feronavi}/feronavi-app:${FERONAVI_VERSION:-0.2.0}
     command: ["node", "dist-server/server/worker.js"]
     environment:
       DATABASE_URL: postgres://feronavi:${DB_PASSWORD:?DB_PASSWORD 必须设置}@db:5432/feronavi
@@ -78,7 +78,7 @@ services:
     restart: unless-stopped
 
   db:
-    image: ghcr.io/${FERONAVI_GH_OWNER:-feronavi}/feronavi-db:${PG_MAJOR:-16}
+    image: ghcr.io/${FERONAVI_GH_OWNER:-feronavi}/feronavi-db:${FERONAVI_DB_VERSION:-16-0.2.0}
     # build:
     #   # ⚠️ 上下文必须是【仓库根】：Dockerfile 要 COPY 根目录的 LICENSE
     #   context: .

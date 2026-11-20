@@ -149,21 +149,41 @@ OpenAPI 描述覆盖 RAG 公共 API。检索与引用遵循当前身份、令牌
 
 ## 开始使用
 
-准备好 Docker Compose，在源码根目录执行以下命令，从当前源码构建并启动一个新实例：
+准备好 Docker Compose，下载编排文件即可启动一个新实例，无需安装 Node.js 或编译源码：
 
 ```bash
+mkdir feronavi && cd feronavi
+curl -fL https://raw.githubusercontent.com/JasperPengC/feronavi/v0.2.0/compose.yaml -o compose.yaml
+
 # 首次安装：生成本地数据库密码
 (umask 077; test -e .env || echo "DB_PASSWORD=$(openssl rand -hex 24)" > .env)
 
-docker compose -f compose.yaml -f compose.source.yaml up -d --build
-docker compose -f compose.yaml -f compose.source.yaml ps
+docker compose pull
+docker compose up -d --wait
+docker compose ps
 ```
 
-启动后打开 [http://127.0.0.1:3000/setup](http://127.0.0.1:3000/setup)，按向导创建组织和管理员。首次构建会编译数据库扩展，需要一些时间。
+启动后打开 [http://127.0.0.1:3000/setup](http://127.0.0.1:3000/setup)，按向导创建组织和管理员。
 
-> 本分支的协作更新尚未发布为预构建镜像，体验这些能力请使用上面的源码构建方式。
+默认拉取应用 `ghcr.io/feronavi/feronavi-app:0.2.0` 与数据库 `ghcr.io/feronavi/feronavi-db:16-0.2.0`。本版预构建镜像支持并验证了 **Linux x86-64（amd64）**；其他架构尚未完成验收。
 
 生产部署请将实例放在 HTTPS 反向代理之后；升级已有实例前，请先备份数据库和数据卷，并核对数据库镜像的迁移要求。
+
+<details>
+<summary>从源码构建</summary>
+
+需要修改源码时，可单独克隆本版并构建：
+
+```bash
+git clone --branch v0.2.0 --depth 1 https://github.com/JasperPengC/feronavi.git feronavi-source
+cd feronavi-source
+(umask 077; test -e .env || echo "DB_PASSWORD=$(openssl rand -hex 24)" > .env)
+docker compose -f compose.yaml -f compose.source.yaml up -d --build --wait
+```
+
+首次构建会编译数据库扩展，需要一些时间。已有实例请继续使用原有目录、项目名和数据卷；版本升级时可在 `.env` 中显式设置 `FERONAVI_VERSION` 与 `FERONAVI_DB_VERSION`。
+
+</details>
 
 第一次使用，可以从这三步开始：
 

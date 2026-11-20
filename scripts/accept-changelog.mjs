@@ -3,6 +3,8 @@ import "./_env.ts";
  * 平台更新日志验收：记录的是 Feronavi 产品自身版本，不是各项目的 release.notes。
  */
 import { chromium } from "playwright";
+import { readFileSync } from "node:fs";
+const releaseVersion = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 const BASE = process.env.BASE;
 const results = [];
 const check = (n, p, d = "") => { results.push(p); console.log(`  ${p ? "✓" : "✗"} ${n}${d ? "  " + d : ""}`); };
@@ -22,7 +24,7 @@ try {
   const count = await entries.count();
   check("展示平台版本时间线（≥5 条）", count >= 5, String(count));
   const versions = await page.locator(".cl-version").allInnerTexts();
-  check("版本按从新到旧排列", versions[0] === "v6.18" && versions.includes("v6.17"), versions.join(","));
+  check("最新平台版本与发布元数据一致", versions[0] === `v${releaseVersion}` && versions.includes("v0.1.0"), versions.join(","));
   const dates = await page.locator(".cl-date").allInnerTexts();
   check("日期倒序", dates.every((d, i) => i === 0 || d <= dates[i - 1]), dates.slice(0, 3).join(","));
   check("内容包含真实产品更新要点", body.includes("看板") && body.includes("权限") && body.includes("工作项"));

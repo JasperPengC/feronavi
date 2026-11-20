@@ -1,6 +1,6 @@
 {
   "name": "feronavi",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "自托管、中文优先、AI 原生的开源项目管理平台",
