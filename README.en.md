@@ -13,6 +13,8 @@
     <a href="#get-started"><img src="https://img.shields.io/badge/deploy-Self--hosted-526178?style=flat" alt="Self-hosted deployment" /></a>
   </p>
   <p>
+    <a href="https://feronavi.com/en/">Website</a> ·
+    <a href="https://feronavi.com/en/docs/overview/">Documentation</a> ·
     <strong><a href="#get-started">Deploy Feronavi</a></strong> ·
     <a href="#overview">Highlights</a> ·
     <a href="#collaboration">Collaboration</a> ·
@@ -28,7 +30,7 @@
   <img src="docs/screenshots/10-workbench-light.png" alt="Feronavi workbench with a custom narrow frame that matches the light or dark theme" width="100%" />
 </picture>
 
-<p align="center"><sub>Product preview · Demo data · Light / dark</sub> · <a href="#more-views">More views&nbsp;→</a></p>
+<p align="center"><sub>Product preview · Demo data · Light / dark · <a href="#more-views">More views&nbsp;→</a></sub></p>
 
 <a id="overview"></a>
 
@@ -57,7 +59,7 @@ The server provides MCP **tools, resources and prompts**, with **Streamable HTTP
 
 The platform UI, built-in assistant and MCP share business services, permissions and audit rules. Agent actions are bound by account permissions and token scopes, with idempotent execution and version conflict handling.
 
-[**Connect your MCP client →**](packages/feronavi-mcp/README.md)
+[**Connect your MCP client →**](https://feronavi.com/en/docs/mcp/)
 
 <a id="rag"></a>
 
@@ -78,8 +80,8 @@ Configure compatible chat and embedding models to use the assistant. Retrieval a
 <details>
 <summary>Connect RAG: models, MCP and APIs</summary>
 
-1. **Use it in the platform.** Configure chat and embedding models, publish the project documents you want to search, and confirm indexing is complete. Then select a project scope in the assistant and ask a question.
-2. **Use it through an agent.** Follow the [MCP setup guide](packages/feronavi-mcp/README.md), then use `rag.projects` to list accessible projects, `rag.search` to retrieve material and `rag.chat` for answers with citations.
+1. **Use it in the platform.** Follow the [knowledge assistant guide](https://feronavi.com/en/docs/assistant/) to configure chat and embedding models, publish the project documents you want to search, and confirm indexing is complete. Then select a project scope in the assistant and ask a question.
+2. **Use it through an agent.** Follow the [MCP setup guide](https://feronavi.com/en/docs/mcp/), then use `rag.projects` to list accessible projects, `rag.search` to retrieve material and `rag.chat` for answers with citations.
 3. **Connect your application.** Get the OpenAPI 3.1 description from your instance at `GET /api/v1/openapi.json`. Authenticate with a platform API token using Bearer authentication. Use `POST /api/v1/rag/search` for retrieval and `POST /api/v1/rag/chat` for Q&A; the description includes request and response schemas, conversations and streaming endpoints.
 
 The OpenAPI description covers the public RAG API. Retrieval and citations respect the current identity, the token's project scope and document permissions.
@@ -167,7 +169,7 @@ Once the services are ready, open [http://127.0.0.1:3000/setup](http://127.0.0.1
 
 The defaults pull `ghcr.io/feronavi/feronavi-app:0.2.0` and `ghcr.io/feronavi/feronavi-db:16-0.2.0`. This release's prebuilt images support and have been validated on **Linux x86-64 (amd64)**. Other architectures have not completed validation.
 
-For production, put the instance behind an HTTPS reverse proxy. Before upgrading an existing instance, back up the database and data volume and review the database image's migration requirements.
+Before opening access to your team, follow the [production deployment guide](https://feronavi.com/en/docs/deployment/) to configure an HTTPS reverse proxy. Before upgrading an existing instance, follow the [backup and upgrade guide](https://feronavi.com/en/docs/operations/) to back up the database and data volume and review the database image's migration requirements. See [quick start](https://feronavi.com/en/docs/quick-start/) for first access to a remote server and startup troubleshooting.
 
 <details>
 <summary>Build from source</summary>
@@ -188,19 +190,29 @@ The first build compiles database extensions and can take some time. For an exis
 For your first project, start here:
 
 1. Create a project, invite teammates and break your first requirement into work items.
-2. Publish a project document, follow the [RAG setup instructions](#rag-integration) to complete indexing, and ask the assistant a question that needs a cited source.
-3. Create an API token, follow the [MCP setup guide](packages/feronavi-mcp/README.md) to connect an agent, and ask it to review progress and suggest the next step.
+2. Publish a project document, follow the [knowledge assistant guide](https://feronavi.com/en/docs/assistant/) to configure models and complete indexing, and ask the assistant a question that needs a cited source.
+3. Create an API token, follow the [MCP setup guide](https://feronavi.com/en/docs/mcp/) to connect an agent, and ask it to review progress and suggest the next step.
 
 <a id="documentation"></a>
 
 ## Integration and help
 
+The [documentation](https://feronavi.com/en/docs/overview/) covers installation, everyday collaboration, agent access and operations. Start with the guide for your current task:
+
 | I want to… | Start here |
 | --- | --- |
-| **Deploy and operate** | [Installation and first-run setup](#get-started) |
-| **Connect an agent** | [MCP client configuration and access](packages/feronavi-mcp/README.md) |
-| **Integrate knowledge and chat** | [Model setup, RAG tools and public APIs](#rag-integration) |
+| **Install a new instance** | [Quick start and first-run setup](https://feronavi.com/en/docs/quick-start/) |
+| **Open access to my team** | [Production deployment and reverse proxies](https://feronavi.com/en/docs/deployment/) |
+| **Manage projects and tasks** | [Projects and plans](https://feronavi.com/en/docs/projects/) · [Work items and views](https://feronavi.com/en/docs/work-items/) |
+| **Write and collaborate on documents** | [Project documents](https://feronavi.com/en/docs/documents/) |
+| **Connect an agent** | [MCP client configuration and access](https://feronavi.com/en/docs/mcp/) |
+| **Use the knowledge assistant** | [Model setup, retrieval and conversations](https://feronavi.com/en/docs/assistant/) |
+| **Manage members and permissions** | [Permissions and identity](https://feronavi.com/en/docs/permissions/) |
+| **Back up or upgrade an instance** | [Backups, migration and upgrades](https://feronavi.com/en/docs/operations/) |
+| **Troubleshoot a problem** | [Frequently asked questions](https://feronavi.com/en/docs/faq/) |
 | **Report a security issue** | [Security reporting instructions](SECURITY.md) |
+
+For application integrations, see [RAG tools and public APIs](#rag-integration) and the [MCP stdio bridge package reference](packages/feronavi-mcp/README.md).
 
 <a id="more-views"></a>
 
@@ -220,6 +232,24 @@ For your first project, start here:
 Screenshots use fictional teams and business data in a dedicated demo environment. Transparent backgrounds and custom, unbranded frames accompany the main screenshots, which follow your light or dark reading theme.
 
 </details>
+
+<a id="acknowledgments"></a>
+
+## Acknowledgments
+
+Thanks to the following supporters for providing model API access and usage credits during Feronavi's development.
+
+### Sponsorship
+
+- [Xlinks](https://api.xlinks.site/)
+
+### LINUX DO community support
+
+- [Agent Router](https://agentrouter.org/)
+- [Any Router](https://anyrouter.top/)
+- [千刀佬](https://linux.do/u/andrew-hh)
+
+*Listed in no particular order.*
 
 <a id="feedback"></a>
 
