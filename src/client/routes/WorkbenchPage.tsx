@@ -24,33 +24,11 @@ import { Panel } from "../components/ui/Panel.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { LoadingBlock, StateBlock } from "../components/ui/StateBlock.tsx";
 import { WorkItemDrawer } from "../components/work-item/DeferredWorkItemDrawer.tsx";
-
-const PRIORITY_LABEL: Record<string, string> = {
-  // 复用优先级词典（已核对 zh 值与原字面完全一致，不是"看起来差不多"就复用）
-  LOWEST: "prio.LOWEST", LOW: "prio.LOW", MEDIUM: "prio.MEDIUM", HIGH: "prio.HIGH", URGENT: "prio.URGENT",
-};
+import { WorkbenchItemRow } from "../components/work-item/WorkbenchItemRow.tsx";
+import { WORKBENCH_GROUP_LABELS } from "../../shared/workbench.ts";
 
 function localDateKey(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function ItemRow({ it, onOpen }: { it: { id: string; key: string; title: string; priority: string | null; dueDate: string | null; projectKey: string }; onOpen: (id: string) => void }) {
-  const today = localDateKey();
-  const overdue = it.dueDate !== null && it.dueDate < today;
-  return (
-    <div className="workbench-item-row" style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--border)", fontSize: "var(--text-sm)" }}>
-      <span className="mono muted" style={{ fontSize: "var(--text-xs)", flex: "none" }}>{it.key}</span>
-      <button type="button" className="row-link" onClick={() => onOpen(it.id)}
-        style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", border: 0, padding: 0, background: "transparent", textAlign: "left", cursor: "pointer" }}>{it.title}</button>
-      {it.priority && <span className="muted" style={{ fontSize: "var(--text-xs)" }}>{tr(PRIORITY_LABEL[it.priority] ?? it.priority)}</span>}
-      {/* 逾期：图标 + 文字，不只靠颜色 */}
-      {overdue ? (
-        <span style={{ color: "var(--danger)", fontSize: "var(--text-xs)", flex: "none", display: "inline-flex", alignItems: "center", gap: 4 }} title={tr("workbench.overdueTag")}><Icon name="info" size={12} />{tr("workbench.overdue")}</span>
-      ) : it.dueDate ? (
-        <span className="muted" style={{ fontSize: "var(--text-xs)", flex: "none" }}>{it.dueDate}</span>
-      ) : null}
-    </div>
-  );
 }
 
 export function WorkbenchPage() {
@@ -60,7 +38,6 @@ export function WorkbenchPage() {
   const [newTitle, setNewTitle] = useState("");
   const [newDue, setNewDue] = useState("");
   const [openItemId, setOpenItemId] = useState<string | null>(null);
-  const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
 
   const { data, isLoading, isError, error: loadError, refetch } = useQuery({ queryKey: queryKeys.workbench(), queryFn: workbench });
   const todoQ = useQuery({ queryKey: ["todos"], queryFn: () => todos.list() });
@@ -173,7 +150,7 @@ export function WorkbenchPage() {
                       </span>
                       <small>{item.projectKey} · {item.dueDate ? item.dueDate.slice(5) : tr("workbench.noDueDate")}</small>
                     </span>
-                    <span className="workbench-attention-priority" data-priority={item.priority}>{item.priority ? tr(PRIORITY_LABEL[item.priority] ?? item.priority) : "—"}</span>
+                    <span className="workbench-attention-priority" data-priority={item.priority}>{item.priority ? tr(`prio.${item.priority}`) : "—"}</span>
                     <span className="workbench-attention-arrow" aria-hidden="true"><Icon name="chevron-right" size={14} /></span>
                     </button>
                   </li>
@@ -256,7 +233,7 @@ export function WorkbenchPage() {
             {todoQ.isSuccess && (todoQ.data ?? []).length === 0 && <p className="muted" style={{ fontSize: "var(--text-sm)" }}>{tr("workbench.empty")}</p>}
             {(todoQ.data ?? []).map((todo) => (
               <div key={todo.id} className="workbench-todo-row" style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
-                <Checkbox checked={todo.done} disabled={toggleTodo.isPending} onChange={() => toggleTodo.mutate(todo)} ariaLabel={todo.title} size="sm" />
+                <Checkbox checked={todo.done} disabled={toggleTodo.isPending} onChange={() => toggleTodo.mutate(todo)} ariaLabel={todo.title} />
                 <span className="workbench-todo-title" style={{ flex: 1, fontSize: "var(--text-sm)", textDecoration: todo.done ? "line-through" : "none", color: todo.done ? "var(--text-faint)" : "var(--text)" }}>{todo.title}</span>
                 {todo.dueDate && <span className="muted workbench-todo-due" style={{ fontSize: "var(--text-xs)" }}>{todo.dueDate}</span>}
                 <Tooltip content={tr("workbench.deleteTodo")}>{(trigger) => (
@@ -323,15 +300,15 @@ export function WorkbenchPage() {
       <div className="workbench-groups-grid">
           {groups.map((g) => (
             <div key={g.key} className="card panel" style={{ padding: 15 }}>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 8 }} aria-label={`${g.name}，共 ${g.count} 条`}>
-                <span style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>{g.name}</span>
-                <span className="muted" style={{ fontSize: "var(--text-xs)" }}>（{g.count}）</span>
+              <div className="panel-title workbench-group-head">
+                <div className="workbench-group-title">
+                  <strong>{tr(WORKBENCH_GROUP_LABELS[g.key])}</strong>
+                  <span className="muted" style={{ fontSize: "var(--text-xs)" }}>（{g.count}）</span>
+                </div>
+                <ArrowLink to="/workbench/$group" params={{ group: g.key }} aria-label={tr("workbench.viewAllGroup", { group: tr(WORKBENCH_GROUP_LABELS[g.key]) })}>{tr("po.viewAll")}</ArrowLink>
               </div>
               {g.count === 0 && <p className="muted" style={{ fontSize: "var(--text-sm)", margin: 0 }}>{tr("workbench.none")}</p>}
-              {(expandedGroups.includes(g.key) ? g.items : g.items.slice(0, 8)).map((it) => <ItemRow key={it.id} it={it} onOpen={setOpenItemId} />)}
-              {g.items.length > 8 && <Button size="sm" variant="ghost" onClick={() => setExpandedGroups((keys) => keys.includes(g.key) ? keys.filter((key) => key !== g.key) : [...keys, g.key])}>
-                {expandedGroups.includes(g.key) ? tr("workbench.showLess") : tr("workbench.showMore", { n: g.items.length - 8 })}
-              </Button>}
+              {g.items.slice(0, 8).map((it) => <WorkbenchItemRow key={it.id} item={it} onOpen={setOpenItemId} />)}
             </div>
           ))}
       </div>

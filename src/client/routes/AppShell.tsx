@@ -16,7 +16,7 @@ import { createPortal } from "react-dom";
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ActorContext, useActorQuery } from "../lib/actor.ts";
-import { apiGet, apiPost, ApiError } from "../lib/api.ts";
+import { apiGet, apiPost, ApiError, onSessionExpired } from "../lib/api.ts";
 import { NotificationBell } from "./NotificationBell.tsx";
 import { PresenceAvatars } from "../components/PresenceAvatars.tsx";
 import { useDocumentTitle, useOrg } from "../lib/useOrg.ts";
@@ -48,6 +48,18 @@ export function AppShell() {
   const queryClient = useQueryClient();
   const location = useRouterState({ select: (s) => s.location });
   const pathname = location.pathname;
+  const sessionLocation = useRef(location);
+  sessionLocation.current = location;
+  const sessionEnding = useRef(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  useEffect(() => onSessionExpired(() => {
+    const currentLocation = sessionLocation.current;
+    if (sessionEnding.current || currentLocation.pathname === "/login") return;
+    sessionEnding.current = true;
+    setSessionExpired(true);
+    queryClient.clear();
+    void navigate({ to: "/login", search: { returnTo: currentLocation.href }, replace: true, ignoreBlocker: true });
+  }), [queryClient, navigate]);
   // 从 /projects/<id>/... 里取出当前项目 id，供侧栏显示项目内入口
   // 允许项目概览页 `/projects/:id`（没有尾斜杠）也识别为当前项目 —— 此前只匹配 `/projects/:id/...`，
   // 导致项目概览页页脚仍显示「全部项目」、侧栏不出现当前项目导航（真实验收发现）。
@@ -346,6 +358,7 @@ export function AppShell() {
     }
   }, [pathname]);
 
+  if (sessionExpired) return null;
   if (isLoading) return <ShellLoading />;
   if (!actor) return null;
 

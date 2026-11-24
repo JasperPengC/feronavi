@@ -13,6 +13,7 @@ import { todo, project, workflowState } from "../../db/schema.ts";
 import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import { publishWorkspaceInvalidation } from "./workspace-events.service.ts";
+import { WORKBENCH_GROUP_KEYS, type WorkbenchGroupKey } from "../../shared/workbench.ts";
 
 function hasOrgGrant(actor: Actor): boolean {
   return actor.grants.some((g) => g.scopeType === "ORG");
@@ -27,59 +28,40 @@ function scopeCond(actor: Actor) {
 }
 
 export interface WorkbenchGroup {
-  key: string;
+  key: WorkbenchGroupKey;
   name: string;
   items: Record<string, unknown>[];
   count: number;
 }
 
+/** 总览与完整列表共用筛选口径；总数始终覆盖所有匹配工作项。 */
+export async function workbenchGroup(actor: Actor, key: WorkbenchGroupKey, options: { page?: number; pageSize?: number } = {}) {
+  const tz = actor.timezone ?? "Asia/Shanghai";
+  const page = Math.max(1, Math.trunc(options.page ?? 1));
+  const pageSize = Math.max(1, Math.min(100, Math.trunc(options.pageSize ?? 50)));
+  const filter = key === "assignedToMe" ? sql`w.assignee_id = ${actor.memberId}`
+    : key === "createdByMe" ? sql`w.reporter_id = ${actor.memberId}`
+    : key === "overdue" ? sql`w.due_date < (now() at time zone ${tz})::date`
+    : sql`w.due_date >= (now() at time zone ${tz})::date and w.due_date <= ((now() at time zone ${tz})::date + 7)`;
+  const where = sql`w.deleted_at is null and ${scopeCond(actor)} and ${filter}`;
+  const order = key === "overdue" || key === "dueSoon" ? sql`w.due_date asc, w.id asc` : sql`w.created_at desc, w.id desc`;
+  const [items, counts] = await Promise.all([
+    sql`select w.id, w.key, w.title, w.type, w.priority, w.due_date::text as "dueDate", w.version, p.key as "projectKey"
+        from work_item w join project p on p.id = w.project_id where ${where}
+        order by ${order} limit ${pageSize} offset ${(page - 1) * pageSize}`,
+    sql`select count(*)::int as n from work_item w join project p on p.id = w.project_id where ${where}`,
+  ]);
+  const names: Record<WorkbenchGroupKey, string> = { assignedToMe: "指派给我的", createdByMe: "我创建的", overdue: "已逾期", dueSoon: "7 天内到期" };
+  return { key, name: names[key], items: items as Record<string, unknown>[], count: Number(counts[0]?.n ?? 0), page, pageSize };
+}
+
 export async function workbench(actor: Actor) {
   const tz = actor.timezone ?? "Asia/Shanghai";
   const scope = scopeCond(actor);
-
-  // 一次取四组，避免四次往返（工作台是首屏，延迟直接可感）
-  const [assigned, created, overdue, dueSoon] = await Promise.all([
-    sql`
-      select w.id, w.key, w.title, w.type, w.priority,
-             w.due_date::text as "dueDate", w.version, p.key as "projectKey"
-      from work_item w join project p on p.id = w.project_id
-      where w.deleted_at is null and w.assignee_id = ${actor.memberId} and ${scope}
-      order by w.created_at desc limit 50
-    `,
-    sql`
-      select w.id, w.key, w.title, w.type, w.priority,
-             w.due_date::text as "dueDate", w.version, p.key as "projectKey"
-      from work_item w join project p on p.id = w.project_id
-      where w.deleted_at is null and w.reporter_id = ${actor.memberId} and ${scope}
-      order by w.created_at desc limit 50
-    `,
-    sql`
-      select w.id, w.key, w.title, w.type, w.priority,
-             w.due_date::text as "dueDate", w.version, p.key as "projectKey"
-      from work_item w join project p on p.id = w.project_id
-      where w.deleted_at is null and w.due_date is not null and ${scope}
-        and w.due_date < (now() at time zone ${tz})::date
-      order by w.due_date asc limit 50
-    `,
-    sql`
-      select w.id, w.key, w.title, w.type, w.priority,
-             w.due_date::text as "dueDate", w.version, p.key as "projectKey"
-      from work_item w join project p on p.id = w.project_id
-      where w.deleted_at is null and w.due_date is not null and ${scope}
-        and w.due_date >= (now() at time zone ${tz})::date
-        and w.due_date <= ((now() at time zone ${tz})::date + 7)
-      order by w.due_date asc limit 50
-    `,
-  ]) as unknown as Record<string, unknown>[][];
-
-  // noUncheckedIndexedAccess 下解构结果可能 undefined —— Promise.all 的长度是确定的，
-  // 这里显式兜底，避免把「不可能」当成「没可能」而靠断言糊过去。
-  const groups: WorkbenchGroup[] = [
-    { key: "assignedToMe", name: "指派给我的", items: assigned ?? [], count: (assigned ?? []).length },
-    { key: "createdByMe", name: "我创建的", items: created ?? [], count: (created ?? []).length },
-    { key: "overdue", name: "已逾期", items: overdue ?? [], count: (overdue ?? []).length },
-    { key: "dueSoon", name: "7 天内到期", items: dueSoon ?? [], count: (dueSoon ?? []).length },
-  ];
+  const groups: WorkbenchGroup[] = await Promise.all(WORKBENCH_GROUP_KEYS.map(async (key) => {
+    const group = await workbenchGroup(actor, key, { pageSize: 8 });
+    return { key: group.key, name: group.name, items: group.items, count: group.count };
+  }));
 
   // ── 跨域聚合（Round 68 对标 YouQu 工作台：缺陷/里程碑）────────────────
   // 口径全部来自真实数据；关闭态同时覆盖通用流 DONE/CANCELLED 与缺陷流 TERMINAL。

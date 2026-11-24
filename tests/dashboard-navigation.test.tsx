@@ -151,7 +151,7 @@ describe("工作台工作项入口", () => {
       return commonResponse(path) ?? json({}, 404);
     }));
     const { router } = renderAt("/workbench");
-    await screen.findByText("指派给我的", { selector: ".workbench-groups-grid span" });
+    await screen.findByText("指派给我的", { selector: ".workbench-group-title strong" });
     const area = within(document.querySelector(selector) as HTMLElement);
     fireEvent.click(area.getByRole("button", { name: ITEM.title }));
     const dialog = await screen.findByRole("dialog", { name: ITEM.key });

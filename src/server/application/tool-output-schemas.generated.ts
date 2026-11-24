@@ -11344,7 +11344,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "type": "object",
       "properties": {
         "key": {
-          "type": "string"
+          "type": "string",
+          "enum": [
+            "assignedToMe",
+            "createdByMe",
+            "overdue",
+            "dueSoon"
+          ]
         },
         "name": {
           "type": "string"

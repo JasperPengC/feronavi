@@ -5,6 +5,7 @@ import { apiGet, ApiError } from "./lib/api.ts";
 import { authNavigationSearch } from "./lib/auth-navigation.ts";
 import { RouteLoadError, RoutePending } from "./components/RouteFeedback.tsx";
 import { useCustomScrollbars } from "./lib/useCustomScrollbars.ts";
+import { WORKBENCH_GROUP_KEYS, type WorkbenchGroupKey } from "../shared/workbench.ts";
 
 const SetupPage = lazyRouteComponent(() => import("./routes/SetupPage.tsx"), "SetupPage");
 const LoginPage = lazyRouteComponent(() => import("./routes/LoginPage.tsx"), "LoginPage");
@@ -23,6 +24,7 @@ const MilestoneDetailPage = lazyRouteComponent(() => import("./routes/MilestoneD
 const CalendarPage = lazyRouteComponent(() => import("./routes/CalendarPage.tsx"), "CalendarPage");
 const TimelinePage = lazyRouteComponent(() => import("./routes/TimelinePage.tsx"), "TimelinePage");
 const WorkbenchPage = lazyRouteComponent(() => import("./routes/WorkbenchPage.tsx"), "WorkbenchPage");
+const WorkbenchGroupPage = lazyRouteComponent(() => import("./routes/WorkbenchGroupPage.tsx"), "WorkbenchGroupPage");
 const AssistantPage = lazyRouteComponent(() => import("./routes/AssistantPage.tsx"), "AssistantPage");
 const TableViewPage = lazyRouteComponent(() => import("./routes/TableViewPage.tsx"), "TableViewPage");
 const WorkflowConfigPage = lazyRouteComponent(() => import("./routes/WorkflowConfigPage.tsx"), "WorkflowConfigPage");
@@ -307,6 +309,19 @@ const workbenchRoute = createRoute({
   component: WorkbenchPage,
 });
 
+const workbenchGroupRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/workbench/$group",
+  beforeLoad: ({ params }) => {
+    if (!WORKBENCH_GROUP_KEYS.includes(params.group as WorkbenchGroupKey)) throw redirect({ to: "/workbench", replace: true });
+  },
+  validateSearch: (search: Record<string, unknown>): { page?: number } => {
+    const page = Number(search.page);
+    return { page: Number.isInteger(page) && page >= 1 && page <= 1_000_000 ? page : undefined };
+  },
+  component: WorkbenchGroupPage,
+});
+
 const assistantRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/assistant",
@@ -322,7 +337,7 @@ const publicIntakeRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute, setupRoute, loginRoute, changePasswordRoute, resetRoute, inviteRoute, publicIntakeRoute,
-  appRoute.addChildren([membersRoute, organizationAdminRoute, roleAdminRoute, changelogRoute, projectsRoute, projectOverviewRoute, issuesRoute, globalIssuesRoute, boardRoute, milestonesRoute, milestoneDetailRoute, calendarRoute, timelineRoute, tableRoute, workflowConfigRoute, projectAutomationRoute, wikiRoute, ideasRoute, insightRoute, activityRoute, importRoute, customFieldsRoute, adminAuditRoute, tokensRoute, systemRoute, settingsRoute, settingsPersonalRoute, settingsIntegrationsRoute, settingsInstanceRoute, portfoliosRoute, portfolioDetailRoute, focusRoute, announcementsRoute, intakeRoute, notificationsRoute, workbenchRoute, assistantRoute]),
+  appRoute.addChildren([membersRoute, organizationAdminRoute, roleAdminRoute, changelogRoute, projectsRoute, projectOverviewRoute, issuesRoute, globalIssuesRoute, boardRoute, milestonesRoute, milestoneDetailRoute, calendarRoute, timelineRoute, tableRoute, workflowConfigRoute, projectAutomationRoute, wikiRoute, ideasRoute, insightRoute, activityRoute, importRoute, customFieldsRoute, adminAuditRoute, tokensRoute, systemRoute, settingsRoute, settingsPersonalRoute, settingsIntegrationsRoute, settingsInstanceRoute, portfoliosRoute, portfolioDetailRoute, focusRoute, announcementsRoute, intakeRoute, notificationsRoute, workbenchRoute, workbenchGroupRoute, assistantRoute]),
 ]);
 
 /**

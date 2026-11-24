@@ -4,6 +4,7 @@
  * 纯数据层：路径 + i18n 键（不存翻译后的文案，切语言不脏）；只有最后一个页签不可关闭，最多 10 个。
  * 会话级持久化用 sessionStorage：刷新保留、关标签页清空，不跨登录共享。
  */
+import { WORKBENCH_GROUP_KEYS, WORKBENCH_GROUP_LABELS, type WorkbenchGroupKey } from "../../shared/workbench.ts";
 export interface WorkspaceTab {
   path: string;
   /** i18n 键（如 nav.projects / po.overview） */
@@ -31,6 +32,7 @@ const PLAIN: Record<string, string> = {
 export function tabLabelKey(pathname: string): string {
   const seg = pathname.split("/").filter(Boolean);
   if (seg.length === 0) return "nav.overview";
+  if (seg[0] === "workbench" && WORKBENCH_GROUP_KEYS.includes(seg[1] as WorkbenchGroupKey)) return WORKBENCH_GROUP_LABELS[seg[1] as WorkbenchGroupKey];
   if (seg[0] === "projects") {
     if (seg.length === 1) return "nav.projects";
     if (seg.length >= 3 && seg[2] === "milestones" && seg[3]) return "md.title";

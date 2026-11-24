@@ -1,5 +1,6 @@
 /** 第二期前端的 API 封装（计划实体 / 日历 / 时间线 / 工作台 / 待办） */
 import { apiGet, apiPost, apiPatch, apiDelete } from "./api.ts";
+import type { WorkbenchGroupKey } from "../../shared/workbench.ts";
 
 export interface PlanEntity {
   id: string;
@@ -66,8 +67,12 @@ export interface WorkbenchCrossDomain {
   milestones: { overdue: number; dueSoon: number; items: { id: string; name: string; dueDate: string; projectId: string; projectKey: string }[] };
 }
 export const workbench = () =>
-  apiGet<{ groups: { key: string; name: string; items: WorkbenchItem[]; count: number }[]; total: number; crossDomain: WorkbenchCrossDomain }>(
+  apiGet<{ groups: { key: WorkbenchGroupKey; name: string; items: WorkbenchItem[]; count: number }[]; total: number; crossDomain: WorkbenchCrossDomain }>(
     "/api/v1/workbench");
+
+export const workbenchGroup = (key: WorkbenchGroupKey, page = 1) =>
+  apiGet<{ key: WorkbenchGroupKey; name: string; items: WorkbenchItem[]; count: number; page: number; pageSize: number }>(
+    `/api/v1/workbench/groups/${key}`, { page, pageSize: 50 });
 
 export interface Todo { id: string; title: string; dueDate: string | null; done: boolean; doneAt: string | null }
 

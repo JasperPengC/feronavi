@@ -19,6 +19,19 @@ export interface PlatformChangelogEntry {
 
 export const PLATFORM_CHANGELOG: PlatformChangelogEntry[] = [
   {
+    version: "v0.2.1",
+    date: "2026-11-24",
+    title: "工作台列表与登录体验修复",
+    kind: "fix",
+    summary: "工作台分组支持完整列表与分页，修复登录失效跳转，统一页脚对齐和个人待办样式。",
+    highlights: [
+      "四个分组的「查看全部」进入独立列表，显示真实总数并支持分页",
+      "登录失效后自动跳转登录页，重新登录后返回原页面",
+      "切换账号时清理业务缓存，防止旧请求回填上一账号的数据",
+      "页脚左边与主体卡片对齐，个人待办悬浮只变色并使用统一复选框组件",
+    ],
+  },
+  {
     version: "v0.2.0",
     date: "2026-11-20",
     title: "多人协作，与 Agent 一起推进项目",

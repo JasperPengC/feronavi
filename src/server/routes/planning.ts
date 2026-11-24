@@ -9,6 +9,7 @@ import {
   createSavedViewSchema, completeIterationSchema,
 } from "../../shared/schemas/planning.ts";
 import type { Actor } from "../permission/actor.ts";
+import { WORKBENCH_GROUP_KEYS } from "../../shared/workbench.ts";
 
 declare module "fastify" {
   interface FastifyRequest { actor?: Actor }
@@ -228,6 +229,17 @@ app.get("/api/v1/workbench", async (req) => {
   const actor = actorOf(req);
   const { workbench: svc } = await import("../services/workbench.service.ts");
   return svc(actor);
+});
+
+app.get("/api/v1/workbench/groups/:key", async (req) => {
+  const actor = actorOf(req);
+  const { key } = z.object({ key: z.enum(WORKBENCH_GROUP_KEYS) }).parse(req.params);
+  const query = z.object({
+    page: z.coerce.number().int().min(1).max(1_000_000).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(50),
+  }).parse(req.query);
+  const { workbenchGroup } = await import("../services/workbench.service.ts");
+  return workbenchGroup(actor, key, query);
 });
 
 app.get("/api/v1/todos", async (req) => {

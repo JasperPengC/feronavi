@@ -155,7 +155,7 @@ With Docker Compose installed, download the Compose file and start a new instanc
 
 ```bash
 mkdir feronavi && cd feronavi
-curl -fL https://raw.githubusercontent.com/JasperPengC/feronavi/v0.2.0/compose.yaml -o compose.yaml
+curl -fL https://raw.githubusercontent.com/JasperPengC/feronavi/v0.2.1/compose.yaml -o compose.yaml
 
 # First installation: create a local database password
 (umask 077; test -e .env || echo "DB_PASSWORD=$(openssl rand -hex 24)" > .env)
@@ -167,7 +167,7 @@ docker compose ps
 
 Once the services are ready, open [http://127.0.0.1:3000/setup](http://127.0.0.1:3000/setup) to create your organization and administrator.
 
-The defaults pull `ghcr.io/feronavi/feronavi-app:0.2.0` and `ghcr.io/feronavi/feronavi-db:16-0.2.0`. This release's prebuilt images support and have been validated on **Linux x86-64 (amd64)**. Other architectures have not completed validation.
+The defaults pull `ghcr.io/feronavi/feronavi-app:0.2.1` and `ghcr.io/feronavi/feronavi-db:16-0.2.0`. This release's prebuilt images support and have been validated on **Linux x86-64 (amd64)**. Other architectures have not completed validation.
 
 Before opening access to your team, follow the [production deployment guide](https://feronavi.com/en/docs/deployment/) to configure an HTTPS reverse proxy. Before upgrading an existing instance, follow the [backup and upgrade guide](https://feronavi.com/en/docs/operations/) to back up the database and data volume and review the database image's migration requirements. See [quick start](https://feronavi.com/en/docs/quick-start/) for first access to a remote server and startup troubleshooting.
 
@@ -177,7 +177,7 @@ Before opening access to your team, follow the [production deployment guide](htt
 To modify the source, clone this release into a separate directory and build it:
 
 ```bash
-git clone --branch v0.2.0 --depth 1 https://github.com/JasperPengC/feronavi.git feronavi-source
+git clone --branch v0.2.1 --depth 1 https://github.com/JasperPengC/feronavi.git feronavi-source
 cd feronavi-source
 (umask 077; test -e .env || echo "DB_PASSWORD=$(openssl rand -hex 24)" > .env)
 docker compose -f compose.yaml -f compose.source.yaml up -d --build --wait
@@ -250,6 +250,10 @@ Thanks to the following supporters for providing model API access and usage cred
 - [千刀佬](https://linux.do/u/andrew-hh)
 
 *Listed in no particular order.*
+
+## Community
+
+This project is shared in the [LINUX DO](https://linux.do) community.
 
 <a id="feedback"></a>
 

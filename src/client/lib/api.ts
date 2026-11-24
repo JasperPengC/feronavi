@@ -60,15 +60,56 @@ function isCsrfError(status: number, body: unknown): boolean {
 
 const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
+const sessionExpiredListeners = new Set<() => void>();
+let sessionGeneration = 0;
+let sessionCheck: { generation: number; promise: Promise<boolean> } | undefined;
+const SESSION_WRITES = new Set(["/api/v1/auth/login", "/api/v1/auth/ldap/login", "/api/v1/auth/logout", "/api/v1/auth/logout-all", "/api/v1/auth/password/change"]);
+
+/** 应用壳统一结束失效会话；API 层继续保留原始错误供调用方处理。 */
+export function onSessionExpired(listener: () => void): () => void {
+  sessionExpiredListeners.add(listener);
+  return () => { sessionExpiredListeners.delete(listener); };
+}
+
+async function checkSessionFailure(url: URL, status: number, generation: number): Promise<void> {
+  if (generation !== sessionGeneration || !sessionExpiredListeners.size || (status !== 401 && status !== 403)) return;
+  let expired = url.pathname === "/api/v1/auth/me";
+  if (!expired) {
+    // 未登录、权限不足与凭据错误可能共用状态码；复核身份，避免误退出有效会话。
+    if (!sessionCheck || sessionCheck.generation !== generation) {
+      const check = { generation, promise: fetch(new URL("/api/v1/auth/me", window.location.origin), {
+        credentials: "same-origin", headers: { accept: "application/json" },
+      }).then((response) => response.status === 401 || response.status === 403).catch(() => false) };
+      sessionCheck = check;
+      void check.promise.finally(() => { if (sessionCheck === check) sessionCheck = undefined; });
+    }
+    expired = await sessionCheck.promise;
+  }
+  if (expired && generation === sessionGeneration) {
+    sessionGeneration += 1;
+    sessionExpiredListeners.forEach((listener) => listener());
+  }
+}
+
 /** JSON 和 multipart 共用同一次数限制、CSRF 恢复与错误转换。 */
 async function request<T>(url: URL, init: RequestInit, failureLabel = "请求失败", raw = false): Promise<T> {
+  const generation = sessionGeneration;
+  const changesSession = init.method === "POST" && SESSION_WRITES.has(url.pathname);
+  const assertCurrentSession = () => {
+    if (!changesSession && generation !== sessionGeneration) throw new DOMException("会话已结束", "AbortError");
+  };
   const headers = new Headers(init.headers);
   const write = WRITE_METHODS.has(init.method ?? "GET");
   const token = write ? readCookie("csrf_token") : null;
   if (token) headers.set("x-csrf-token", token);
 
   for (let attempt = 0; ; attempt += 1) {
+    assertCurrentSession();
     const response = await fetch(url, { ...init, headers, credentials: "same-origin" });
+    if (response.ok) {
+      assertCurrentSession();
+      if (changesSession) sessionGeneration += 1;
+    }
     if (raw && response.ok) return response as T;
     if (response.status === 204) return undefined as T;
     let payload: unknown;
@@ -81,6 +122,7 @@ async function request<T>(url: URL, init: RequestInit, failureLabel = "请求失
       }
     }
     if (!response.ok) {
+      await checkSessionFailure(url, response.status, generation);
       const body = (payload && typeof payload === "object" ? payload : {}) as Partial<ApiErrorBody>;
       throw new ApiError(response.status, {
         code: body.code ?? "INTERNAL",
@@ -88,6 +130,8 @@ async function request<T>(url: URL, init: RequestInit, failureLabel = "请求失
         details: body.details ?? null,
       });
     }
+    // Mutation 清缓存后仍会执行 onSuccess；不把旧账号响应交给这些回调。
+    assertCurrentSession();
     return payload as T;
   }
 }

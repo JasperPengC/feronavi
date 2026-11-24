@@ -112,7 +112,8 @@ export function LoginPage() {
       } else {
         await apiPost("/api/v1/auth/login", { username, password, remember, totpCode: totpCode || undefined });
       }
-      await qc.invalidateQueries({ queryKey: ["actor"] });
+      // 成功登录可能换成另一账号；清空旧业务缓存并取消旧查询后再获取身份。
+      qc.clear();
       const me = await qc.fetchQuery({
         queryKey: ["actor"],
         queryFn: () => apiGet<Actor>("/api/v1/auth/me"),

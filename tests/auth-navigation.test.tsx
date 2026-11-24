@@ -8,6 +8,8 @@ import { authNavigationSearch } from "../src/client/lib/auth-navigation.ts";
 import { ChangePasswordPage } from "../src/client/routes/ChangePasswordPage.tsx";
 import { setLocale, t } from "../src/client/i18n/index.ts";
 import type { Actor } from "../src/client/lib/actor.ts";
+import { apiGet, apiPost, apiStreamPost, apiUpload } from "../src/client/lib/api.ts";
+import { DraftNavigationGuard } from "../src/client/components/ui/DraftNavigationGuard.tsx";
 
 const projectId = "11111111-1111-1111-1111-111111111111";
 const actor: Actor = {
@@ -20,13 +22,14 @@ const json = (value: unknown, status = 200) => new Response(JSON.stringify(value
   status, headers: { "content-type": "application/json" },
 });
 
-function renderAuth(path: string, options: { signedIn?: boolean; mustChangePassword?: boolean; rejectLogin?: boolean; rejectLogout?: boolean } = {}) {
-  const state = { signedIn: false, mustChangePassword: false, rejectLogin: false, rejectLogout: false, ...options };
+function renderAuth(path: string, options: { signedIn?: boolean; mustChangePassword?: boolean; rejectLogin?: boolean; rejectLogout?: boolean; sessionStatus?: number; guard?: "dirty" | "saving"; loginMemberId?: string } = {}) {
+  const state = { signedIn: false, mustChangePassword: false, rejectLogin: false, rejectLogout: false, sessionStatus: 403, memberId: actor.memberId, loginMemberId: actor.memberId, ...options };
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const pathname = new URL(String(input), "http://localhost").pathname;
     if (pathname === "/api/v1/auth/login") {
       if (state.rejectLogin) return json({ code: "UNAUTHORIZED", message: "用户名或密码错误" }, 401);
       state.signedIn = true;
+      state.memberId = state.loginMemberId;
       return json({ ok: true });
     }
     if (pathname === "/api/v1/auth/password/change" && init?.method === "POST") {
@@ -40,8 +43,11 @@ function renderAuth(path: string, options: { signedIn?: boolean; mustChangePassw
       return json({ ok: true });
     }
     if (pathname === "/api/v1/auth/me") return state.signedIn
-      ? json({ ...actor, mustChangePassword: state.mustChangePassword })
+      ? json({ ...actor, memberId: state.memberId, mustChangePassword: state.mustChangePassword })
       : json({ code: "UNAUTHORIZED", message: "请先登录" }, 401);
+    if (pathname === "/api/v1/private-page" || pathname === "/api/v1/auth/2fa/setup") return state.signedIn
+      ? json({ code: "FORBIDDEN", message: "无权访问该资源" }, 403)
+      : json({ code: "FORBIDDEN", message: "未登录或会话已失效" }, state.sessionStatus);
     if (pathname === "/api/v1/organization") return json({ name: "测试组织" });
     if (pathname === "/api/v1/setup/state") return json({ initialized: true, passwordResetEnabled: false });
     if (pathname.endsWith("/providers")) return json({ providers: [] });
@@ -57,7 +63,7 @@ function renderAuth(path: string, options: { signedIn?: boolean; mustChangePassw
   const changePassword = createRoute({ getParentRoute: () => root, path: "/change-password", component: ChangePasswordPage, validateSearch: authNavigationSearch });
   const app = createRoute({ getParentRoute: () => root, id: "_app", component: AppShell });
   const destinations = ["/projects", "/projects/$projectId/wiki", "/projects/$projectId/table"].map((route) =>
-    createRoute({ getParentRoute: () => app, path: route, component: () => <p>目标页面</p> }),
+    createRoute({ getParentRoute: () => app, path: route, component: () => <><DraftNavigationGuard dirty={state.guard === "dirty"} saving={state.guard === "saving"} message="尚有未保存的内容" /><p>目标页面</p></> }),
   );
   const router = createRouter({ routeTree: root.addChildren([login, changePassword, app.addChildren(destinations)]),
     history: createMemoryHistory({ initialEntries: [path] }) });
@@ -87,6 +93,127 @@ afterEach(() => {
 });
 
 describe("登录返回原页面", () => {
+  it("已登录账号直接进入登录页切换账号后清除原账号缓存", async () => {
+    const { client, router } = renderAuth("/projects", { signedIn: true, loginMemberId: "second-account" });
+    await screen.findByText("目标页面");
+    client.setQueryData(["private-page-data"], { content: "原账号正文" });
+    await router.navigate({ to: "/login" });
+    await screen.findByRole("heading", { name: "登录" });
+    await signIn();
+    await screen.findByText("目标页面");
+    expect(client.getQueryData(["actor"])).toMatchObject({ memberId: "second-account" });
+    expect(client.getQueryData(["private-page-data"])).toBeUndefined();
+  });
+
+  it.each([
+    { transition: "logout", pendingBody: false }, { transition: "expired", pendingBody: false },
+    { transition: "expired", pendingBody: true },
+  ])("$transition 后旧发布请求（pendingBody=$pendingBody）的成功回调不会回填新会话缓存", async ({ transition, pendingBody }) => {
+    const { client, state, fetchMock } = renderAuth("/projects", { signedIn: true });
+    await screen.findByText("目标页面");
+    let finishOldRequest!: (response: Response) => void;
+    const response = new Promise<Response>((resolve) => { finishOldRequest = resolve; });
+    let finishBody!: (payload: unknown) => void;
+    const body = new Promise<unknown>((resolve) => { finishBody = resolve; });
+    const oldResponse = json({ content: "旧账号私有正文" });
+    const parseBody = vi.spyOn(oldResponse, "json").mockImplementation(() => body);
+    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
+      new URL(String(input)).pathname === "/api/v1/pages/old-private-page" ? response : fetchMock(input, init));
+    const cacheKey = ["page", "old-private-page"];
+    const onSuccess = vi.fn((data: unknown) => { client.setQueryData(cacheKey, data); });
+    const mutation = client.getMutationCache().build(client, {
+      mutationFn: () => apiPost("/api/v1/pages/old-private-page", { content: "旧账号私有正文" }), onSuccess,
+    });
+    const outcome = mutation.execute(undefined).then(() => null, (error: unknown) => error);
+    await waitFor(() => expect(mutation.state.status).toBe("pending"));
+    if (pendingBody) {
+      finishOldRequest(oldResponse);
+      await waitFor(() => expect(parseBody).toHaveBeenCalled());
+    }
+    if (transition === "logout") {
+      fireEvent.click(screen.getByRole("button", { name: "账户菜单" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: t("header.logout") }));
+    } else {
+      state.signedIn = false;
+      await expect(apiGet("/api/v1/private-page")).rejects.toMatchObject({ status: 403 });
+    }
+    await screen.findByRole("heading", { name: "登录" });
+    await signIn();
+    await screen.findByText("目标页面");
+    client.setQueryData(cacheKey, { content: "新会话数据" });
+    if (pendingBody) finishBody({ content: "旧账号私有正文" });
+    else finishOldRequest(json({ content: "旧账号私有正文" }));
+    expect(await outcome).toMatchObject({ name: "AbortError" });
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(client.getQueryData(cacheKey)).toEqual({ content: "新会话数据" });
+  });
+
+  it.each(["dirty", "saving"] as const)("会话过期时登录拦截能通过 %s 导航保护", async (guard) => {
+    const { router, state } = renderAuth("/projects", { signedIn: true, guard });
+    await screen.findByText("目标页面");
+    state.signedIn = false;
+    await expect(apiGet("/api/v1/private-page")).rejects.toMatchObject({ status: 403 });
+    await screen.findByRole("heading", { name: "登录" });
+    expect(router.state.location.search).toMatchObject({ returnTo: "/projects" });
+  });
+  it.each([401, 403])("旧会话迟到的 %s 不会让重新登录后的新会话退出", async (status) => {
+    const { client, fetchMock } = renderAuth("/projects", { signedIn: true });
+    await screen.findByText("目标页面");
+    let finishOldRequest!: (response: Response) => void;
+    const response = new Promise<Response>((resolve) => { finishOldRequest = resolve; });
+    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
+      new URL(String(input)).pathname === "/api/v1/late-request" ? response : fetchMock(input, init));
+    const oldRequest = apiGet("/api/v1/late-request");
+    fireEvent.click(screen.getByRole("button", { name: "账户菜单" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: t("header.logout") }));
+    await screen.findByRole("heading", { name: "登录" });
+    await signIn();
+    await screen.findByText("目标页面");
+    client.setQueryData(["new-session-data"], { title: "新会话" });
+    finishOldRequest(json({ code: "FORBIDDEN", message: "未登录或会话已失效" }, status));
+    await expect(oldRequest).rejects.toMatchObject({ status });
+    expect(screen.getByText("目标页面")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "登录" })).toBeNull();
+    expect(client.getQueryData(["new-session-data"])).toEqual({ title: "新会话" });
+  });
+
+  it.each([401, 403])("缓存身份仍有效时，业务接口 %s 会拦截失效会话并清除缓存", async (sessionStatus) => {
+    const target = `/projects/${projectId}/table?item=expired-item#details`;
+    const { router, client, state } = renderAuth(target, { signedIn: true, sessionStatus });
+    await screen.findByText("目标页面");
+    client.setQueryData(["private-page-data"], { title: "旧会话数据" });
+    state.signedIn = false;
+    await expect(apiGet("/api/v1/private-page")).rejects.toMatchObject({ status: sessionStatus });
+    await screen.findByRole("heading", { name: "登录" });
+    expect(router.state.location.search).toMatchObject({ returnTo: target });
+    expect(client.getQueryData(["private-page-data"])).toBeUndefined();
+    await signIn();
+    await screen.findByText("目标页面");
+    expect(router.state.location.href).toBe(target);
+  });
+
+  it.each(["json", "upload", "stream", "security"])("%s 写请求同样拦截失效会话", async (kind) => {
+    const { router, state } = renderAuth("/projects", { signedIn: true });
+    await screen.findByText("目标页面");
+    state.signedIn = false;
+    const request = kind === "upload" ? apiUpload("/api/v1/private-page", new FormData())
+      : kind === "stream" ? apiStreamPost("/api/v1/private-page", {})
+      : kind === "security" ? apiPost("/api/v1/auth/2fa/setup", {}) : apiPost("/api/v1/private-page", {});
+    await expect(request).rejects.toMatchObject({ status: 403 });
+    await screen.findByRole("heading", { name: "登录" });
+    expect(router.state.location.search).toMatchObject({ returnTo: "/projects" });
+  });
+
+  it("普通权限拒绝保留登录状态和页面缓存", async () => {
+    const { router, client } = renderAuth("/projects", { signedIn: true });
+    await screen.findByText("目标页面");
+    client.setQueryData(["private-page-data"], { title: "可见数据" });
+    await expect(apiGet("/api/v1/private-page")).rejects.toMatchObject({ status: 403 });
+    expect(router.state.location.pathname).toBe("/projects");
+    expect(client.getQueryData(["private-page-data"])).toEqual({ title: "可见数据" });
+    expect(screen.queryByRole("heading", { name: "登录" })).toBeNull();
+  });
+
   it("本地2FA挑战后可输入动态码并携带remember再次登录", async () => {
     const { router } = renderAuth("/login");
     let signedIn = false;
