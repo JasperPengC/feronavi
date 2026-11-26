@@ -153,13 +153,13 @@ OpenAPI 描述覆盖 RAG 公共 API。检索与引用遵循当前身份、令牌
 
 ## 开始使用
 
-本文介绍当前源码能力；0.3.0 镜像与配套 MCP 包的发布状态以[正式版本](https://github.com/JasperPengC/feronavi/releases)为准。下面的 Docker 命令固定安装已发布的 **0.2.1**；体验当前源码请使用下方的源码构建方式。
+本版安装目标为 **0.3.0**，Docker 命令固定安装该版本。使用前请确认[版本发布页](https://github.com/JasperPengC/feronavi/releases/tag/v0.3.0)已提供正式镜像、源码包及配套 MCP 桥接包。
 
 准备好 Docker Compose，下载编排文件即可启动一个新实例，无需安装 Node.js 或编译源码：
 
 ```bash
 mkdir feronavi && cd feronavi
-curl -fL https://raw.githubusercontent.com/JasperPengC/feronavi/v0.2.1/compose.yaml -o compose.yaml
+curl -fL https://raw.githubusercontent.com/JasperPengC/feronavi/v0.3.0/compose.yaml -o compose.yaml
 
 # 首次安装：生成本地数据库密码
 (umask 077; test -e .env || echo "DB_PASSWORD=$(openssl rand -hex 24)" > .env)
@@ -171,7 +171,7 @@ docker compose ps
 
 启动后打开 [http://127.0.0.1:3000/setup](http://127.0.0.1:3000/setup)，按向导创建组织和管理员。
 
-上述命令拉取应用 `ghcr.io/feronavi/feronavi-app:0.2.1` 与数据库 `ghcr.io/feronavi/feronavi-db:16-0.2.0`，可使用已发布的 `feronavi-mcp@0.1.0` 桥接包。预构建镜像已验证 **Linux x86-64（amd64）**；其他架构尚未完成验收。0.3.0 升级、备份及回退见[升级说明](UPGRADING.md)，执行前请先确认目标产物已经正式发布。
+上述命令拉取应用 `ghcr.io/feronavi/feronavi-app:0.3.0` 与数据库 `ghcr.io/feronavi/feronavi-db:16-0.2.0`，配套 MCP 桥接包为 `feronavi-mcp@0.1.1`。预构建镜像已验证 **Linux x86-64（amd64）**；其他架构尚未完成验收。0.3.0 升级、备份及回退见[升级说明](UPGRADING.md)，执行前请先确认目标产物已经正式发布。
 
 给团队开放访问前，请按[生产部署指南](https://feronavi.com/zh/docs/deployment/)配置 HTTPS 反向代理；升级已有实例前，请按[备份与升级指南](https://feronavi.com/zh/docs/operations/)备份数据库和数据卷，并核对数据库镜像的迁移要求。远程服务器的首次访问和启动排查见[快速开始](https://feronavi.com/zh/docs/quick-start/)。
 

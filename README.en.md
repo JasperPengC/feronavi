@@ -153,13 +153,13 @@ Chinese and English interfaces, light and dark themes, and email, IM, webhooks a
 
 ## Get started
 
-This README describes the current source. Check [official releases](https://github.com/JasperPengC/feronavi/releases) for the availability of the 0.3.0 images and companion MCP package. The Docker commands below install the published **0.2.1** release; use the source build below to try the current source.
+The installation target for this release is **0.3.0**. The Docker commands pin that version. Before installing, confirm that the [release page](https://github.com/JasperPengC/feronavi/releases/tag/v0.3.0) provides the official images, source archive, and companion MCP bridge package.
 
 With Docker Compose installed, download the Compose file and start a new instance. No Node.js installation or source compilation is required:
 
 ```bash
 mkdir feronavi && cd feronavi
-curl -fL https://raw.githubusercontent.com/JasperPengC/feronavi/v0.2.1/compose.yaml -o compose.yaml
+curl -fL https://raw.githubusercontent.com/JasperPengC/feronavi/v0.3.0/compose.yaml -o compose.yaml
 
 # First installation: create a local database password
 (umask 077; test -e .env || echo "DB_PASSWORD=$(openssl rand -hex 24)" > .env)
@@ -171,7 +171,7 @@ docker compose ps
 
 Once the services are ready, open [http://127.0.0.1:3000/setup](http://127.0.0.1:3000/setup) to create your organization and administrator.
 
-These commands pull `ghcr.io/feronavi/feronavi-app:0.2.1` and `ghcr.io/feronavi/feronavi-db:16-0.2.0`, and work with the published `feronavi-mcp@0.1.0` bridge. Prebuilt images have been validated on **Linux x86-64 (amd64)**. Other architectures have not completed validation. See the [0.3.0 upgrade and recovery notes](UPGRADING.md), and confirm the target artifacts have been officially released before upgrading.
+These commands pull `ghcr.io/feronavi/feronavi-app:0.3.0` and `ghcr.io/feronavi/feronavi-db:16-0.2.0`. The companion MCP bridge is `feronavi-mcp@0.1.1`. Prebuilt images have been validated on **Linux x86-64 (amd64)**. Other architectures have not completed validation. See the [0.3.0 upgrade and recovery notes](UPGRADING.md), and confirm the target artifacts have been officially released before upgrading.
 
 Before opening access to your team, follow the [production deployment guide](https://feronavi.com/en/docs/deployment/) to configure an HTTPS reverse proxy. Before upgrading an existing instance, follow the [backup and upgrade guide](https://feronavi.com/en/docs/operations/) to back up the database and data volume and review the database image's migration requirements. See [quick start](https://feronavi.com/en/docs/quick-start/) for first access to a remote server and startup troubleshooting.
 
