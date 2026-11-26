@@ -2,6 +2,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- 真实业务JSON响应由每个场景断言 */
 import assert from "node:assert/strict";
 import type { BUSINESS_WORKFLOWS } from "../../src/server/application/capabilities/intelligence-tools.ts";
+import { loadActor } from "../../src/server/auth/actor-loader.ts";
+import { prepareReadyRelease } from "../../tests/support/release-ready-fixture.ts";
 type Json = Record<string, any>;
 export type FullBusinessWorkflowId = typeof BUSINESS_WORKFLOWS[number]["id"];
 export interface FullBusinessWorkflowHarness {
@@ -84,6 +86,12 @@ const workflows: Record<FullBusinessWorkflowId, () => Promise<void>> = {
     await update(item.id, { releaseId: release.id });
     await denied("plan.completeRelease", { releaseId: release.id }, "BLOCKED_BY_PREREQUISITE");
     await terminal(item.id);
+    await denied("plan.completeRelease", { releaseId: release.id }, "BLOCKED_BY_PREREQUISITE");
+    equal((await call("plan.getRelease", { releaseId: release.id })).completedAt, null, "任务终结但缺交付证据时仍不能完成版本");
+    // 仅在随机隔离库准备模拟交付证据；完成及复读仍走各自真实传输/确认入口。
+    const actor = await loadActor(admin.id);
+    assert.ok(actor);
+    await prepareReadyRelease(actor, p.id, release.id);
     const released = await call("plan.completeRelease", { releaseId: release.id });
     equal((await call("plan.completeRelease", { releaseId: release.id })).completedAt, released.completedAt, "完成版本保持首次时间");
     proof((await call("plan.getRelease", { releaseId: release.id })).completedAt, "版本完成复读");
