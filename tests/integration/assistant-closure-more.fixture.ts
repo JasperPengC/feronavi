@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { RagActionProposal } from "../../src/shared/rag.ts";
+import { prepareReadyRelease } from "../support/release-ready-fixture.ts";
 assert.match(new URL(process.env.DATABASE_URL ?? "postgres://invalid/").pathname, /^\/feronavi_test_[a-f0-9]{32}$/u);
 const { db, sql, createIndependentSql } = await import("../../src/db/index.ts");
 const { member, role, roleAssignment, ragMessage, projectMembership } = await import("../../src/db/schema.ts");
@@ -79,6 +80,7 @@ try {
       const extra = kind === "iteration" ? { startDate: "2026-11-01", endDate: "2026-11-14" } : {};
       const plan = (await planning.createPlan(actor, project.id, kind, { name: `${kind}-lifecycle`, ...extra }))!;
       const label = kind[0]!.toUpperCase() + kind.slice(1), key = `${kind}Id`;
+      if (kind === "release") await prepareReadyRelease(actor, project.id, plan.id);
       if (kind === "iteration" || kind === "release") await confirm(`plan.complete${label}`, { [key]: plan.id });
       await confirm(`plan.archive${label}`, { [key]: plan.id });
       assert.ok((await planning.get(actor, plan.id, kind)).archivedAt);
@@ -87,13 +89,21 @@ try {
       assert.ok(restored.resources.some(resource => resource.kind === kind && resource.id === plan.id));
     });
   }
-  await check("empty release completes through confirmation and rereads completion time", async () => {
+  await check("release confirmation requires delivery proof, then completes once and rereads completion time", async () => {
     const release = (await planning.createPlan(actor, project.id, "release", { name: "无遗留任务版本" }))!;
     const action = await propose("plan.completeRelease", { releaseId: release.id });
     const message = await save(action);
     assert.equal((await planning.get(actor, release.id, "release")).completedAt, null);
-    await Promise.all([decide(message, action), decide(message, action)]);
+    await assert.rejects(decide(message, action), { code: "BLOCKED_BY_PREREQUISITE" });
+    assert.equal((await planning.get(actor, release.id, "release")).completedAt, null);
+    const blocked = await conversations.getConversation(actor, conversation.id);
+    assert.equal(blocked.messages.find(row => row.id === message.id)!.reply!.actions![0]!.status, "pending");
+    await prepareReadyRelease(actor, project.id, release.id);
+    const readyAction = await propose("plan.completeRelease", { releaseId: release.id });
+    const readyMessage = await save(readyAction);
+    await Promise.all([decide(readyMessage, readyAction), decide(readyMessage, readyAction)]);
     assert.ok((await planning.get(actor, release.id, "release")).completedAt);
+    assert.equal((await sql`select count(*)::int n from release_verification where release_id=${release.id}`)[0]!.n, 1);
   });
   await check("iteration capacity rejects changed collection before writing and confirms fresh proposal", async () => {
     const iteration = (await planning.createPlan(actor, project.id, "iteration", { name: "成员容量", startDate: "2026-11-01", endDate: "2026-11-14" }))!;

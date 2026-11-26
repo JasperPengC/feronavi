@@ -6,7 +6,7 @@ import "./_env.ts";   // 环境预设必须最先加载（服务模块在导入�
  *   1 **未初始化时的拦截面**：页面 302 → /setup；API 返回 JSON 错误（不重定向）
  *   2 **原子性**：向导完成失败时不得留下「组织建了但管理员没建」的半初始化状态
  *   3 **完成后锁定**：/setup 页面转登录，向导写 API 仍返回 403
- *   4 **管理员能登录**且拿到 47 权限（向导产物真的可用）
+ *   4 **管理员能登录**且拿到 50 权限（向导产物真的可用）
  */
 import { buildApp } from "../src/server/app.ts";
 import { db, sql } from "../src/db/index.ts";
@@ -181,7 +181,7 @@ try {
   ok("重复完成向导 → 403（不能改掉管理员）", rerun.status === 403, `实际 ${rerun.status}`);
   ok("组织名未被重复提交改动", (await db.select().from(organization))[0]?.name === "测试组织");
 
-  // ── ⑦ 向导产物可用：管理员能登录并拿到 47 权限 ────────────
+  // ── ⑦ 向导产物可用：管理员能登录并拿到 50 权限 ────────────
   const login = await fetch(`${BASE}/api/v1/auth/login`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ username: USER, password: PW }),
@@ -191,7 +191,8 @@ try {
   const me = await (await fetch(`${BASE}/api/v1/auth/me`, { headers: { cookie } })).json() as {
     permissions: string[]; mustChangePassword: boolean;
   };
-  ok("登录后拿到 47 个权限", me.permissions.length === 47, String(me.permissions.length));
+  ok("登录后拿到 50 个权限", me.permissions.length === 50, String(me.permissions.length));
+  ok("管理员可维护用例、计划和执行测试", ["test_case:manage", "test_plan:manage", "test_run:execute"].every(key => me.permissions.includes(key)));
   ok("标记必须改密（初始管理员）", me.mustChangePassword === true);
 
   // ── ⑧ 敏感设置不回显 ──────────────────────────────────────

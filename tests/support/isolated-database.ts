@@ -42,7 +42,7 @@ export async function runNode(args: string[], env: NodeJS.ProcessEnv, timeout = 
     child.once("close", (code) => {
       if (failure || code !== 0) kill("SIGKILL");
       cleanup();
-      if (failure || code !== 0) reject(Object.assign(failure ?? new Error(`测试子进程失败（${code}）：${args[0]}\n${stderr.slice(-8000)}`), { stdout, stderr, code }));
+      if (failure || code !== 0) reject(Object.assign(failure ?? new Error(`测试子进程失败（${code}）：${args[0]}\nstdout:\n${stdout.slice(-8000)}\nstderr:\n${stderr.slice(-8000)}`), { stdout, stderr, code }));
       else resolveRun({ stdout, stderr });
     });
   });

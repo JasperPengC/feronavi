@@ -13,5 +13,10 @@ it("已取消的启动不会创建子进程", async () => {
   await expect(runNode(["-e", "throw new Error('should not execute')"], process.env, 60_000, controller.signal)).rejects.toMatchObject({ name: "AbortError" });
 });
 it("子进程失败保留退出码与诊断，不重试或伪报成功", async () => {
-  await expect(runNode(["-e", "console.error('fixture diagnostic'); process.exit(7)"], process.env)).rejects.toMatchObject({ code: 7, stderr: expect.stringContaining("fixture diagnostic") });
+  await expect(runNode(["-e", "console.log('fixture stdout failure'); console.error('fixture diagnostic'); process.exit(7)"], process.env)).rejects.toMatchObject({
+    code: 7,
+    stdout: expect.stringContaining("fixture stdout failure"),
+    stderr: expect.stringContaining("fixture diagnostic"),
+    message: expect.stringContaining("fixture stdout failure"),
+  });
 });

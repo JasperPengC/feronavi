@@ -1,10 +1,10 @@
 import "./_env.ts";
 /** 隔离随机库 + 独占临时Valkey，验证真实HTTP与跨进程限额，不连接开发缓存。 */
 import assert from "node:assert/strict";
-import { spawn, execFileSync, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import Redis from "ioredis";
+import { startIsolatedRedis } from "../tests/support/isolated-special.ts";
 
 if (process.argv.includes("--worker")) {
   const { buildApp } = await import("../src/server/app.ts");
@@ -31,8 +31,7 @@ if (process.argv.includes("--worker")) {
   assert.equal(await verifyPassword("!", password), false);
   assert.equal(await verifyPassword("invalid", password), false);
   const children = new Set<ChildProcess>();
-  const container = `feronavi-login-security-${suffix}`;
-  let containerCreated = false;
+  let cache: Awaited<ReturnType<typeof startIsolatedRedis>> | undefined;
   let checks = 0;
   const check = (label: string, condition: boolean) => { assert.ok(condition, label); checks++; console.log(`OK ${label}`); };
   async function worker(redisURL: string, trusted = true) {
@@ -61,13 +60,8 @@ if (process.argv.includes("--worker")) {
     return { status: response.status, body: await response.json() as { code?: string }, cookie: response.headers.get("set-cookie") };
   }
   try {
-    execFileSync("docker", ["run", "-d", "--name", container, "--label", "feronavi.test=login-security", "-p", "127.0.0.1::6379", "valkey/valkey:8-alpine"], { stdio: "pipe" });
-    containerCreated = true;
-    const port = execFileSync("docker", ["port", container, "6379/tcp"], { encoding: "utf8" }).trim().split(":").at(-1);
-    const redisURL = `redis://127.0.0.1:${port}`;
-    const redis = new Redis(redisURL, { connectTimeout: 1000, maxRetriesPerRequest: 0, retryStrategy: () => null });
-    redis.on("error", () => {});
-    try { assert.equal(await redis.ping(), "PONG"); } finally { redis.disconnect(); }
+    cache = await startIsolatedRedis(process.env.FERONAVI_TEST_DIRECTORY!);
+    const redisURL = cache.url;
 
     // 单独进程、无可信代理配置：伪造XFF既不能绕过本地登录，也不能绕过LDAP入口速率限制。
     const direct = await worker("", false);
@@ -92,7 +86,7 @@ if (process.argv.includes("--worker")) {
         const current = n % 2 ? second : first;
         const result = await request(current.base, target, `198.51.100.${n}`);
         assert.equal(result.status, 403, `${mode}第${n + 1}次账户失败`);
-        if (mode === "interrupted" && n === 0) execFileSync("docker", ["stop", "--time", "1", container], { stdio: "pipe" });
+        if (mode === "interrupted" && n === 0) await cache.suspend();
       }
       const locked = await request(second.base, target, "198.51.100.240");
       check(`${mode} 账户跨IP第11次429${mode === "shared" ? "（跨进程）" : ""}`, locked.status === 429 && locked.body.code === "RATE_LIMITED");
@@ -104,7 +98,6 @@ if (process.argv.includes("--worker")) {
     console.log(`登录安全HTTP验收 ${checks} 项通过。`);
   } finally {
     for (const child of children) child.kill("SIGKILL");
-    if (containerCreated) execFileSync("docker", ["rm", "-f", container], { stdio: "pipe" });
-    await sql.end();
+    try { await cache?.stop(); } finally { await sql.end(); }
   }
 }

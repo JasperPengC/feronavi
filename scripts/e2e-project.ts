@@ -76,15 +76,18 @@ try {
     `模板 ${tplEdges.length} / 副本 ${copyEdges.length}`);
 
   // key 与 category 必须原样保留（MCP meta.workflow 与前端枚举依赖）
-  const tplKeys = new Set(tplStates.map((s) => s.key));
-  ok("状态 key 原样保留", copyStates.every((s) => tplKeys.has(s.key)));
-  const tplCats = new Map(tplStates.map((s) => [s.key, s.category]));
-  ok("category 照抄（终态判定依赖它）", copyStates.every((s) => tplCats.get(s.key) === s.category));
+  // 不同工作流可以有同名状态（如需求与缺陷的 VERIFIED），按类型和 key 对照。
+  const tplTypes = new Map(tpl.map(w => [w.id, w.appliesToType]));
+  const copyTypes = new Map(wfs.map(w => [w.id, w.appliesToType]));
+  const tplCats = new Map(tplStates.map(s => [`${tplTypes.get(s.workflowId)}:${s.key}`, s.category]));
+  const copyKey = (s: typeof copyStates[number]) => `${copyTypes.get(s.workflowId)}:${s.key}`;
+  ok("各工作流状态 key 原样保留", copyStates.every(s => tplCats.has(copyKey(s))));
+  ok("各工作流 category 照抄（终态判定依赖它）", copyStates.every(s => tplCats.get(copyKey(s)) === s.category));
 
   // 终态数量必须一致，否则看板/完成时间会算错
   const tplTerm = tplStates.filter((s) => s.category === "TERMINAL").length;
   const copyTerm = copyStates.filter((s) => s.category === "TERMINAL").length;
-  ok("终态数一致（7 个）", copyTerm === tplTerm && copyTerm === 7, `模板 ${tplTerm} / 副本 ${copyTerm}`);
+  ok("终态数一致（8 个）", copyTerm === tplTerm && copyTerm === 8, `模板 ${tplTerm} / 副本 ${copyTerm}`);
 
   // ── ③ 创建者自动入组（规范缺口补丁）──────────────────────
   const list = await fetch(`${BASE}/api/v1/projects`, { headers: { cookie } });

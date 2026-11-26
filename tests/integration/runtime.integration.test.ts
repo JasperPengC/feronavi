@@ -16,7 +16,7 @@ describe("真实 PostgreSQL 与运行入口", () => {
   });
   afterAll(async () => { await database?.cleanup(); });
 
-  it("全新库包含检索扩展、47 权限、4 内置角色和22平台工作流状态", async () => {
+  it("全新库包含检索扩展、50 权限、4 内置角色和22平台工作流状态", async () => {
     const connection = postgres(database.url, { max: 1 });
     try {
       const extensions = await connection<{ extname: string }[]>`select extname from pg_extension`;
@@ -27,7 +27,12 @@ describe("真实 PostgreSQL 与运行入口", () => {
           (select count(*)::int from role where is_system) as roles,
           (select count(*)::int from workflow_state s join workflow w on w.id = s.workflow_id
             where w.project_id is null) as states`;
-      expect(counts).toEqual({ permissions: 47, roles: 4, states: 22 });
+      expect(counts).toEqual({ permissions: 50, roles: 4, states: 22 });
+      const testingPermissions = await connection<{ key: string }[]>`
+        select key from permission where "group" = 'test' order by key`;
+      expect(testingPermissions.map(row => row.key)).toEqual([
+        "test_case:manage", "test_plan:manage", "test_run:execute",
+      ]);
     } finally { await connection.end({ timeout: 5 }); }
   });
 

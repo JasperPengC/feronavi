@@ -27,9 +27,20 @@ try {
   const actor = (await loadActor(admin.id))!;
   const denied = (await loadActor(outsider.id))!;
   const project = await createProject(actor, { key: "REV", name: "需求历史验收" });
-  // 模拟升级前已有需求；旧库尚无历史表，不能通过新版需求创建入口。
-  const legacy = (await inTransaction(() => items.createWorkItem(actor, project.id, { type: "TASK", title: "既有需求", description: "原有正文" })))!;
-  await db.update(workItem).set({ type: "REQUIREMENT", version: 7, createdAt: new Date("2020-01-01") }).where(eq(workItem.id, legacy.id));
+  // 只使用旧表字段生成升级前需求；当前创建服务依赖后续迁移，不能用于旧库夹具。
+  const [legacy] = await sql<{ id: string }[]>`
+    with p as (
+      update project set next_issue_number = next_issue_number + 1 where id = ${project.id}
+      returning id, key, next_issue_number - 1 as n
+    )
+    insert into work_item (project_id, number, key, type, title, description,
+      workflow_id, status_id, reporter_id, version, created_at)
+    select p.id, p.n, p.key || '-' || p.n, 'REQUIREMENT', '既有需求', '原有正文',
+      w.id, s.id, ${actor.memberId}, 7, '2020-01-01'::timestamptz
+    from p join workflow w on w.project_id = p.id and w.applies_to_type = 'REQUIREMENT'
+      join workflow_state s on s.workflow_id = w.id and s.key = 'DRAFT'
+    returning id`;
+  assert.ok(legacy);
   await (await import("../../src/db/migrate.ts")).runMigrations();
   const baseline = await rows(legacy.id);
   assert.equal(baseline.length, 1);

@@ -80,7 +80,8 @@ try {
   };
   check("/auth/me 返回 200", me.status === 200, `实际 ${me.status}`);
   check("Actor 有身份", actor.memberId === m!.id && actor.username === USERNAME);
-  check("Actor 有 47 个权限（ADMIN）", actor.permissions.length === 47, `实际 ${actor.permissions.length}`);
+  check("Actor 有 50 个权限（ADMIN）", actor.permissions.length === 50, `实际 ${actor.permissions.length}`);
+  check("ADMIN 包含用例、计划和测试执行权限", ["test_case:manage", "test_plan:manage", "test_run:execute"].every(key => actor.permissions.includes(key)));
   check("Actor 有数据范围（ORG）",
     actor.dataScopes.length === 1 && actor.dataScopes[0]!.scopeType === "ORG");
 

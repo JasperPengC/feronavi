@@ -13,6 +13,7 @@ import { createWorkItem, updateWorkItem } from "../src/server/services/work-item
 import { createToken } from "../src/server/services/token.service.ts";
 import { datasetRegistry } from "../src/server/services/system-backup/registry.ts";
 import { ensureInitialized } from "./_test-helpers.ts";
+import { prepareReadyRelease } from "../tests/support/release-ready-fixture.ts";
 
 let passed = 0, failed = 0;
 const check = async (name: string, run: () => Promise<void>) => {
@@ -139,6 +140,7 @@ try {
     for (const kind of ["iteration", "release"] as const) {
       const row = kind === "iteration" ? await makeIteration("archive-cycle") : await plans.createPlan(actor, p.id, kind, { name: "archive-cycle" });
       await assert.rejects(() => plans.archive(actor, row!.id, kind), { code: "BLOCKED_BY_PREREQUISITE" });
+      if (kind === "release") await prepareReadyRelease(actor, p.id, row!.id);
       if (kind === "iteration") await completeIteration(actor, row!.id); else await completeRelease(actor, row!.id);
       await plans.archive(actor, row!.id, kind);
       assert.ok(!(await plans.list(actor, p.id, kind)).some((item) => item.id === row!.id));
@@ -152,6 +154,7 @@ try {
   await check("归档等待中的创建与更新挂载会在项目锁内重验", async () => {
     for (const kind of ["iteration", "release"] as const) {
       const row = kind === "iteration" ? await makeIteration("archive-race") : (await plans.createPlan(actor, p.id, "release", { name: "archive-race" }))!;
+      if (kind === "release") await prepareReadyRelease(actor, p.id, row.id);
       if (kind === "iteration") await completeIteration(actor, row.id); else await completeRelease(actor, row.id);
       const item = await makeItem(`archive-race-existing-${kind}`);
       const blocker = await sql.reserve();
@@ -191,6 +194,9 @@ try {
     await assert.rejects(() => completeRelease(actor, row.id), { code: "BLOCKED_BY_PREREQUISITE" });
     const [terminal] = await db.select().from(workflowState).where(and(eq(workflowState.workflowId, item.workflowId), eq(workflowState.category, "TERMINAL")));
     await db.update(workItem).set({ statusId: terminal!.id }).where(eq(workItem.id, item.id));
+    await assert.rejects(() => completeRelease(actor, row.id), { code: "BLOCKED_BY_PREREQUISITE" });
+    assert.equal((await plans.get(actor, row.id, "release")).completedAt, null);
+    await prepareReadyRelease(actor, p.id, row.id);
     const result = await completeRelease(actor, row.id);
     assert.deepEqual(await completeRelease(actor, row.id), result);
     await assert.rejects(() => completeRelease(reader, row.id), { code: "FORBIDDEN" });
@@ -239,6 +245,10 @@ try {
     for (const kind of ["Iteration", "Release"] as const) {
       const row = kind === "Iteration" ? await makeIteration("mcp-archive") : (await plans.createPlan(actor, p.id, "release", { name: "mcp-archive" }))!;
       const key = `${kind.toLowerCase()}Id`;
+      if (kind === "Release") {
+        assert.equal((await mcp(`plan.complete${kind}`, { [key]: row.id })).code, "BLOCKED_BY_PREREQUISITE");
+        await prepareReadyRelease(actor, p.id, row.id);
+      }
       assert.ok((await mcp(`plan.complete${kind}`, { [key]: row.id })).completedAt);
       assert.ok((await mcp(`plan.archive${kind}`, { [key]: row.id })).archivedAt);
       assert.equal((await mcp(`plan.unarchive${kind}`, { [key]: row.id })).archivedAt, null);
