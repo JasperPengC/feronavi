@@ -39,6 +39,19 @@ describe("领域返回类型生成的工具输出契约", () => {
   it("没有领域结果定义的新工具不能静默发布空契约", () => {
     expect(() => outputSchemaFor({ name: "unknown.tool" })).toThrow("工具缺少输出契约");
   });
+  it.each([
+    { mode: "vector", directoryPath: "研发文档 / 验收与记录" },
+    { mode: "keyword", directoryPath: "研发文档 / 验收与记录" },
+    { mode: "vector", directoryPath: "" },
+    { mode: "keyword", directoryPath: "" },
+  ])("跨项目检索保留命中的可见目录路径 %j", ({ mode, directoryPath }) => {
+    const hit = { chunkId: id, pageId: id, projectId: id, projectName: "自研项目", title: "验收场景", headingPath: null, snippet: "当前 Codex 的验收结果", score: 0.8, mode, directoryPath };
+    const output = currentResult("rag.search", { mode, hits: [hit], scope: { projectIds: [id], projectCount: 1 } });
+    expect(output.hits[0].directoryPath).toBe(directoryPath);
+    expect(output.hits[0].pageId).toBe(id);
+    expect(() => currentResult("rag.search", { ...output, hits: [{ ...hit, storagePath: "/private/data" }] })).toThrow();
+    expect(() => currentResult("rag.search", { ...output, hits: [{ ...hit, directoryPath: 123 }] })).toThrow();
+  });
   it("按真实传输表示接受Date、nullable和幂等完成结果", () => {
     const output = currentResult("attachment.list", { attachments: [attachment] });
     expect(JSON.stringify(output)).toContain("2026-11-16T00:00:00.000Z");

@@ -157,6 +157,11 @@ describe("system backup dataset registry", () => {
 
     expect(page.deferredReferenceColumns).toEqual([
       {
+        column: "created_by",
+        targetDataset: "identity.member",
+        targetColumn: "id",
+      },
+      {
         column: "current_revision_id",
         targetDataset: "content.page_revision",
         targetColumn: "id",

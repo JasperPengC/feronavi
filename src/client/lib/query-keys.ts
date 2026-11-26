@@ -14,6 +14,7 @@ export const queryKeys = {
   timeline: scopedKey("timeline"),
   workbench: scopedKey("workbench"),
   workItemDetail: scopedKey("work-item-detail"),
+  requirementHistory: scopedKey("requirement-history"),
   workItemParent: scopedKey("work-item-parent"),
   workItemChildren: scopedKey("work-item-children"),
   workItemSla: scopedKey("work-item-sla"),
@@ -41,8 +42,10 @@ export async function invalidateWorkItemQueries(qc: QueryClient, id?: string): P
   const scope = id ? [id] : [];
   await Promise.all([
     queryKeys.workItemDetail(...scope), queryKeys.workItemParent(...scope),
+    queryKeys.requirementHistory(...scope),
     queryKeys.workItemSla(...scope), queryKeys.workItemApprovals(...scope),
     queryKeys.workItemChildren(), queryKeys.board(), queryKeys.table(),
+    ["work-item-picker"],
     queryKeys.issues(), queryKeys.issueStats(), queryKeys.calendar(), queryKeys.calendarUnscheduled(),
     queryKeys.timeline(), queryKeys.workbench(), queryKeys.projectActivity(), queryKeys.activitySeries(),
     queryKeys.milestoneDetail(), queryKeys.milestones(), queryKeys.iterations(), queryKeys.projects(),
@@ -106,11 +109,14 @@ function resourceQueryKeys(event: ResourceInvalidation): unknown[][] {
       break;
     case "import": keys.push(["imports", p], ["import", id]); projectWork(); break;
     case "workitem":
+      // 事件只有变更项ID，父项可能已变更；全部已挂载子列表按前缀失效。
+      keys.push(["work-item-children"], ["work-item-picker", p]);
+      keys.push(["requirement-changes", id], ["requirement-change", id], ["requirement-change-context", id]);
       keys.push(...["work-item-detail", "work-item-parent", "work-item-children", "work-item-sla", "work-item-approvals", "work-item-links", "work-item-transfers", "work-item-watchers", "work-item-collaborators", "work-item-progress", "work-item-time-logs", "work-item-relations"].map((name) => [name, id]));
       projectWork();
       break;
     case "wiki": keys.push(["wiki-tree", p], ["wiki-page", id], ["wiki-revisions", id], ["wiki-perms", id], ["knowledge-chunks", id], ["knowledge-jobs", id]); break;
-    case "project": keys.push(["projects"], ["project", p], ["project-overview", p], ["project-members", p], ["widget-data"], ["portfolios"], ["portfolio"], ["portfolio-summary"]); break;
+    case "project": keys.push(["testing", p], ["requirement-change-context"], ["requirement-change"], ["projects"], ["project", p], ["project-overview", p], ["project-members", p], ["widget-data"], ["portfolios"], ["portfolio"], ["portfolio-summary"]); break;
     case "automation": keys.push(["automation-rules", p], ["automation-runs", p]); break;
     case "sla": keys.push(["sla-policies", p]); break;
     case "workflow": keys.push(["workflows", p], ["wf-states"], ["wf-transitions"], ["board", p]); break;

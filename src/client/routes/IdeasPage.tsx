@@ -21,6 +21,7 @@ import { TextInput } from "../components/ui/TextInput.tsx";
 import { LoadingBlock, StateBlock } from "../components/ui/StateBlock.tsx";
 import { WorkItemDrawer } from "../components/work-item/DeferredWorkItemDrawer.tsx";
 import { useCan } from "../lib/actor.ts";
+import { WorkItemTag } from "../components/work-item/WorkItemTag.tsx";
 
 interface Idea {
   id: string; title: string; description: string | null; status: string;
@@ -36,10 +37,6 @@ function statusLabel(status: string) {
   const key = STATUS_LABEL[status];
   return key ? t(key) : status;
 }
-/** 状态 → 药丸色调（第 36 轮统一为 .status-pill；语义沿用原 STATUS_TAG，不改判断） */
-const STATUS_PILL: Record<string, string> = {
-  NEW: "dot-blue", UNDER_REVIEW: "dot-amber", PLANNED: "dot-green", REJECTED: "dot-red",
-};
 
 export function IdeasPage() {
   useLocale();   // 订阅语言，切换即时生效
@@ -154,7 +151,8 @@ export function IdeasPage() {
                   })()}
                 </div>
               </td>
-              <td><span className={`status-pill ${STATUS_PILL[it.status] ?? ""}`}>{statusLabel(it.status)}</span></td>
+              <td><WorkItemTag kind="status" stateKey={it.status}
+                value={it.status === "PLANNED" ? "IN_PROGRESS" : "TODO"} label={statusLabel(it.status)} /></td>
               <td className="ideas-actions table-actions"><div className="table-actions-group">
                 {canVote && <Button size="sm" variant="ghost" aria-label={t("ideas.unvoteLabel", { title: it.title })} onClick={() => unvote.mutate(it.id)}>{t("ideas.unvote")}</Button>}
                 {it.promotedWorkItemId

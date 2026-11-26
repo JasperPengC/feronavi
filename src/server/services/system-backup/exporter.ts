@@ -401,7 +401,7 @@ export async function exportSystemBackup(
       mode: input.mode,
       createdAt,
       ...metadata,
-      requiredFeatures: ["persistent-collaboration-and-conversations"],
+      requiredFeatures: ["persistent-collaboration-and-conversations", "requirement-history", "document-folders", "product-attribution", "requirement-changes", "test-case-library", "test-execution", "test-execution-builds", "delivery-evidence", "release-gate"],
       capabilities: [
         "database-snapshot",
         "attachment-blobs",

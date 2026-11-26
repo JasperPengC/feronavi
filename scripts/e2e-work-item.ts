@@ -8,7 +8,7 @@ import "./_env.ts";   // 环境预设必须最先加载（服务模块在导入�
  *    顺带验证**软删后编号不复用**（计数器不回退）。
  */
 import { db, sql } from "../src/db/index.ts";
-import { member, role, roleAssignment, project, workItem, auditEntry, activityEntry } from "../src/db/schema.ts";
+import { member, role, rolePermission, roleAssignment, project, workItem, auditEntry, activityEntry } from "../src/db/schema.ts";
 import { hashPassword } from "../src/server/auth/password.ts";
 import { anonymizeMember } from "../src/server/services/member.service.ts";
 import * as wiService from "../src/server/services/work-item.service.ts";
@@ -33,7 +33,10 @@ const [m] = await db.insert(member).values({
 }).returning({ id: member.id });
 await db.insert(roleAssignment).values({ memberId: m!.id, roleId: adminRole!.id, scopeType: "ORG", scopeId: null });
 const actor = (await loadActor(m!.id))!;
-ok("Actor 装载成功（47 权限）", actor.permissions.size === 47, String(actor.permissions.size));
+const adminPermissions = await db.select({ key: rolePermission.permissionKey }).from(rolePermission).where(eq(rolePermission.roleId, adminRole!.id));
+ok("Actor 装载完整管理员权限且无额外权限", adminPermissions.length > 0
+  && actor.permissions.size === adminPermissions.length
+  && adminPermissions.every(({ key }) => actor.permissions.has(key)), String(actor.permissions.size));
 
 const KEY = "R5PROJ";
 await db.delete(project).where(eq(project.key, KEY));

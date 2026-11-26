@@ -4,6 +4,8 @@ import "../plugins-types.ts";
 import { z } from "zod";
 import { DomainError } from "../../shared/errors.ts";
 import * as wiki from "../services/wiki.service.ts";
+import { organizePage } from "../services/page-structure.service.ts";
+import { organizePageSchema } from "../../shared/schemas/page-structure.ts";
 import type { Actor } from "../permission/actor.ts";
 
 declare module "fastify" {
@@ -23,10 +25,9 @@ export async function registerPageRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/v1/projects/:id/pages", async (req) => {
     const actor = actorOf(req);
     const { id } = pidP.parse(req.params);
-    const q = req.query as { q?: string };
+    const q = z.object({ q: z.string().max(300).optional(), archived: z.enum(["true", "false"]).optional() }).parse(req.query);
     // 带 q 时走检索（同样套可见性条件）
-    if (q.q) return { pages: await wiki.searchPages(actor, id, q.q), mode: "search" };
-    return { pages: await wiki.listPages(actor, id), mode: "tree" };
+    return { pages: await wiki.listPages(actor, id, { q: q.q, archived: q.archived === "true" }), mode: q.q ? "search" : "tree" };
   });
 
   app.post("/api/v1/projects/:id/pages", { onRequest: app.csrfProtection }, async (req, reply) => {
@@ -34,6 +35,7 @@ export async function registerPageRoutes(app: FastifyInstance): Promise<void> {
     const { id } = pidP.parse(req.params);
     const parsed = z.object({
       title: z.string().min(1).max(300),
+      kind: z.enum(["DOCUMENT", "FOLDER"]).optional(),
       content: z.string().max(200_000).optional(),
       parentId: z.string().uuid().nullable().optional(),
       visibility: z.enum(["PROJECT", "RESTRICTED"]).optional(),
@@ -50,6 +52,13 @@ export async function registerPageRoutes(app: FastifyInstance): Promise<void> {
     return wiki.getPage(actorOf(req), id);
   });
 
+  app.patch("/api/v1/pages/:id/structure", { onRequest: app.csrfProtection }, async (req) => {
+    const { id } = idP.parse(req.params);
+    const parsed = organizePageSchema.safeParse(req.body);
+    if (!parsed.success) throw new DomainError("VALIDATION", "参数不合法", parsed.error.issues);
+    return organizePage(actorOf(req), id, parsed.data);
+  });
+
   app.patch("/api/v1/pages/:id", { onRequest: app.csrfProtection }, async (req) => {
     const { id } = idP.parse(req.params);
     const parsed = z.object({
@@ -60,6 +69,7 @@ export async function registerPageRoutes(app: FastifyInstance): Promise<void> {
       visibility: z.enum(["PROJECT", "RESTRICTED"]).optional(),
       changeSummary: z.string().max(300).nullable().optional(),
       expectedRevisionId: z.string().uuid().optional(),
+      expectedStructureVersion: z.number().int().positive().optional(),
     }).safeParse(req.body);
     if (!parsed.success) throw new DomainError("VALIDATION", "参数不合法", parsed.error.issues);
     return wiki.updatePage(actorOf(req), id, parsed.data);

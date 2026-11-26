@@ -16,7 +16,7 @@ export interface SelectOption { value: string; label: string; secondaryLabel?: s
 export function Select({
   value, options, onChange, ariaLabel, size = "md", disabled, placeholder,
   label, hint, error, required, id, className = "", invalid = false, searchable = false,
-  description, minPanelWidth = 168, leadingIcon,
+  description, minPanelWidth = 168, leadingIcon, onSearchChange, selectedOption, searchStatus,
 }: {
   value: string;
   options: SelectOption[];
@@ -42,6 +42,10 @@ export function Select({
   minPanelWidth?: number;
   /** 与文字共用点击和聚焦区域的装饰图标。 */
   leadingIcon?: React.ReactNode;
+  /** 远程检索交给调用方；不再对服务端结果重复做本地过滤。 */
+  onSearchChange?: (query: string) => void;
+  selectedOption?: SelectOption;
+  searchStatus?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(() => Math.max(0, options.findIndex((o) => o.value === value)));
@@ -56,11 +60,11 @@ export function Select({
   /** 搜索模式下用于渲染与键盘导航的过滤结果 */
   const filtered = useMemo(() => {
     const choices = placeholder ? options.filter((option) => option.value !== "") : options;
-    if (!searchable) return choices;
+    if (!searchable || onSearchChange) return choices;
     const q = query.trim().toLowerCase();
     if (!q) return choices;
     return choices.filter((o) => `${o.value} ${o.label} ${o.secondaryLabel ?? ""}`.toLowerCase().includes(q));
-  }, [options, query, searchable, placeholder]);
+  }, [options, query, searchable, placeholder, onSearchChange]);
 
   useEffect(() => {
     if (!open) return;
@@ -72,7 +76,7 @@ export function Select({
     return () => { document.removeEventListener("pointerdown", onDown); document.removeEventListener("focusin", onFocus); };
   }, [open]);
 
-  const current = options.find((o) => o.value === value);
+  const current = options.find((o) => o.value === value) ?? (selectedOption?.value === value ? selectedOption : undefined);
   const activeIndex = Math.max(0, Math.min(active, filtered.length - 1));
 
   function commit(o: SelectOption | undefined) {
@@ -88,6 +92,7 @@ export function Select({
 
   function show() {
     setQuery("");
+    onSearchChange?.("");
     setActive(Math.max(0, filtered.findIndex(option => option.value === value)));
     setOpen(true);
   }
@@ -218,7 +223,7 @@ export function Select({
                 aria-label={`${ariaLabel}（${t("common.searchOptions")}）`}
                 placeholder={`${t("common.search")}…`}
                 value={query}
-                onChange={(e) => { setQuery(e.target.value); setActive(0); }}
+                onChange={(e) => { setQuery(e.target.value); onSearchChange?.(e.target.value); setActive(0); }}
               />
             </div>
           )}
@@ -246,7 +251,8 @@ export function Select({
             </button>
           ))}
           </div>
-          {searchable && filtered.length === 0 && (
+          {searchStatus && <div className="select-empty" role="status">{searchStatus}</div>}
+          {searchable && !searchStatus && filtered.length === 0 && (
             <p className="select-empty">{t("common.noMatches")}</p>
           )}
         </div>

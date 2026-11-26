@@ -183,7 +183,7 @@ export async function listIssuesGlobal(actor: Actor, f: IssueFilters = {}) {
   const rows = await db.select({
     id: workItem.id, key: workItem.key, title: workItem.title, type: workItem.type,
     severity: workItem.severity, priority: workItem.priority,
-    statusName: workflowState.name, statusCategory: workflowState.category,
+    statusName: workflowState.name, statusCategory: workflowState.category, statusKey: workflowState.key,
     assigneeName: member.name, reporterName: reporter.name,
     dueDate: workItem.dueDate, createdAt: workItem.createdAt,
     updatedAt: workItem.updatedAt,
@@ -238,7 +238,7 @@ export async function listIssues(actor: Actor, projectId: string, f: IssueFilter
   const rows = await db.select({
     id: workItem.id, key: workItem.key, title: workItem.title, type: workItem.type,
     severity: workItem.severity, priority: workItem.priority,
-    statusName: workflowState.name, statusCategory: workflowState.category,
+    statusName: workflowState.name, statusCategory: workflowState.category, statusKey: workflowState.key,
     assigneeName: member.name, reporterName: reporterP.name,
     dueDate: workItem.dueDate, createdAt: workItem.createdAt,
     updatedAt: workItem.updatedAt,
@@ -368,7 +368,7 @@ export async function addProgressUpdate(actor: Actor, workItemId: string, input:
   await recordBusinessEvent({
     projectId: full.projectId, actor, targetType: "WORK_ITEM", targetId: workItemId,
     action: "work_item.progress_added",
-    summary: `${actor.name} 更新了问题「${(wi as unknown as { key: string }).key}」处理进展：${input.summary.slice(0, 60)}`,
+    summary: `${actor.name} 更新了工作项「${(wi as unknown as { key: string }).key}」处理进展：${input.summary.slice(0, 60)}`,
   });
   return row;
 }

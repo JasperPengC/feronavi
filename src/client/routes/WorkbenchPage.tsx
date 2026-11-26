@@ -25,6 +25,7 @@ import { Icon } from "../components/Icon.tsx";
 import { LoadingBlock, StateBlock } from "../components/ui/StateBlock.tsx";
 import { WorkItemDrawer } from "../components/work-item/DeferredWorkItemDrawer.tsx";
 import { WorkbenchItemRow } from "../components/work-item/WorkbenchItemRow.tsx";
+import { WorkItemTag } from "../components/work-item/WorkItemTag.tsx";
 import { WORKBENCH_GROUP_LABELS } from "../../shared/workbench.ts";
 
 function localDateKey(date = new Date()) {
@@ -85,9 +86,11 @@ export function WorkbenchPage() {
   };
 
   const attentionItems = (() => {
+    if (data?.attentionItems) return data.attentionItems;
     const seen = new Set<string>();
     const source = [...(groups.find((g) => g.key === "overdue")?.items ?? []), ...(groups.find((g) => g.key === "dueSoon")?.items ?? []), ...(groups.find((g) => g.key === "assignedToMe")?.items ?? [])];
     return source.filter((item) => {
+      if (["DONE", "CANCELLED", "TERMINAL"].includes(item.statusCategory ?? "")) return false;
       const id = String(item.id ?? item.key ?? "");
       if (!id || seen.has(id)) return false;
       seen.add(id);
@@ -150,7 +153,7 @@ export function WorkbenchPage() {
                       </span>
                       <small>{item.projectKey} · {item.dueDate ? item.dueDate.slice(5) : tr("workbench.noDueDate")}</small>
                     </span>
-                    <span className="workbench-attention-priority" data-priority={item.priority}>{item.priority ? tr(`prio.${item.priority}`) : "—"}</span>
+                    <WorkItemTag kind="priority" value={item.priority} />
                     <span className="workbench-attention-arrow" aria-hidden="true"><Icon name="chevron-right" size={14} /></span>
                     </button>
                   </li>

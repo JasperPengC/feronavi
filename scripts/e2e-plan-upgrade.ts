@@ -169,10 +169,10 @@ async function verifyUpgrade() {
     await rejects("旧版本有未完成工作项时仍拒绝完成", () => lifecycle.complete(actor, releaseId, "release"));
     // 模拟既有工作流完成；本用例只验迁移与计划生命周期，不改工作流定义。
     await sql`update work_item set status_id = ${terminal!.id}, completed_at = now() where id = ${pendingId}`;
-    const releaseCompletion = await lifecycle.complete(actor, releaseId, "release");
-    await lifecycle.setArchived(actor, releaseId, "release", true);
-    const restoredRelease = await lifecycle.setArchived(actor, releaseId, "release", false);
-    check("旧版本处理工作项后可完成、归档与恢复", !releaseCompletion.alreadyCompleted && restoredRelease.archivedAt === null && restoredRelease.completedAt?.getTime() === releaseCompletion.completedAt.getTime() && restoredRelease.completionResult?.movedCount === 0);
+    await rejects("旧未完成版本升级后也须发布候选与交付核验", () => lifecycle.complete(actor, releaseId, "release"));
+    await rejects("缺交付核验的旧版本仍不能归档", () => lifecycle.setArchived(actor, releaseId, "release", true));
+    const pendingRelease = await plans.get(actor, releaseId, "release");
+    check("门禁失败保留旧版本未完成状态", pendingRelease.completedAt === null && pendingRelease.archivedAt === null && pendingRelease.completionResult === null);
     for (const [kind, id] of [["iteration", completedIterationId], ["release", completedReleaseId]] as const) {
       const repeated = await lifecycle.complete(actor, id, kind);
       check(`旧已完成${kind}重复完成返回未知计数且不伪造历史`, repeated.alreadyCompleted && repeated.completedAt.toISOString() === oldCompletion.toISOString()

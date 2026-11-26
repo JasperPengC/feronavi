@@ -9,6 +9,7 @@ const clients: QueryClient[] = [];
 const items = Array.from({ length: 65 }, (_, i) => ({
   id: `item-${i + 1}`, key: `TEST-${i + 1}`, title: `工作项 ${i + 1}`, type: "TASK",
   priority: "MEDIUM", dueDate: null, version: 1, projectKey: "TEST",
+  statusName: "待同事评审", statusKey: "WAITING_REVIEW", statusCategory: "IN_PROGRESS",
 }));
 const groups = [
   { key: "assignedToMe", name: "指派给我的", count: 4, items: items.slice(0, 4) },
@@ -17,13 +18,13 @@ const groups = [
   { key: "dueSoon", name: "7 天内到期", count: 0, items: [] },
 ];
 
-function renderWorkbench(path = "/workbench") {
+function renderWorkbench(path = "/workbench", attentionItems?: typeof items) {
   vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
     const url = new URL(String(input));
     const group = groups.find((entry) => url.pathname === `/api/v1/workbench/groups/${entry.key}`);
     const page = Number(url.searchParams.get("page") ?? 1);
     const body = group ? { ...group, items: items.slice((page - 1) * 50, page * 50), page, pageSize: 50 }
-      : url.pathname === "/api/v1/workbench" ? { groups, total: 65 }
+      : url.pathname === "/api/v1/workbench" ? { groups, total: 65, ...(attentionItems === undefined ? {} : { attentionItems }) }
       : url.pathname === "/api/v1/auth/me" ? { memberId: "m1", username: "tester", name: "测试", permissions: [], dataScopes: [], mustChangePassword: false, locale: "zh-CN", theme: "light", timezone: "Asia/Shanghai" }
       : url.pathname === "/api/v1/todos" ? []
       : { items: [], name: "测试组织", providers: [], unreadCount: 0 };
@@ -55,6 +56,8 @@ it("四组标题提供独立列表链接，列表翻页覆盖超过 50 项的数
   expect(router.state.location.pathname).toBe("/workbench/createdByMe");
   const list = await screen.findByRole("region", { name: "我创建的" });
   expect(within(list).getByRole("button", { name: "工作项 50", exact: true })).toBeTruthy();
+  expect(within(list).getAllByText("待同事评审")).toHaveLength(50);
+  expect(within(list).getAllByText("待同事评审")[0]?.getAttribute("data-tone")).toBe("warning");
   expect(within(list).queryByRole("button", { name: "工作项 51", exact: true })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: /下一页/ }));
   await screen.findByRole("button", { name: "工作项 65", exact: true });
@@ -69,4 +72,12 @@ it("完整列表的分页深链可直接打开，并能返回工作台", async (
   fireEvent.click(screen.getByRole("link", { name: "返回工作台" }));
   await screen.findByText("我创建的");
   expect(router.state.location.pathname).toBe("/workbench");
+});
+
+it("今日关注采用服务端完整待处理范围，不被历史分组八条预览挤掉", async () => {
+  renderWorkbench("/workbench", [items[64]!]);
+  await screen.findByText("我创建的");
+  const focus = document.querySelector(".workbench-focus-panel") as HTMLElement;
+  expect(within(focus).getByRole("button", { name: "工作项 65", exact: true })).toBeTruthy();
+  expect(within(focus).queryByRole("button", { name: "工作项 1", exact: true })).toBeNull();
 });

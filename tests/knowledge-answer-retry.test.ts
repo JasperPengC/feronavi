@@ -14,7 +14,7 @@ const actor = { memberId: "member" } as Actor;
 const hits = [{ chunkId: "chunk", pageId: "page", projectId: "project", title: "月结规则", snippet: "第六个工作日", headingPath: null, score: 1, mode: "keyword" as const }];
 beforeEach(() => {
   vi.useFakeTimers(); state.fetch.mockReset(); state.usage.mockReset(); state.actor.mockReset(); state.page.mockReset();
-  state.actor.mockResolvedValue(actor); state.page.mockResolvedValue({ projectId: "project" });
+  state.actor.mockResolvedValue(actor); state.page.mockResolvedValue({ projectId: "project",kind:"DOCUMENT",isArchived:false });
 });
 afterEach(() => vi.useRealTimers());
 const success = () => new Response(JSON.stringify({ choices: [{ message: { content: "第六个工作日 [1]" } }], usage: { total_tokens: 32 } }));
@@ -60,8 +60,13 @@ it("取消检查在后续尝试前执行，不继续调用供应商", async () =
 });
 it("后续尝试重验来源权限，失权不再外发摘录", async () => {
   state.fetch.mockRejectedValue(new DOMException("timeout", "TimeoutError"));
-  state.page.mockRejectedValue(new DomainError("FORBIDDEN", "无权读取"));
+  state.page.mockResolvedValueOnce({projectId:"project",kind:"DOCUMENT",isArchived:false}).mockRejectedValue(new DomainError("FORBIDDEN", "无权读取"));
   const observed = generateKnowledgeAnswer(actor, "截止日？", hits).catch(error => error);
   await vi.runAllTimersAsync();
   expect(await observed).toMatchObject({ code: "FORBIDDEN" }); expect(state.fetch).toHaveBeenCalledTimes(1);
+});
+it.each([{kind:'FOLDER',isArchived:false},{kind:'DOCUMENT',isArchived:true}])('目录或归档资料不能在首次尝试发送给模型：%j',async page=>{
+ state.page.mockResolvedValue({projectId:'project',...page});
+ await expect(generateKnowledgeAnswer(actor,'截止日？',hits)).rejects.toMatchObject({code:'NOT_FOUND'});
+ expect(state.fetch).not.toHaveBeenCalled();
 });

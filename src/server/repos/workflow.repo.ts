@@ -6,7 +6,7 @@
  */
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db/index.ts";
-import { workflowState, workflowTransition } from "../../db/schema.ts";
+import { workflow, workflowState, workflowTransition } from "../../db/schema.ts";
 import { sql } from "drizzle-orm";
 
 export async function findStateById(id: string) {
@@ -83,37 +83,56 @@ export interface BoardColumn {
  * ⚠️ `left join` 保证**空列也要出现**（用户需要看到"这一列现在没有卡片"，
  *    而不是那一列凭空消失）。
  */
-export interface BoardFilters { q?: string; priority?: string }
+export interface BoardFilters { q?: string; priority?: string; type?: string; workflowId?: string }
 
 function boardFilterSql(filters: BoardFilters) {
   const keyword = filters.q?.trim();
   return sql`${keyword ? sql`and (strpos(lower(wi.key), lower(${keyword})) > 0 or strpos(lower(wi.title), lower(${keyword})) > 0)` : sql``}
-    ${filters.priority ? sql`and wi.priority = ${filters.priority}` : sql``}`;
+    ${filters.priority ? sql`and wi.priority = ${filters.priority}` : sql``}
+    ${filters.type ? sql`and wi.type = ${filters.type}` : sql``}`;
+}
+
+function boardWorkflowSql(filters: BoardFilters) {
+  // 子任务继承父项工作流，不能只查 applies_to_type=SUBTASK。
+  return sql`${filters.workflowId ? sql`and w.id = ${filters.workflowId}` : sql``}
+    ${filters.type && filters.type !== "SUBTASK" ? sql`and w.applies_to_type = ${filters.type}` : sql``}`;
+}
+
+/** 看板只读元数据，不依赖工作流配置管理权限。 */
+export async function listBoardWorkflows(projectId: string) {
+  return db.select({ id: workflow.id, name: workflow.name, appliesToType: workflow.appliesToType })
+    .from(workflow).where(eq(workflow.projectId, projectId)).orderBy(workflow.appliesToType, workflow.name);
 }
 
 export async function loadBoard(projectId: string, perColumnLimit: number, filters: BoardFilters = {}): Promise<BoardColumn[]> {
   // 每个状态只取前 N 条 + 独立 count：不再把整列几百条 json_agg 进内存。
   const rows = await db.execute(sql`
-    select
-      s.key as state_key, s.name, s.category, s.color, s.wip_limit, s.sort_order,
+    with selected_states as (
+      select distinct on (s.key) s.key, s.name, s.category, s.color,
+        case when count(*) over (partition by s.key) = 1 then s.wip_limit else null end as wip_limit, s.sort_order
+      from workflow_state s join workflow w on w.id = s.workflow_id
+      where w.project_id = ${projectId} and s.archived_at is null ${boardWorkflowSql(filters)}
+      order by s.key, w.is_default desc, w.id
+    ), board_items as (
+      select wi.id, wi.key, wi.number, wi.title, wi.priority, wi.assignee_id, wi.version, wi.created_at, s.key as state_key
+      from work_item wi join workflow_state s on s.id = wi.status_id join workflow w on w.id = s.workflow_id
+      where wi.project_id = ${projectId} and w.project_id = ${projectId} and wi.deleted_at is null
+        ${boardWorkflowSql(filters)} ${boardFilterSql(filters)}
+    )
+    select s.key as state_key, s.name, s.category, s.color, s.wip_limit, s.sort_order,
       coalesce((
         select json_agg(json_build_object(
           'id', x.id, 'key', x.key, 'number', x.number, 'title', x.title,
           'priority', x.priority, 'assigneeId', x.assignee_id, 'version', x.version
         ))
         from (
-          select wi.* from work_item wi
-          where wi.status_id = s.id and wi.deleted_at is null
-          ${boardFilterSql(filters)}
+          select wi.* from board_items wi where wi.state_key = s.key
           order by wi.created_at desc, wi.id desc
           limit ${perColumnLimit}
         ) x
       ), '[]'::json) as items,
-      (select count(*)::int from work_item wi where wi.status_id = s.id and wi.deleted_at is null ${boardFilterSql(filters)}) as count
-    from workflow_state s
-    join workflow w on w.id = s.workflow_id
-    where w.project_id = ${projectId}
-    order by s.sort_order
+      (select count(*)::int from board_items wi where wi.state_key = s.key) as count
+    from selected_states s order by s.sort_order, s.key
   `) as unknown as {
     state_key: string; name: string; category: string; color: string; wip_limit: number | null; sort_order: number;
     items: BoardColumn["items"] | null; count: number;
@@ -132,9 +151,9 @@ export async function loadBoardColumn(projectId: string, stateKey: string, offse
     from work_item wi
     join workflow_state s on s.id = wi.status_id
     join workflow w on w.id = s.workflow_id
-    where w.project_id = ${projectId} and s.key = ${stateKey}
+    where wi.project_id = ${projectId} and w.project_id = ${projectId} and s.key = ${stateKey}
       and wi.deleted_at is null
-      ${boardFilterSql(filters)}
+      ${boardWorkflowSql(filters)} ${boardFilterSql(filters)}
     order by wi.created_at desc, wi.id desc
     offset ${offset} limit ${limit}
   `) as unknown as { id: string; key: string; number: number; title: string; priority: string | null; assignee_id: string | null; version: number }[];
@@ -142,8 +161,8 @@ export async function loadBoardColumn(projectId: string, stateKey: string, offse
     select count(*)::int as n from work_item wi
     join workflow_state s on s.id = wi.status_id
     join workflow w on w.id = s.workflow_id
-    where w.project_id = ${projectId} and s.key = ${stateKey} and wi.deleted_at is null
-      ${boardFilterSql(filters)}
+    where wi.project_id = ${projectId} and w.project_id = ${projectId} and s.key = ${stateKey} and wi.deleted_at is null
+      ${boardWorkflowSql(filters)} ${boardFilterSql(filters)}
   `) as unknown as { n: number }[];
   return {
     items: rows.map((r) => ({ id: r.id, key: r.key, number: r.number, title: r.title,

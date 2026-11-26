@@ -281,6 +281,24 @@
       "group": "API",
       "description": "通过 API 写入数据（预留给令牌授权；当前 MCP/API 令牌按 tier 分级与项目白名单鉴权，不消费此键）",
       "sortOrder": 47
+    },
+    {
+      "key": "test_case:manage",
+      "group": "test",
+      "description": "维护正式测试用例、版本和套件",
+      "sortOrder": 48
+    },
+    {
+      "key": "test_plan:manage",
+      "group": "test",
+      "description": "管理测试计划与构建环境",
+      "sortOrder": 49
+    },
+    {
+      "key": "test_run:execute",
+      "group": "test",
+      "description": "执行测试、提交结果和复测",
+      "sortOrder": 50
     }
   ],
   "roles": [
@@ -333,7 +351,10 @@
         "work_item:manage_workflow",
         "work_item:transition",
         "work_item:update_any",
-        "work_item:update_own"
+        "work_item:update_own",
+        "test_case:manage",
+        "test_plan:manage",
+        "test_run:execute"
       ]
     },
     {
@@ -371,7 +392,10 @@
         "work_item:delete",
         "work_item:transition",
         "work_item:update_any",
-        "work_item:update_own"
+        "work_item:update_own",
+        "test_case:manage",
+        "test_plan:manage",
+        "test_run:execute"
       ]
     },
     {
@@ -391,7 +415,9 @@
         "page:update_own",
         "work_item:create",
         "work_item:transition",
-        "work_item:update_own"
+        "work_item:update_own",
+        "test_case:manage",
+        "test_run:execute"
       ]
     },
     {
@@ -642,8 +668,8 @@
         [
           "VERIFIED",
           "已验证",
-          "IN_PROGRESS",
-          "info"
+          "TERMINAL",
+          "success"
         ],
         [
           "REJECTED",

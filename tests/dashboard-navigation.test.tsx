@@ -6,7 +6,7 @@ import { makeRouter } from "../src/client/router.tsx";
 import { setLocale } from "../src/client/i18n/index.ts";
 
 const ACTOR = {
-  memberId: "m1", username: "demo", name: "测试成员", permissions: ["project:create"],
+  memberId: "m1", username: "demo", name: "测试成员", permissions: ["project:create", "milestone:manage"],
   dataScopes: [{ scopeType: "ORG", scopeId: null }], mustChangePassword: false,
   locale: "zh-CN", timezone: "Asia/Shanghai",
 };

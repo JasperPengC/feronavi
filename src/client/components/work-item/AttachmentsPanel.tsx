@@ -21,7 +21,7 @@ function humanSize(n: number) {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function AttachmentsPanel({ targetType, targetId }: { targetType: string; targetId: string }) {
+export function AttachmentsPanel({ targetType, targetId, readOnly = false }: { targetType: string; targetId: string; readOnly?: boolean }) {
   const qc = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +43,7 @@ export function AttachmentsPanel({ targetType, targetId }: { targetType: string;
   });
 
   async function upload(files: FileList | null) {
-    if (!files?.length || uploadLock.current) return;
+    if (readOnly || !files?.length || uploadLock.current) return;
     uploadLock.current = true;
     setUploading(true); setError(null);
     try {
@@ -72,11 +72,11 @@ export function AttachmentsPanel({ targetType, targetId }: { targetType: string;
         <h3 className="wi-drawer__title" style={{ margin: 0 }}>{t("att.title")}</h3>
         <span className="muted" style={{ fontSize: "var(--text-xs)" }}>{t("att.hint")}</span>
         <span style={{ flex: 1 }} />
-        <input ref={inputRef} type="file" multiple hidden disabled={uploading} aria-label={t("att.choose")}
+        {!readOnly && <><input ref={inputRef} type="file" multiple hidden disabled={uploading} aria-label={t("att.choose")}
           onChange={(e) => void upload(e.target.files)} />
         <Button size="sm" onClick={() => inputRef.current?.click()} disabled={uploading}>
           <Icon name="upload" size={14} />{uploading ? t("att.uploading") : t("att.upload")}
-        </Button>
+        </Button></>}
       </div>
       {error && <p className="field-error" role="alert">{error}</p>}
       {q.isLoading && <p className="muted" style={{ fontSize: "var(--text-sm)" }}>{t("common.loading")}</p>}
@@ -92,10 +92,10 @@ export function AttachmentsPanel({ targetType, targetId }: { targetType: string;
               <span className="muted wi-attachment-meta">{humanSize(a.sizeBytes)}</span>
               <a className="btn-link" href={`/api/v1/attachments/${a.id}`} download>{t("att.download")}</a>
               {previewable && <a className="btn-link" href={`/api/v1/attachments/${a.id}/preview`} target="_blank" rel="noreferrer">{t("att.preview")}</a>}
-              <Button size="sm" variant="ghost" disabled={remove.isPending}
+              {!readOnly && <Button size="sm" variant="ghost" disabled={remove.isPending}
                 onClick={async () => { if (await confirmDialog(t("att.deleteConfirm"), { danger: true })) remove.mutate(a.id); }}>
                 {t("common.delete")}
-              </Button>
+              </Button>}
             </li>
           );
         })}

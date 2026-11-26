@@ -1,6 +1,6 @@
 /** Wiki 页（第十二期）：树与标记、乐观锁提示、版本回滚、受限页授权 */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, cleanup, fireEvent } from "@testing-library/react";
+import { act, render, screen, waitFor, cleanup, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { makeRouter } from "../src/client/router.tsx";
@@ -57,9 +57,56 @@ const PAGES = { pages: [
   { id: "p2", title: "受限文档", slug: "sec", parentId: null, visibility: "RESTRICTED", sortOrder: 0, currentRevisionId: "r1" },
 ] };
 const DETAIL = { id: "p2", title: "受限文档", slug: "sec", parentId: null, visibility: "RESTRICTED",
-  sortOrder: 0, currentRevisionId: "r1", content: "机密正文", revisionNo: 1, changeSummary: null };
+  sortOrder: 0, currentRevisionId: "r1", content: "机密正文", revisionNo: 1, structureVersion: 3, changeSummary: null };
 
 describe("Wiki 页", () => {
+  it("文件夹显示子文档列表，整理结构不创建协同正文", async () => {
+    const folder = { ...DETAIL, id: "folder", title: "研发资料", kind: "FOLDER", parentId: null, currentRevisionId: null, content: "", revisionNo: 0, structureVersion: 3 };
+    stub({ "/auth/me": [200, ACTOR], [`/projects/${P}/pages`]: [200, { pages: [folder, { ...DETAIL, kind: "DOCUMENT", parentId: "folder" }] }],
+      [`/projects/${P}/members`]: [200, { members: [] }], "/pages/folder/revisions": [200, { revisions: [] }],
+      "/pages/folder/permissions": [200, { permissions: [] }], "/pages/folder": [200, folder] });
+    renderPage("?page=folder");
+    expect(await screen.findByRole("button", { name: /受限文档.*受限/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "编辑" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "整理" }));
+    expect(await screen.findByRole("dialog", { name: "整理" })).toBeTruthy();
+    expect(calls.some(call => call.includes("/collaboration/rooms/PAGE/folder"))).toBe(false);
+  });
+  it("归档文档可读但不展示正文编辑、附件写入或索引入口", async () => {
+    stub({ "/auth/me": [200, ACTOR], [`/projects/${P}/pages`]: [200, { pages: [] }],
+      [`/projects/${P}/members`]: [200, { members: [] }], "/pages/p2/revisions": [200, { revisions: [] }],
+      "/pages/p2/permissions": [200, { permissions: [] }], "/pages/p2": [200, { ...DETAIL, kind: "DOCUMENT", isArchived: true, archivedAt: "2026-11-25T00:00:00Z", structureVersion: 2 }] });
+    renderPage("?page=p2");
+    expect(await screen.findByText("机密正文")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "编辑" })).toBeNull();
+    expect(screen.getByRole("button", { name: "恢复" })).toBeTruthy();
+    expect(calls.some(call => call.includes("/collaboration/rooms/PAGE/p2"))).toBe(false);
+  });
+  it("文档路径错误给出行号并保留草稿，修正后才允许发布", async () => {
+    stub({ "/auth/me": [200, ACTOR], [`/projects/${P}/pages`]: [200, PAGES],
+      [`/projects/${P}/members`]: [200, { members: [] }], "/pages/p2/revisions": [200, { revisions: [] }],
+      "/pages/p2/permissions": [200, { permissions: [] }], "/pages/p2": [200, DETAIL] });
+    renderPage("?page=p2");
+    fireEvent.click(await screen.findByRole("button", { name: "编辑" }));
+    const editor = await screen.findByRole("textbox", { name: "文档正文" }) as HTMLTextAreaElement;
+    await waitFor(() => expect(editor.disabled).toBe(false));
+    fireEvent.change(editor, { target: { value: "说明\n\n[源码](/Users/dev/code.ts:2)" } });
+    expect(await screen.findByText(/第 3 行/)).toBeTruthy();
+    const save = screen.getByRole("button", { name: "保存修改" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    expect(editor.value).toContain("/Users/dev/code.ts:2");
+    expect(calls.some(call => call.includes("/publish"))).toBe(false);
+    fireEvent.change(editor, { target: { value: "说明\n\n`src/code.ts:2`" } });
+    await waitFor(() => expect(save.disabled).toBe(false));
+    expect(screen.queryByText(/处链接需要修正/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "铺满工作区" }));
+    expect(document.querySelector(".wiki-layout")?.getAttribute("data-wide")).toBe("true");
+    expect(screen.getByRole("textbox", { name: "文档正文" })).toBe(editor);
+    expect(editor.value).toBe("说明\n\n`src/code.ts:2`");
+    fireEvent.click(screen.getByRole("button", { name: "标准宽度" }));
+    expect(document.querySelector(".wiki-layout")?.getAttribute("data-wide")).toBe("false");
+    expect(screen.getByRole("textbox", { name: "文档正文" })).toBe(editor);
+  });
   it("权限保存遇到过期 CSRF 会刷新令牌并完成授权", async () => {
     document.cookie = "csrf_token=expired; path=/";
     let permissions: unknown[] = [];
@@ -148,6 +195,39 @@ describe("Wiki 页", () => {
     expect(screen.queryByRole("heading", { name: "发布指南" })).toBeNull();
   });
 
+  it("目录选择写入可刷新地址，浏览器前后退还原对应文档", async () => {
+    stubReadablePages();
+    const first = renderPage("?page=p1");
+    await screen.findByRole("heading", { name: "发布指南" });
+    fireEvent.click(screen.getAllByText("受限文档")[0]!);
+    await screen.findByText("机密正文");
+    await waitFor(() => expect(first.router.state.location.search).toMatchObject({ page: "p2" }));
+    const savedSearch = first.router.state.location.searchStr;
+    await act(async () => first.router.history.back());
+    await screen.findByRole("heading", { name: "发布指南" });
+    await act(async () => first.router.history.forward());
+    await screen.findByText("机密正文");
+    first.unmount(); first.qc.clear();
+    renderPage(savedSearch);
+    await screen.findByText("机密正文");
+    expect(screen.queryByRole("heading", { name: "发布指南" })).toBeNull();
+  });
+
+  it("新建文档更新地址并保持编辑，地址同步不会清空新草稿", async () => {
+    const created = { ...DETAIL, id: "new-page", title: "未命名文档", content: "", visibility: "PROJECT" };
+    stub({ "/auth/me": [200, ACTOR], [`/projects/${P}/pages`]: [200, created],
+      [`/projects/${P}/members`]: [200, { members: [] }],
+      "/pages/new-page/revisions": [200, { revisions: [] }], "/pages/new-page": [200, created] });
+    const { router } = renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "新建", exact: true }));
+    const editor = await screen.findByRole("textbox", { name: "文档正文" }) as HTMLTextAreaElement;
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ page: "new-page" }));
+    await waitFor(() => expect(editor.disabled).toBe(false));
+    fireEvent.change(editor, { target: { value: "正在编写的首篇文档" } });
+    expect(screen.getByRole("textbox", { name: "文档正文" })).toBe(editor);
+    expect(editor.value).toBe("正在编写的首篇文档");
+  });
+
   it("切换文档前保护未保存的草稿，取消后仍能继续编辑", async () => {
     stubReadablePages();
     renderPage();
@@ -172,13 +252,30 @@ describe("Wiki 页", () => {
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));
     await waitFor(() => expect((screen.getByRole("textbox", { name: "文档正文" }) as HTMLTextAreaElement).disabled).toBe(false));
     fireEvent.change(screen.getByRole("textbox", { name: "文档正文" }), { target: { value: "我的修改" } });
-    qc.setQueryData(["wiki-page", "p1"], { ...readableDetail, currentRevisionId: "r9", content: "其他人的新版本" });
+    qc.setQueryData(["wiki-page", "p1"], { ...readableDetail, title: "别人整理后的标题", structureVersion: 4, currentRevisionId: "r9", content: "其他人的新版本" });
     await waitFor(() => expect((screen.getByRole("textbox", { name: "文档正文" }) as HTMLTextAreaElement).value).toBe("我的修改"));
     fireEvent.click(screen.getByRole("button", { name: t("wk.saveChanges") }));
     await waitFor(() => {
       const saveCall = vi.mocked(fetch).mock.calls.find(([url, init]) => String(url).includes("/PAGE/p1/publish") && init?.method === "POST");
       expect(saveCall).toBeTruthy();
       expect(JSON.parse(String(saveCall![1]!.body))).toMatchObject({ expectedRevisionId: "r1", userConfirmed: true });
+      expect(JSON.parse(String(saveCall![1]!.body))).not.toHaveProperty("title");
+      expect(JSON.parse(String(saveCall![1]!.body))).not.toHaveProperty("expectedStructureVersion");
+    });
+  });
+
+  it("编辑标题时携带开始编辑的结构版本，后台整理不替换该基线", async () => {
+    stubReadablePages();
+    const { qc } = renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "编辑" }));
+    await waitFor(() => expect((screen.getByRole("textbox", { name: "文档正文" }) as HTMLTextAreaElement).disabled).toBe(false));
+    fireEvent.change(screen.getByRole("textbox", { name: "文档标题" }), { target: { value: "我的标题" } });
+    qc.setQueryData(["wiki-page", "p1"], { ...readableDetail, title: "别人整理后的标题", structureVersion: 4 });
+    fireEvent.click(screen.getByRole("button", { name: t("wk.saveChanges") }));
+    await waitFor(() => {
+      const saveCall = vi.mocked(fetch).mock.calls.find(([url, init]) => String(url).includes("/PAGE/p1/publish") && init?.method === "POST");
+      expect(saveCall).toBeTruthy();
+      expect(JSON.parse(String(saveCall![1]!.body))).toMatchObject({ title: "我的标题", expectedStructureVersion: 3, expectedRevisionId: "r1" });
     });
   });
 

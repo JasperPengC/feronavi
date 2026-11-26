@@ -1,6 +1,6 @@
 {
   "name": "feronavi-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Feronavi MCP stdio bridge: npx feronavi-mcp connects any MCP client to a Feronavi server over Streamable HTTP.",
   "type": "module",
   "scripts": {

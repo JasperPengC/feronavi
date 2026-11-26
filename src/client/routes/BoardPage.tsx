@@ -18,6 +18,7 @@ import { toast } from "../components/ui/Toast.tsx";
 import { DndContext, DragOverlay, PointerSensor, KeyboardSensor, pointerWithin, closestCenter, useSensor, useSensors, useDraggable, useDroppable } from "@dnd-kit/core";
 import { apiGet, apiPost, ApiError } from "../lib/api.ts";
 import { WorkItemViewHeader } from "../components/project/WorkItemViewHeader.tsx";
+import { WorkItemTag } from "../components/work-item/WorkItemTag.tsx";
 import { Drawer } from "../components/ui/Drawer.tsx";
 import { WorkItemDrawer } from "../components/work-item/DeferredWorkItemDrawer.tsx";
 import { WorkItemEditor } from "../components/work-item/WorkItemEditor.tsx";
@@ -25,6 +26,7 @@ import { Button } from "../components/ui/Button.tsx";
 import { TextArea } from "../components/ui/TextArea.tsx";
 import { TextInput } from "../components/ui/TextInput.tsx";
 import { Select } from "../components/Select.tsx";
+import { Checkbox } from "../components/Checkbox.tsx";
 import { StateBlock } from "../components/ui/StateBlock.tsx";
 import { Icon } from "../components/Icon.tsx";
 
@@ -37,6 +39,7 @@ interface BoardColumn {
   wipLimit?: number | null;
   items: BoardItem[]; count: number; truncated: boolean;
 }
+interface BoardWorkflow { id: string; name: string; appliesToType: string }
 
 const PRIORITY_LABEL: Record<string, string> = {
   LOWEST: "board.priority.LOWEST", LOW: "board.priority.LOW", MEDIUM: "board.priority.MEDIUM",
@@ -60,7 +63,7 @@ function Card({ item, onOpen }: { item: BoardItem; onOpen: (id: string) => void 
       ref={setNodeRef}
       className="card board-card"
       style={{
-        padding: 10, marginBottom: 8, touchAction: "none",
+        touchAction: "none",
         // 拖动期间只改变位移与透明度，不重新计算卡片布局。
         transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
         opacity: isDragging ? 0.4 : 1,
@@ -80,9 +83,7 @@ function Card({ item, onOpen }: { item: BoardItem; onOpen: (id: string) => void 
         {item.title}
       </button>
       {item.priority && (
-        <div className="muted" style={{ fontSize: "var(--text-xs)" }}>
-          {t("common.priority")} {PRIORITY_LABEL[item.priority] ? t(PRIORITY_LABEL[item.priority]!) : item.priority}
-        </div>
+        <WorkItemTag kind="priority" value={item.priority} />
       )}
     </div>
   );
@@ -95,6 +96,7 @@ function Column({ col, activeId, onOpen, dropId, showTotal = true, onLoadMore, l
     <div
       ref={setNodeRef}
       className="board-column"
+      role="region" aria-label={col.name}
       data-state-key={col.stateKey}
       data-state-category={col.category}
       style={{
@@ -137,11 +139,15 @@ export function BoardPage() {
   const [q, setQ] = useState("");
   const [keyword, setKeyword] = useState("");
   const [prioFilter, setPrioFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [workflowFilter, setWorkflowFilter] = useState("");
+  const [workflowOptions, setWorkflowOptions] = useState<{ projectId: string; items: BoardWorkflow[] } | null>(null);
+  const [hideEmpty, setHideEmpty] = useState(false);
   const [laneBy, setLaneBy] = useState<"none" | "priority">("none");
   const [extraByColumn, setExtraByColumn] = useState<Record<string, BoardItem[]>>({});
   const [loadingColumn, setLoadingColumn] = useState<string | null>(null);
   const pageRequests = useRef<Record<string, symbol>>({});
-  const boardScope = `${projectId}\u0000${keyword}\u0000${prioFilter}`;
+  const boardScope = `${projectId}\u0000${keyword}\u0000${prioFilter}\u0000${typeFilter}\u0000${workflowFilter}`;
   const boardScopeRef = useRef(boardScope);
   boardScopeRef.current = boardScope;
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
@@ -156,11 +162,14 @@ export function BoardPage() {
     useSensor(KeyboardSensor),
   );
 
-  const boardKey = queryKeys.board(projectId, keyword, prioFilter);
+  const boardKey = queryKeys.board(projectId, keyword, prioFilter, typeFilter, workflowFilter);
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: boardKey,
-    queryFn: () => apiGet<{ columns: BoardColumn[]; total: number }>(`/api/v1/projects/${projectId}/work-items/board`, { pageSizePerColumn: 25, q: keyword || undefined, priority: prioFilter || undefined }),
+    queryFn: () => apiGet<{ columns: BoardColumn[]; total: number; workflows?: BoardWorkflow[] }>(`/api/v1/projects/${projectId}/work-items/board`, { pageSizePerColumn: 25, q: keyword || undefined, priority: prioFilter || undefined, type: typeFilter || undefined, workflowId: workflowFilter || undefined }),
   });
+  useEffect(() => {
+    if (data?.workflows) setWorkflowOptions({ projectId, items: data.workflows });
+  }, [data?.workflows, projectId]);
 
   /**
    * 工作流配置可能为同一个项目返回多套状态模板，服务端会把它们展开成重复的
@@ -259,7 +268,7 @@ export function BoardPage() {
     setExtraByColumn({});
     setLoadingColumn(null);
     return () => { pageRequests.current = {}; };
-  }, [data, projectId, keyword, prioFilter]);
+  }, [data, projectId, keyword, prioFilter, typeFilter, workflowFilter]);
 
   async function loadMore(stateKey: string, current: number) {
     if (pageRequests.current[stateKey]) return;
@@ -268,7 +277,7 @@ export function BoardPage() {
     pageRequests.current[stateKey] = request;
     setLoadingColumn(stateKey);
     try {
-      const r = await apiGet<{ items: BoardItem[]; count: number }>(`/api/v1/projects/${projectId}/work-items/board/columns/${stateKey}`, { offset: current, limit: 25, q: keyword || undefined, priority: prioFilter || undefined });
+      const r = await apiGet<{ items: BoardItem[]; count: number }>(`/api/v1/projects/${projectId}/work-items/board/columns/${stateKey}`, { offset: current, limit: 25, q: keyword || undefined, priority: prioFilter || undefined, type: typeFilter || undefined, workflowId: workflowFilter || undefined });
       if (boardScopeRef.current !== requestScope || pageRequests.current[stateKey] !== request) return;
       setExtraByColumn((prev) => {
         const existing = prev[stateKey] ?? [];
@@ -284,7 +293,11 @@ export function BoardPage() {
       }
     }
   }
-  const filteredColumns = mergedColumns;
+  const populatedColumns = mergedColumns.filter(col => col.count > 0);
+  const filteredColumns = hideEmpty && !activeId && populatedColumns.length ? populatedColumns : mergedColumns;
+  const workflows = (data?.workflows ?? (workflowOptions?.projectId === projectId ? workflowOptions.items : [])).filter(workflow => !typeFilter || typeFilter === "SUBTASK" || workflow.appliesToType === typeFilter);
+  const hasFilters = !!(keyword || prioFilter || typeFilter || workflowFilter);
+  const clearFilters = () => { setQ(""); setKeyword(""); setPrioFilter(""); setTypeFilter(""); setWorkflowFilter(""); };
 
 
 
@@ -323,13 +336,18 @@ export function BoardPage() {
       <p className="muted work-items-help">{t("wiv.boardHelp")}</p>
       <div className="board-filter-row">
         <div className="board-filters" role="group" aria-label={t("board.filters")}>
-          <TextInput style={{ width: 240 }} placeholder={t("board.searchPlaceholder")} aria-label={t("board.searchPlaceholder")}
+          <TextInput style={{ width: 200 }} placeholder={t("board.searchPlaceholder")} aria-label={t("board.searchPlaceholder")}
             value={q} onChange={(e) => setQ(e.target.value)} />
+          <Select ariaLabel={t("wiDetail.type")} value={typeFilter} onChange={value => { setTypeFilter(value); setWorkflowFilter(""); }}
+            options={[{ value: "", label: t("wiDetail.type") }, ...["TASK", "REQUIREMENT", "DEFECT", "SUBTASK"].map(value => ({ value, label: t(`type.${value}`) }))]} />
+          <Select ariaLabel={t("board.workflow")} value={workflowFilter} onChange={setWorkflowFilter} disabled={!workflows.length}
+            options={[{ value: "", label: t("board.workflow") }, ...workflows.map(workflow => ({ value: workflow.id, label: workflow.name }))]} />
           <Select ariaLabel={t("common.priority")} value={prioFilter} onChange={setPrioFilter}
             options={[{ value: "", label: t("common.priority") }, ...["URGENT", "HIGH", "MEDIUM", "LOW", "LOWEST"].map((value) => ({ value, label: t(PRIORITY_LABEL[value]!) }))]} />
           <Select ariaLabel={t("board.groupBy")} value={laneBy} onChange={(v) => setLaneBy(v as "none" | "priority")}
             options={[{ value: "none", label: t("board.groupNone") }, { value: "priority", label: t("board.groupPriority") }]} />
-          {(q || prioFilter) && <Button size="sm" variant="ghost" onClick={() => { setQ(""); setPrioFilter(""); }}>{t("board.clearFilters")}</Button>}
+          <Checkbox size="sm" checked={hideEmpty} onChange={setHideEmpty} label={t("board.hideEmpty")} />
+          {(q || hasFilters) && <Button size="sm" variant="ghost" onClick={clearFilters}>{t("board.clearFilters")}</Button>}
         </div>
         {!isLoading && !isError && (laneBy === "none" || !flat.length) && <div className="board-scroll-controls" role="group" aria-label={t("board.horizontalScroll")}>
           <Button size="sm" variant="ghost" iconOnly disabled={!canScrollLeft} aria-label={t("board.scrollLeft")}
@@ -349,9 +367,9 @@ export function BoardPage() {
       {!isLoading && !isError && !columns.length && <StateBlock kind="empty" title={t("common.noData")} />}
       {!isLoading && !isError && columns.length > 0 && !flat.length && <div className="board-empty-notice" role="status">
         <Icon name="inbox" size={16} />
-        <span>{keyword || prioFilter ? t("common.noMatches") : t("common.noData")}</span>
-        {keyword || prioFilter
-          ? <Button size="sm" variant="ghost" onClick={() => { setQ(""); setKeyword(""); setPrioFilter(""); }}>{t("board.clearFilters")}</Button>
+        <span>{hasFilters ? t("common.noMatches") : t("common.noData")}</span>
+        {hasFilters
+          ? <Button size="sm" variant="ghost" onClick={clearFilters}>{t("board.clearFilters")}</Button>
           : <Button size="sm" variant="ghost" onClick={() => setCreateOpen(true)}><Icon name="plus" size={14} />{t("wie.create")}</Button>}
       </div>}
       {!isLoading && !isError && laneBy === "priority" && mergedColumns.some((col) => col.items.length < col.count) && <div className="toolbar">
@@ -387,7 +405,7 @@ export function BoardPage() {
               return (
                 <section className="board-lane" key={lane || "none"} aria-label={lane || t("board.noPriority")}>
                   <div className="board-lane-head">
-                    <span className={`status-pill ${lane === "URGENT" || lane === "HIGH" ? "dot-red" : lane === "MEDIUM" ? "dot-blue" : "dot-green"}`}>{lane ? t(PRIORITY_LABEL[lane]!) : t("board.noPriority")}</span>
+                    <WorkItemTag kind="priority" value={lane} label={lane ? t(PRIORITY_LABEL[lane]!) : t("board.noPriority")} />
                   </div>
                   <div className="board-columns board-lane-columns" data-custom-scroll>
                     {laneColumns.map((c) => (

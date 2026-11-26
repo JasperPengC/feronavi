@@ -73,7 +73,7 @@ const PROJECT_PAGES: [string, string, string, IconName][] = [
   ["intake", "nav.intake", "intake 需求 收集", "inbox"],
   ["board", "nav.board", "看板 kanban", "grid"],
   ["table", "nav.table", "表格 table 列表", "table"],
-  ["milestones", "nav.milestones", "里程碑 milestone", "flag"],
+  ["milestones", "nav.planning", "计划 里程碑 迭代 版本 发布 模块 milestone iteration sprint release version module planning", "flag"],
   ["calendar", "nav.calendar", "日历 calendar", "calendar"],
   ["timeline", "nav.timeline", "时间线 timeline", "timeline"],
   ["wiki", "nav.wiki", "知识库 wiki 文档", "book"],

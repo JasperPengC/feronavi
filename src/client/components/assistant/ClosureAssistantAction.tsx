@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { useRef, useState, type ComponentType, type ReactNode } from "react";
 import type { RagActionProposal, RagProject, RagResourceKind } from "../../../shared/rag.ts";
 import { ApiError } from "../../lib/api.ts";
 import { getLocale, t } from "../../i18n/index.ts";
 import { Button } from "../ui/Button.tsx";
+import { AssistantActionStatus, AssistantActionFailure, actionNeedsRevision, useActionExpired } from "./AssistantActionStatus.tsx";
 
 type Resource = ComponentType<{ projectId: string | null; kind: RagResourceKind; id: string; children: ReactNode }>;
 const fieldKeys: Record<string, string> = {
@@ -74,15 +75,7 @@ export function ClosureAssistantAction({ action, projects, canAct, onDecide, Res
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const [error, setError] = useState<{ message: string; blocked: boolean }>();
-  const [expiryTick, refreshExpiry] = useState(0);
-  useEffect(() => {
-    if (action.status !== "pending") return;
-    const remaining = Date.parse(action.expiresAt) - Date.now();
-    if (!Number.isFinite(remaining) || remaining <= 0) return;
-    const timer = window.setTimeout(() => refreshExpiry(value => value + 1), Math.min(remaining, 2_147_483_647));
-    return () => window.clearTimeout(timer);
-  }, [action.expiresAt, action.status, expiryTick]);
-  const expired = action.status === "expired" || action.status === "pending" && Date.parse(action.expiresAt) <= Date.now();
+  const expired = useActionExpired(action);
   const pending = action.status === "pending" && !expired;
   const presentation = action.presentation!;
   const preview = action.target?.preview;
@@ -91,21 +84,22 @@ export function ClosureAssistantAction({ action, projects, canAct, onDecide, Res
   const observed = action.result?.value.observations;
   const observations = Array.isArray(observed) ? observed.filter((value): value is { toolName: string; value: unknown } => !!value && typeof value === "object" && typeof value.toolName === "string" && "value" in value) : [];
   async function decide(decision: "confirm" | "reject") {
-    if (lock.current || !canAct || !pending || decision === "confirm" && error?.blocked || Date.parse(action.expiresAt) <= Date.now()) return;
+    if (lock.current || !canAct || !pending || decision === "confirm" && error?.blocked || actionNeedsRevision(action) || Date.parse(action.expiresAt) <= Date.now()) return;
     lock.current = true; setBusy(true); setError(undefined);
     try { await onDecide(action.id, decision); }
     catch (cause) { setError({ message: cause instanceof ApiError ? cause.message : t("assistant.action.retryHint"), blocked: cause instanceof ApiError && ([401, 403, 404, 409, 410].includes(cause.status) || ["CONFLICT", "VERSION_CONFLICT", "NOT_FOUND", "FORBIDDEN", "EXPIRED"].includes(cause.code)) }); }
     finally { lock.current = false; setBusy(false); }
   }
   return <section className="assistant-action" aria-label={presentation.title}>
-    <div className="assistant-action-heading"><h3>{presentation.title}</h3><span role="status">{busy ? t("assistant.action.executing") : t(`assistant.action.status.${expired ? "expired" : action.status}`)}</span></div>
+    <div className="assistant-action-heading"><h3>{presentation.title}</h3><AssistantActionStatus action={action} busy={busy} /></div>
+    <AssistantActionFailure action={action} />
     <p className="assistant-action-project">{action.projectId ? projects.find(project => project.id === action.projectId)?.name ?? t("assistant.project") : t(`assistant.scope.${action.scope?.kind ?? "account"}`)}</p>
     {action.target && targetName && <p className="assistant-action-target"><ResourceLink projectId={action.projectId} kind={action.target.kind} id={action.target.id}>{targetKey ? `${targetKey} · ${targetName}` : targetName}</ResourceLink></p>}
     <dl className="assistant-action-changes">{presentation.fields.map((field, index) => <div key={index}><dt>{field.label}</dt><dd><Text value={field.value} /></dd></div>)}</dl>
     {pending && <p className="assistant-action-expiry">{t("assistant.action.serverRecheck")}</p>}
-    {error?.blocked && <p className="assistant-action-error" role="alert">{t("assistant.action.changed")}</p>}
-    {error && <p className="assistant-action-error" role="alert">{error.message}</p>}
-    {pending && <div className="assistant-action-controls"><Button size="sm" disabled={!canAct || busy || error?.blocked} onClick={() => void decide("confirm")}>{error && !error.blocked ? t("assistant.action.retry") : t("assistant.action.confirm")}</Button><Button size="sm" variant="ghost" disabled={!canAct || busy} onClick={() => void decide("reject")}>{t("assistant.action.reject")}</Button></div>}
+    {!action.lastFailure && error?.blocked && <p className="assistant-action-error" role="alert">{t("assistant.action.changed")}</p>}
+    {!action.lastFailure && error && <p className="assistant-action-error" role="alert">{error.message}</p>}
+    {pending && <div className="assistant-action-controls"><Button size="sm" disabled={!canAct || busy || error?.blocked || actionNeedsRevision(action)} onClick={() => void decide("confirm")}>{error && !error.blocked ? t("assistant.action.retry") : t("assistant.action.confirm")}</Button><Button size="sm" variant="ghost" disabled={!canAct || busy} onClick={() => void decide("reject")}>{t("assistant.action.reject")}</Button></div>}
     {pending && <p className="assistant-action-expiry">{t("assistant.action.expires", { time: stamp(action.expiresAt) })}</p>}
     {action.result && <section className="assistant-action-facts" aria-label={t("assistant.closure.result")}><h4>{t("assistant.closure.result")}</h4><p className="assistant-action-expiry">{t("assistant.observedAt", { time: stamp(action.result.observedAt) })}</p>
       {observations.length ? observations.map((observation, index) => {

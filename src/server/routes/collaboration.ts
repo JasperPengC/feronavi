@@ -126,7 +126,7 @@ export async function registerCollaborationRoutes(app: FastifyInstance): Promise
     if (p.resourceType !== "PAGE") throw new DomainError("VALIDATION", "只有页面协作房间支持发布", null);
     const room = await rooms.getRoom(actor, p.resourceType, p.resourceId);
     if (!(await rooms.canWriteRoom(actor, room))) throw new DomainError("FORBIDDEN", "没有页面写权限", null);
-    const body = z.object({ title: z.string().min(1).max(200).optional(), expectedRevisionId: z.string().uuid(), changeSummary: z.string().max(300).optional(), userConfirmed: z.boolean() }).safeParse(req.body);
+    const body = z.object({ title: z.string().min(1).max(300).optional(), expectedStructureVersion: z.number().int().positive().optional(), expectedRevisionId: z.string().uuid(), changeSummary: z.string().max(300).optional(), userConfirmed: z.boolean() }).safeParse(req.body);
     if (!body.success) throw new DomainError("VALIDATION", "参数不合法", body.error.issues);
     requireUserConfirmation(body.data.userConfirmed);
     return documents.publishPage(actor, room.id, body.data);

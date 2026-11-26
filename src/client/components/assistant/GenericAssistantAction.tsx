@@ -4,6 +4,7 @@ import type { RagActionProposal, RagProject, RagResourceKind } from "../../../sh
 import { apiGet, ApiError } from "../../lib/api.ts";
 import { getLocale, t } from "../../i18n/index.ts";
 import { Button } from "../ui/Button.tsx";
+import { AssistantActionStatus, AssistantActionFailure, actionNeedsRevision, useActionExpired } from "./AssistantActionStatus.tsx";
 
 type Resource = ComponentType<{ projectId: string | null; kind: RagResourceKind; id: string; children: ReactNode }>;
 type Row = Record<string, unknown> & { id: string; projectId: string; name?: string; title?: string; key?: string; body?: string };
@@ -16,7 +17,7 @@ function resultKind(action: RagActionProposal): RagResourceKind {
 }
 function stamp(date: string) { return new Date(date).toLocaleString(getLocale()); }
 function readable(row: Row | undefined) { return row?.name || row?.title || row?.body; }
-function ActionText({ text }: { text: string }) {
+export function AssistantActionText({ text }: { text: string }) {
   if (text.length <= 280 && text.split("\n").length <= 5) return <>{text}</>;
   return <details className="assistant-action-content"><summary>{text.slice(0, 180)}… <span>{t("assistant.action.fullContent")}</span></summary><p>{text}</p></details>;
 }
@@ -39,7 +40,7 @@ export function GenericAssistantAction({ action, accountId, projects, canAct, on
   const current = saved ?? (targetQuery.isSuccess && targetQuery.data.projectId === action.projectId ? targetQuery.data : target?.kind === "comment" ? preview : undefined);
   const loading = !!target && target.kind !== "comment" && !saved && targetQuery.isPending;
   const inaccessible = !!target && !saved && (target.kind === "comment" ? !preview : targetQuery.isError || targetQuery.isSuccess && !current);
-  const expired = action.status === "expired" || action.status === "pending" && Date.parse(action.expiresAt) <= Date.now();
+  const expired = useActionExpired(action);
   const pending = action.status === "pending" && !expired;
   const changed = action.parameters.expectedRevisionId !== undefined && current && current.currentRevisionId !== action.parameters.expectedRevisionId;
   const parentKind = kind === "page" ? "page" : kind === "comment" ? "comment" : "module";
@@ -65,7 +66,7 @@ export function GenericAssistantAction({ action, accountId, projects, canAct, on
     if (field === "progressMode") return t(`assistant.value.progressMode.${input}`);
     if (typeof input === "boolean") return t(input ? "assistant.value.enabled" : "assistant.value.disabled");
     if (typeof input === "object") return t("assistant.value.structured");
-    return <ActionText text={String(input)} />;
+    return <AssistantActionText text={String(input)} />;
   }
   async function decide(decision: "confirm" | "reject") {
     if (lock.current || !canAct) return;
@@ -75,23 +76,25 @@ export function GenericAssistantAction({ action, accountId, projects, canAct, on
     finally { lock.current = false; setBusy(false); }
   }
   const targetName = readable(current);
+  const commentOwnerId = target?.kind === "workItem" ? target.id : current?.targetId ?? action.parameters.workItemId;
   const resultFields = Object.entries(action.parameters).filter(([field]) => editable.has(field));
   return <section className="assistant-action" aria-label={name}>
-    <div className="assistant-action-heading"><h3>{name}</h3><span role="status">{busy ? t("assistant.action.executing") : t(`assistant.action.status.${expired ? "expired" : action.status}`)}</span></div>
+    <div className="assistant-action-heading"><h3>{name}</h3><AssistantActionStatus action={action} busy={busy} /></div>
+    <AssistantActionFailure action={action} />
     <p className="assistant-action-project">{action.projectId ? projects.find(project => project.id === action.projectId)?.name ?? t("assistant.project") : t(`assistant.scope.${action.scope?.kind ?? "account"}`)}</p>
     {loading ? <p role="status">{t("assistant.action.loadingTarget")}</p> : inaccessible ? <p role="alert">{t("assistant.action.unavailable")}</p> : <>
       {current && targetName && <p className="assistant-action-target">{target?.kind === "comment" || saved && kind === "comment" ? <span>{t("assistant.resource.comment")}</span> : <ResourceLink projectId={action.projectId} kind={saved ? kind : target!.kind} id={current.id}>{current.key ? `${current.key} · ${targetName}` : targetName}</ResourceLink>}</p>}
-      {kind === "comment" && target?.kind !== "workItem" && typeof (current?.targetId ?? action.parameters.workItemId) === "string" && <p className="assistant-action-target"><ResourceLink projectId={action.projectId} kind="workItem" id={String(current?.targetId ?? action.parameters.workItemId)}>{t("assistant.resource.workItem")}</ResourceLink></p>}
+      {kind === "comment" && (saved || target?.kind !== "workItem") && typeof commentOwnerId === "string" && <p className="assistant-action-target"><ResourceLink projectId={action.projectId} kind="workItem" id={commentOwnerId}>{t("assistant.resource.commentOwner")}</ResourceLink></p>}
       <dl className="assistant-action-changes">{resultFields.map(([field, next]) => <div key={field}><dt>{t(`assistant.field.${field === "parentId" ? "parentResource" : field}`)}</dt><dd>
         {pending && current && verb === "update" && <><span className="assistant-action-old">{value(field, current[field])}</span><span className="assistant-change-arrow" aria-label={t("assistant.action.changesTo")}>→</span></>}
         <span>{value(field, saved && field in saved ? saved[field] : next)}</span>
       </dd></div>)}</dl>
       {pending && <p className="assistant-action-expiry">{t("assistant.action.serverRecheck")}</p>}
-      {(pending && changed || error?.blocked) && <p className="assistant-action-error" role="alert">{t("assistant.action.changed")}</p>}
+      {!action.lastFailure && (pending && changed || error?.blocked) && <p className="assistant-action-error" role="alert">{t("assistant.action.changed")}</p>}
       {pending && refsLoading && <p role="status">{t("assistant.action.referencesLoading")}</p>}
       {pending && refsFailed && <p className="assistant-action-error" role="alert">{t("assistant.action.referencesUnavailable")}</p>}
-      {error && <p className="assistant-action-error" role="alert">{error.message}</p>}
-      {pending && <div className="assistant-action-controls"><Button size="sm" disabled={!canAct || busy || !!changed || error?.blocked || refsLoading || refsFailed} onClick={() => void decide("confirm")}>{error && !error.blocked ? t("assistant.action.retry") : t("assistant.action.confirm")}</Button><Button size="sm" variant="ghost" disabled={!canAct || busy} onClick={() => void decide("reject")}>{t("assistant.action.reject")}</Button></div>}
+      {!action.lastFailure && error && <p className="assistant-action-error" role="alert">{error.message}</p>}
+      {pending && <div className="assistant-action-controls"><Button size="sm" disabled={!canAct || busy || !!changed || error?.blocked || actionNeedsRevision(action) || refsLoading || refsFailed} onClick={() => void decide("confirm")}>{error && !error.blocked ? t("assistant.action.retry") : t("assistant.action.confirm")}</Button><Button size="sm" variant="ghost" disabled={!canAct || busy} onClick={() => void decide("reject")}>{t("assistant.action.reject")}</Button></div>}
       {pending && <p className="assistant-action-expiry">{t("assistant.action.expires", { time: stamp(action.expiresAt) })}</p>}
       {saved && action.result && <p className="assistant-action-expiry">{t("assistant.observedAt", { time: stamp(action.result.observedAt) })}</p>}
       <details className="assistant-error-details"><summary>{t("assistant.errorDetails")}</summary><p>{action.toolName} · {action.id}</p><pre>{JSON.stringify(action.parameters, null, 2)}</pre></details>

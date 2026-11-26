@@ -37,7 +37,7 @@ async function recipientCanRead(memberId: string, targetType: string, targetId: 
 }
 
 /** 评论目标必须与工作项同项目（评论是跟着工作项的） */
-async function assertTargetVisible(actor: Actor, targetType: string, targetId: string): Promise<string | null> {
+async function assertTargetVisible(actor: Actor, targetType: string, targetId: string, mutating = false): Promise<string | null> {
   let pid: string | null;
   if (targetType === "WORK_ITEM") {
     const rows = await db.execute(sql`
@@ -50,6 +50,10 @@ async function assertTargetVisible(actor: Actor, targetType: string, targetId: s
     `) as unknown as { project_id: string | null }[];
     pid = rows[0]?.project_id ?? null;
   } else if (targetType === "PAGE") {
+    if (mutating) {
+      const [mutable] = await db.execute<{ id: string }>(sql`select id from page where id = ${targetId} and kind = 'DOCUMENT' and not exists(select 1 from archived_page a where a.id = page.id)`);
+      if (!mutable) throw forbidden();
+    }
     const rows = await db.execute(sql`
       select project_id::text as project_id, visibility from page where id = ${targetId} and deleted_at is null
     `) as unknown as { project_id: string | null; visibility: string }[];
@@ -81,7 +85,7 @@ export async function createComment(
   input: { targetType: string; targetId: string; body: string; parentId?: string | null },
 ) {
   businessEffects(); // Fail before writes if an entry point omitted application composition.
-  const projectId = await assertTargetVisible(actor, input.targetType, input.targetId);
+  const projectId = await assertTargetVisible(actor, input.targetType, input.targetId, true);
   const ctx: PermissionContext = {
     memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId,
   };
@@ -220,7 +224,7 @@ export async function updateComment(actor: Actor, id: string, body: string) {
   const rows = await db.select().from(comment).where(eq(comment.id, id)).limit(1);
   const row = rows[0];
   if (!row || row.deletedAt) throw forbidden();
-  const projectId = await assertTargetVisible(actor, row.targetType, row.targetId);
+  const projectId = await assertTargetVisible(actor, row.targetType, row.targetId, true);
   // 文档 10 节：comment:update_own（自己的）；判定走权限引擎而不是硬比 id，与管理员策略解耦。
   // 作用域传**目标所属项目**（此前传 null 导致项目档成员改不了自己的评论）。
   const ctx: PermissionContext = {
@@ -243,7 +247,7 @@ export async function deleteComment(actor: Actor, id: string): Promise<void> {
   const rows = await db.select().from(comment).where(eq(comment.id, id)).limit(1);
   const row = rows[0];
   if (!row || row.deletedAt) throw forbidden();
-  const projectId = await assertTargetVisible(actor, row.targetType, row.targetId);
+  const projectId = await assertTargetVisible(actor, row.targetType, row.targetId, true);
   // 文档 10 节：本人 comment:update_own，或 comment:delete_any（作用域 = 目标所属项目）
   const ctx: PermissionContext = {
     memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId,

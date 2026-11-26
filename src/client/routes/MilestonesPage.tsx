@@ -4,7 +4,8 @@ import { queryKeys } from "../lib/query-keys.ts";
 import { t, useLocale } from "../i18n/index.ts";
 import { useState } from "react";
 import { PageTabs, TabPanel } from "../components/ui/PageTabs.tsx";
-import { Link, useParams } from "@tanstack/react-router";
+import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import { parsePlanningSearch, type PlanSection } from "../lib/work-item-table-search.ts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { planning, type PlanEntity } from "../lib/planning-api.ts";
 import { ApiError } from "../lib/api.ts";
@@ -21,16 +22,17 @@ import { MetricCard } from "../components/ui/MetricCard.tsx";
 import { PlanningEntitiesPanel } from "../components/project/PlanningEntitiesPanel.tsx";
 import { Modal } from "../components/ui/Modal.tsx";
 import { useSettingsDraft } from "../components/settings/SettingsDraft.tsx";
-
-const KIND_LABEL: Record<string, string> = {
-  milestone: t("ms.kindMilestone"), iteration: t("ms.kindIteration"), release: t("ms.kindRelease"), module: t("ms.kindModule"),
-};
+import { useCan } from "../lib/actor.ts";
 
 export function MilestonesPage() {
   useLocale();   // 订阅语言
   const { projectId } = useParams({ from: "/_app/projects/$projectId/milestones" });
   const qc = useQueryClient();
-  const [section, setSection] = useState("milestones");
+  const canManage = useCan("milestone:manage");
+  const search = parsePlanningSearch(useSearch({ strict: false }));
+  const navigate = useNavigate({ from: "/projects/$projectId/milestones" });
+  const section = search.section ?? "milestones";
+  const setSection = (value: string) => void navigate({ search: { section: value as PlanSection }, resetScroll: false });
   const [editing, setEditing] = useState<PlanEntity | null>(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", dueDate: "" });
@@ -78,10 +80,10 @@ export function MilestonesPage() {
 
   return (
     <div className={`page project-refinement milestones-page${section === "milestones" ? " data-page" : ""}`}>
-      <PageHead title={t("ms.title")}
-        actions={section === "milestones" && (data?.length ?? 0) > 0 ? <Button variant="primary" onClick={openCreate}><Icon name="plus" size={14} />{t("ms.new")}</Button> : undefined} />
+      <PageHead title={t("nav.planning")}
+        actions={canManage && section === "milestones" && (data?.length ?? 0) > 0 ? <Button variant="primary" onClick={openCreate}><Icon name="plus" size={14} />{t("ms.new")}</Button> : undefined} />
 
-      <PageTabs id="planning" label={t("ms.title")} value={section} onChange={setSection} tabs={[
+      <PageTabs id="planning" label={t("nav.planning")} value={section} onChange={setSection} tabs={[
         { value: "milestones", label: t("ms.title") },
         ...(["iteration", "release", "module"] as const).map(value => ({ value, label: t({ iteration: "ms.kindIteration", release: "ms.kindRelease", module: "ms.kindModule" }[value]) })),
       ]} />
@@ -109,13 +111,13 @@ export function MilestonesPage() {
         <div className="card milestone-empty">
           <span className="empty-mark" aria-hidden="true"><Icon name="flag" size={18} /></span>
           <strong>{t("ms.empty")}</strong>
-          <p className="muted">{t("ms.sub")}</p>
+          <p className="muted">{t(canManage ? "ms.sub" : "pe.readOnlyEmpty")}</p>
           <div className="milestone-empty-meta" aria-hidden="true">
             <span><Icon name="flag" size={14} />{t("ms.title")}</span>
             <span><Icon name="calendar" size={14} />{t("common.dueDate")}</span>
             <span><Icon name="file" size={14} />{t("common.name")}</span>
           </div>
-          <Button variant="primary" onClick={openCreate}><Icon name="plus" size={14} />{t("ms.emptyCta")}</Button>
+          {canManage && <Button variant="primary" onClick={openCreate}><Icon name="plus" size={14} />{t("ms.emptyCta")}</Button>}
         </div>
       )}
 
@@ -128,7 +130,7 @@ export function MilestonesPage() {
             <tr>
               <th>{t("common.name")}</th>
               <th>{t("common.dueDate")}</th>
-              <th className="table-actions">{t("common.actions")}</th>
+              {canManage && <th className="table-actions">{t("common.actions")}</th>}
             </tr>
           </thead>
           <tbody>
@@ -148,11 +150,11 @@ export function MilestonesPage() {
                     <span className="status-pill dot-red status-pill-icon" title={t("common.overdue")}><Icon name="info" size={12} />{m.dueDate}</span>
                   ) : (m.dueDate ?? "—")}
                 </td>
-                <td data-label={t("common.actions")} style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                {canManage && <td data-label={t("common.actions")} style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                   <Button size="sm" onClick={() => openEdit(m)}><Icon name="pencil" size={13} />{t("common.edit")}</Button>{" "}
                   <ConfirmButton size="sm" disabled={archive.isPending} confirmText={t("common.confirmArchive")}
                     onConfirm={() => archive.mutate(m.id)}><Icon name="archive" size={13} />{t("common.archive")}</ConfirmButton>
-                </td>
+                </td>}
               </tr>
             ))}
           </tbody>
@@ -190,7 +192,8 @@ export function MilestonesPage() {
 
       </TabPanel>
       {(["iteration", "release", "module"] as const).map(kind => <TabPanel key={kind} tabsId="planning" value={kind} activeValue={section}>
-        <PlanningEntitiesPanel projectId={projectId!} initialKind={kind} showTabs={false} />
+        <PlanningEntitiesPanel projectId={projectId!} initialKind={kind} showTabs={false} archived={!!search.archived}
+          onArchivedChange={archived => void navigate({ search: { ...search, archived: archived || undefined }, resetScroll: false })} />
       </TabPanel>)}
 
       {draft.guard}
@@ -220,5 +223,3 @@ export function MilestonesPage() {
     </div>
   );
 }
-
-void KIND_LABEL;

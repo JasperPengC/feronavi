@@ -1,6 +1,7 @@
 import { t } from "../../i18n/index.ts";
 import { Icon } from "../Icon.tsx";
 import type { WorkbenchItem } from "../../lib/planning-api.ts";
+import { WorkItemTag } from "./WorkItemTag.tsx";
 
 export function WorkbenchItemRow({ item, onOpen }: { item: WorkbenchItem; onOpen: (id: string) => void }) {
   const now = new Date();
@@ -11,11 +12,12 @@ export function WorkbenchItemRow({ item, onOpen }: { item: WorkbenchItem; onOpen
       <span className="mono muted" style={{ fontSize: "var(--text-xs)", flex: "none" }}>{item.key}</span>
       <button type="button" className="row-link" onClick={() => onOpen(item.id)}
         style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", border: 0, padding: 0, background: "transparent", textAlign: "left", cursor: "pointer" }}>{item.title}</button>
-      {item.priority && <span className="muted" style={{ fontSize: "var(--text-xs)" }}>{t(`prio.${item.priority}`)}</span>}
+      {item.statusName && <WorkItemTag kind="status" value={item.statusCategory} stateKey={item.statusKey} label={item.statusName} />}
+      {item.priority && <WorkItemTag kind="priority" value={item.priority} />}
       {overdue ? (
-        <span style={{ color: "var(--danger)", fontSize: "var(--text-xs)", flex: "none", display: "inline-flex", alignItems: "center", gap: 4 }} title={t("workbench.overdueTag")}><Icon name="info" size={12} />{t("workbench.overdue")}</span>
+        <span className="workbench-item-date" style={{ color: "var(--danger)", fontSize: "var(--text-xs)", flex: "none", display: "inline-flex", alignItems: "center", gap: 4 }} title={t("workbench.overdueTag")}><Icon name="info" size={12} />{t("workbench.overdue")}</span>
       ) : item.dueDate ? (
-        <span className="muted" style={{ fontSize: "var(--text-xs)", flex: "none" }}>{item.dueDate}</span>
+        <span className="muted workbench-item-date" style={{ fontSize: "var(--text-xs)", flex: "none" }}>{item.dueDate}</span>
       ) : null}
     </div>
   );

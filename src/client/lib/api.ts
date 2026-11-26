@@ -146,7 +146,7 @@ export function apiStreamPost(path: string, body: unknown, signal?: AbortSignal)
 
 export async function api<T>(
   path: string,
-  opts: { method?: string; body?: unknown; query?: Record<string, unknown>; signal?: AbortSignal } = {},
+  opts: { method?: string; body?: unknown; query?: Record<string, unknown>; signal?: AbortSignal; idempotencyKey?: string } = {},
 ): Promise<T> {
   const method = opts.method ?? "GET";
   const url = new URL(path, window.location.origin);
@@ -157,6 +157,7 @@ export async function api<T>(
   }
 
   const headers: Record<string, string> = { accept: "application/json" };
+  if (opts.idempotencyKey) headers["idempotency-key"] = opts.idempotencyKey;
   const init: RequestInit = { method, headers, credentials: "same-origin", signal: opts.signal };
 
   if (opts.body !== undefined) {

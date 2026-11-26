@@ -2,76 +2,76 @@
 export const generatedToolOutputs: { results: Record<string, Record<string, unknown>>; definitions: Record<string, Record<string, unknown>>; sources: Record<string,string> } = {
   "results": {
     "activity.project": {
-      "$ref": "#/$defs/T361"
+      "$ref": "#/$defs/T412"
     },
     "announcement.list": {
-      "$ref": "#/$defs/T142"
+      "$ref": "#/$defs/T146"
     },
     "announcement.revoke": {
-      "$ref": "#/$defs/T435"
+      "$ref": "#/$defs/T486"
     },
     "announcement.send": {
-      "$ref": "#/$defs/T433"
+      "$ref": "#/$defs/T484"
     },
     "approval.approve": {
-      "$ref": "#/$defs/T438"
+      "$ref": "#/$defs/T489"
     },
     "approval.list": {
-      "$ref": "#/$defs/T379"
+      "$ref": "#/$defs/T430"
     },
     "approval.reject": {
-      "$ref": "#/$defs/T438"
+      "$ref": "#/$defs/T489"
     },
     "attachment.download": {
-      "$ref": "#/$defs/T136"
-    },
-    "attachment.get": {
-      "$ref": "#/$defs/T137"
-    },
-    "attachment.remove": {
-      "$ref": "#/$defs/T130"
-    },
-    "automation.createRule": {
-      "$ref": "#/$defs/T441"
-    },
-    "automation.deleteRule": {
-      "$ref": "#/$defs/T139"
-    },
-    "automation.listRules": {
-      "$ref": "#/$defs/T381"
-    },
-    "automation.listRuns": {
-      "$ref": "#/$defs/T383"
-    },
-    "automation.testRule": {
       "$ref": "#/$defs/T140"
     },
+    "attachment.get": {
+      "$ref": "#/$defs/T141"
+    },
+    "attachment.remove": {
+      "$ref": "#/$defs/T134"
+    },
+    "automation.createRule": {
+      "$ref": "#/$defs/T492"
+    },
+    "automation.deleteRule": {
+      "$ref": "#/$defs/T143"
+    },
+    "automation.listRules": {
+      "$ref": "#/$defs/T432"
+    },
+    "automation.listRuns": {
+      "$ref": "#/$defs/T434"
+    },
+    "automation.testRule": {
+      "$ref": "#/$defs/T144"
+    },
     "automation.updateRule": {
-      "$ref": "#/$defs/T138"
+      "$ref": "#/$defs/T142"
     },
     "collab.command": {
-      "$ref": "#/$defs/T408"
+      "$ref": "#/$defs/T459"
     },
     "collab.inspect": {
-      "$ref": "#/$defs/T330"
+      "$ref": "#/$defs/T381"
     },
     "collab.publishPage": {
-      "$ref": "#/$defs/T410"
+      "$ref": "#/$defs/T461"
     },
     "collab.update": {
-      "$ref": "#/$defs/T409"
+      "$ref": "#/$defs/T460"
     },
     "comment.create": {
       "$ref": "#/$defs/T19"
     },
     "comment.delete": {
-      "$ref": "#/$defs/T421"
+      "$ref": "#/$defs/T472"
     },
     "comment.list": {
       "$ref": "#/$defs/T17"
     },
     "comment.update": {
-      "$ref": "#/$defs/T420"
+      "$ref": "#/$defs/T471"
     },
     "customField.archive": {
       "type": "object",
@@ -80,7 +80,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T184"
+          "$ref": "#/$defs/T188"
         }
       },
       "required": [
@@ -96,7 +96,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T240"
+          "$ref": "#/$defs/T244"
         }
       },
       "required": [
@@ -106,7 +106,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "additionalProperties": false
     },
     "customField.definitions": {
-      "$ref": "#/$defs/T238"
+      "$ref": "#/$defs/T242"
     },
     "customField.getValues": {
       "$ref": "#/$defs/T20"
@@ -121,7 +121,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T241"
+          "$ref": "#/$defs/T245"
         }
       },
       "required": [
@@ -131,34 +131,34 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "additionalProperties": false
     },
     "dashboard.addWidget": {
-      "$ref": "#/$defs/T207"
+      "$ref": "#/$defs/T211"
     },
     "dashboard.create": {
-      "$ref": "#/$defs/T204"
-    },
-    "dashboard.delete": {
-      "$ref": "#/$defs/T404"
-    },
-    "dashboard.deleteWidget": {
-      "$ref": "#/$defs/T406"
-    },
-    "dashboard.get": {
-      "$ref": "#/$defs/T202"
-    },
-    "dashboard.list": {
-      "$ref": "#/$defs/T403"
-    },
-    "dashboard.listWidgets": {
-      "$ref": "#/$defs/T405"
-    },
-    "dashboard.update": {
-      "$ref": "#/$defs/T205"
-    },
-    "dashboard.updateWidget": {
       "$ref": "#/$defs/T208"
     },
+    "dashboard.delete": {
+      "$ref": "#/$defs/T455"
+    },
+    "dashboard.deleteWidget": {
+      "$ref": "#/$defs/T457"
+    },
+    "dashboard.get": {
+      "$ref": "#/$defs/T206"
+    },
+    "dashboard.list": {
+      "$ref": "#/$defs/T454"
+    },
+    "dashboard.listWidgets": {
+      "$ref": "#/$defs/T456"
+    },
+    "dashboard.update": {
+      "$ref": "#/$defs/T209"
+    },
+    "dashboard.updateWidget": {
+      "$ref": "#/$defs/T212"
+    },
     "dashboard.widgetData": {
-      "$ref": "#/$defs/T407"
+      "$ref": "#/$defs/T458"
     },
     "dashboard.widgets.create": {
       "type": "object",
@@ -167,7 +167,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T207"
+          "$ref": "#/$defs/T211"
         }
       },
       "required": [
@@ -182,25 +182,25 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "null"
         },
         {
-          "$ref": "#/$defs/T189"
+          "$ref": "#/$defs/T193"
         },
         {
-          "$ref": "#/$defs/T192"
+          "$ref": "#/$defs/T196"
         },
         {
-          "$ref": "#/$defs/T209"
+          "$ref": "#/$defs/T213"
         },
         {
-          "$ref": "#/$defs/T210"
+          "$ref": "#/$defs/T214"
         },
         {
-          "$ref": "#/$defs/T212"
+          "$ref": "#/$defs/T216"
         },
         {
-          "$ref": "#/$defs/T215"
+          "$ref": "#/$defs/T219"
         },
         {
-          "$ref": "#/$defs/T218"
+          "$ref": "#/$defs/T222"
         }
       ]
     },
@@ -211,7 +211,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T184"
+          "$ref": "#/$defs/T188"
         }
       },
       "required": [
@@ -221,7 +221,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "additionalProperties": false
     },
     "dashboard.widgets.list": {
-      "$ref": "#/$defs/T206"
+      "$ref": "#/$defs/T210"
     },
     "dashboard.widgets.update": {
       "type": "object",
@@ -230,7 +230,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T208"
+          "$ref": "#/$defs/T212"
         }
       },
       "required": [
@@ -239,17 +239,47 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
+    "delivery.configureSource": {
+      "$ref": "#/$defs/T57"
+    },
+    "delivery.createCandidate": {
+      "$ref": "#/$defs/T343"
+    },
+    "delivery.createEvidence": {
+      "$ref": "#/$defs/T59"
+    },
+    "delivery.getEvidence": {
+      "$ref": "#/$defs/T59"
+    },
+    "delivery.linkEvidence": {
+      "$ref": "#/$defs/T59"
+    },
+    "delivery.listEvidence": {
+      "$ref": "#/$defs/T58"
+    },
+    "delivery.recordFeedback": {
+      "$ref": "#/$defs/T347"
+    },
+    "delivery.releaseGate": {
+      "$ref": "#/$defs/T342"
+    },
+    "delivery.sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/T57"
+      }
+    },
     "department.archive": {
-      "$ref": "#/$defs/T289"
+      "$ref": "#/$defs/T293"
     },
     "department.create": {
-      "$ref": "#/$defs/T95"
+      "$ref": "#/$defs/T99"
     },
     "department.list": {
-      "$ref": "#/$defs/T93"
+      "$ref": "#/$defs/T97"
     },
     "department.update": {
-      "$ref": "#/$defs/T96"
+      "$ref": "#/$defs/T100"
     },
     "export.projectReport": {
       "$ref": "#/$defs/T56"
@@ -260,144 +290,144 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
     "focus.blocks": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/T173"
+        "$ref": "#/$defs/T177"
       }
     },
     "focus.createBlock": {
-      "$ref": "#/$defs/T175"
+      "$ref": "#/$defs/T179"
     },
     "focus.deleteBlock": {
-      "$ref": "#/$defs/T396"
+      "$ref": "#/$defs/T447"
     },
     "focus.getBlock": {
-      "$ref": "#/$defs/T173"
+      "$ref": "#/$defs/T177"
     },
     "focus.getSession": {
-      "$ref": "#/$defs/T174"
+      "$ref": "#/$defs/T178"
     },
     "focus.listBlocks": {
-      "$ref": "#/$defs/T395"
+      "$ref": "#/$defs/T446"
     },
     "focus.listSessions": {
-      "$ref": "#/$defs/T397"
+      "$ref": "#/$defs/T448"
     },
     "focus.recordSession": {
-      "$ref": "#/$defs/T177"
+      "$ref": "#/$defs/T181"
     },
     "focus.sessions": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/T174"
+        "$ref": "#/$defs/T178"
       }
     },
     "focus.today": {
-      "$ref": "#/$defs/T179"
+      "$ref": "#/$defs/T183"
     },
     "focus.updateBlock": {
-      "$ref": "#/$defs/T176"
+      "$ref": "#/$defs/T180"
     },
     "focus.updateSession": {
-      "$ref": "#/$defs/T178"
+      "$ref": "#/$defs/T182"
     },
     "idea.delete": {
-      "$ref": "#/$defs/T130"
+      "$ref": "#/$defs/T134"
     },
     "idea.get": {
-      "$ref": "#/$defs/T127"
+      "$ref": "#/$defs/T131"
     },
     "idea.list": {
-      "$ref": "#/$defs/T125"
-    },
-    "idea.promote": {
-      "$ref": "#/$defs/T424"
-    },
-    "idea.submit": {
-      "$ref": "#/$defs/T422"
-    },
-    "idea.unvote": {
-      "$ref": "#/$defs/T130"
-    },
-    "idea.update": {
       "$ref": "#/$defs/T129"
     },
+    "idea.promote": {
+      "$ref": "#/$defs/T475"
+    },
+    "idea.submit": {
+      "$ref": "#/$defs/T473"
+    },
+    "idea.unvote": {
+      "$ref": "#/$defs/T134"
+    },
+    "idea.update": {
+      "$ref": "#/$defs/T133"
+    },
     "idea.vote": {
-      "$ref": "#/$defs/T423"
+      "$ref": "#/$defs/T474"
     },
     "import.confirm": {
-      "$ref": "#/$defs/T162"
+      "$ref": "#/$defs/T166"
     },
     "import.create": {
-      "$ref": "#/$defs/T155"
+      "$ref": "#/$defs/T159"
     },
     "import.dryRun": {
-      "$ref": "#/$defs/T160"
+      "$ref": "#/$defs/T164"
     },
     "import.get": {
-      "$ref": "#/$defs/T157"
+      "$ref": "#/$defs/T161"
     },
     "import.list": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/T156"
+        "$ref": "#/$defs/T160"
       }
     },
     "import.rollback": {
-      "$ref": "#/$defs/T163"
+      "$ref": "#/$defs/T167"
     },
     "import.setMapping": {
-      "$ref": "#/$defs/T158"
+      "$ref": "#/$defs/T162"
     },
     "import.suggestions": {
       "$ref": "#/$defs/T54"
     },
     "insight.activitySeries": {
-      "$ref": "#/$defs/T195"
+      "$ref": "#/$defs/T199"
     },
     "insight.burnDown": {
-      "$ref": "#/$defs/T189"
+      "$ref": "#/$defs/T193"
     },
     "insight.burndown": {
-      "$ref": "#/$defs/T189"
+      "$ref": "#/$defs/T193"
     },
     "insight.cumulativeFlow": {
-      "$ref": "#/$defs/T192"
+      "$ref": "#/$defs/T196"
     },
     "insight.projectActivity": {
-      "$ref": "#/$defs/T195"
+      "$ref": "#/$defs/T199"
     },
     "intake.convertSubmission": {
       "anyOf": [
         {
-          "$ref": "#/$defs/T152"
+          "$ref": "#/$defs/T156"
         },
         {
-          "$ref": "#/$defs/T153"
+          "$ref": "#/$defs/T157"
         }
       ]
     },
     "intake.createForm": {
-      "$ref": "#/$defs/T389"
+      "$ref": "#/$defs/T440"
     },
     "intake.deleteForm": {
-      "$ref": "#/$defs/T391"
+      "$ref": "#/$defs/T442"
     },
     "intake.getForm": {
-      "$ref": "#/$defs/T145"
+      "$ref": "#/$defs/T149"
     },
     "intake.listForms": {
-      "$ref": "#/$defs/T388"
+      "$ref": "#/$defs/T439"
     },
     "intake.listSubmissions": {
-      "$ref": "#/$defs/T150"
+      "$ref": "#/$defs/T154"
     },
     "intake.rejectSubmission": {
-      "$ref": "#/$defs/T392"
+      "$ref": "#/$defs/T443"
     },
     "intake.rotateToken": {
-      "$ref": "#/$defs/T390"
+      "$ref": "#/$defs/T441"
     },
     "intake.updateForm": {
-      "$ref": "#/$defs/T149"
+      "$ref": "#/$defs/T153"
     },
     "integration.create": {
       "type": "object",
@@ -406,7 +436,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T246"
+          "$ref": "#/$defs/T250"
         }
       },
       "required": [
@@ -422,7 +452,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T247"
+          "$ref": "#/$defs/T251"
         }
       },
       "required": [
@@ -432,7 +462,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "additionalProperties": false
     },
     "integration.list": {
-      "$ref": "#/$defs/T244"
+      "$ref": "#/$defs/T248"
     },
     "integration.sync": {
       "type": "object",
@@ -441,7 +471,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T249"
+          "$ref": "#/$defs/T253"
         }
       },
       "required": [
@@ -451,7 +481,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "additionalProperties": false
     },
     "integration.syncStatus": {
-      "$ref": "#/$defs/T248"
+      "$ref": "#/$defs/T252"
     },
     "integration.update": {
       "type": "object",
@@ -460,7 +490,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T246"
+          "$ref": "#/$defs/T250"
         }
       },
       "required": [
@@ -470,49 +500,49 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "additionalProperties": false
     },
     "knowledge.ask": {
-      "$ref": "#/$defs/T372"
+      "$ref": "#/$defs/T423"
     },
     "knowledge.search": {
-      "$ref": "#/$defs/T370"
+      "$ref": "#/$defs/T421"
     },
     "member.anonymize": {
-      "$ref": "#/$defs/T298"
+      "$ref": "#/$defs/T302"
     },
     "member.assignOrganization": {
-      "$ref": "#/$defs/T101"
+      "$ref": "#/$defs/T105"
     },
     "member.disable": {
-      "$ref": "#/$defs/T298"
+      "$ref": "#/$defs/T302"
     },
     "member.enable": {
-      "$ref": "#/$defs/T298"
+      "$ref": "#/$defs/T302"
     },
     "member.get": {
-      "$ref": "#/$defs/T293"
+      "$ref": "#/$defs/T297"
     },
     "member.getPermissions": {
-      "$ref": "#/$defs/T294"
+      "$ref": "#/$defs/T298"
     },
     "member.list": {
-      "$ref": "#/$defs/T185"
+      "$ref": "#/$defs/T189"
     },
     "meta.capabilities": {
-      "$ref": "#/$defs/T57"
+      "$ref": "#/$defs/T61"
     },
     "meta.fields": {
-      "$ref": "#/$defs/T374"
+      "$ref": "#/$defs/T425"
     },
     "meta.tool": {
-      "$ref": "#/$defs/T81"
+      "$ref": "#/$defs/T85"
     },
     "meta.workflow": {
-      "$ref": "#/$defs/T363"
+      "$ref": "#/$defs/T414"
     },
     "notification.getPrefs": {
-      "$ref": "#/$defs/T141"
+      "$ref": "#/$defs/T145"
     },
     "notification.list": {
-      "$ref": "#/$defs/T359"
+      "$ref": "#/$defs/T410"
     },
     "notification.markRead": {
       "anyOf": [
@@ -557,10 +587,10 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ]
     },
     "notification.setPrefs": {
-      "$ref": "#/$defs/T141"
+      "$ref": "#/$defs/T145"
     },
     "organization.applyTemplate": {
-      "$ref": "#/$defs/T102"
+      "$ref": "#/$defs/T106"
     },
     "organization.archiveDepartment": {
       "type": "object",
@@ -587,43 +617,43 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "additionalProperties": false
     },
     "organization.assignMember": {
-      "$ref": "#/$defs/T101"
+      "$ref": "#/$defs/T105"
     },
     "organization.createDepartment": {
-      "$ref": "#/$defs/T95"
-    },
-    "organization.createPosition": {
       "$ref": "#/$defs/T99"
     },
+    "organization.createPosition": {
+      "$ref": "#/$defs/T103"
+    },
     "organization.departments": {
-      "$ref": "#/$defs/T93"
-    },
-    "organization.get": {
-      "$ref": "#/$defs/T284"
-    },
-    "organization.getTemplate": {
-      "$ref": "#/$defs/T286"
-    },
-    "organization.positions": {
       "$ref": "#/$defs/T97"
     },
+    "organization.get": {
+      "$ref": "#/$defs/T288"
+    },
+    "organization.getTemplate": {
+      "$ref": "#/$defs/T290"
+    },
+    "organization.positions": {
+      "$ref": "#/$defs/T101"
+    },
     "organization.update": {
-      "$ref": "#/$defs/T285"
+      "$ref": "#/$defs/T289"
     },
     "organization.updateDepartment": {
-      "$ref": "#/$defs/T96"
-    },
-    "organization.updatePosition": {
       "$ref": "#/$defs/T100"
     },
+    "organization.updatePosition": {
+      "$ref": "#/$defs/T104"
+    },
     "page.create": {
-      "$ref": "#/$defs/T425"
+      "$ref": "#/$defs/T476"
     },
     "page.delete": {
-      "$ref": "#/$defs/T130"
+      "$ref": "#/$defs/T134"
     },
     "page.get": {
-      "$ref": "#/$defs/T369"
+      "$ref": "#/$defs/T420"
     },
     "page.getPermissions": {
       "$ref": "#/$defs/T49"
@@ -632,25 +662,25 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "$ref": "#/$defs/T48"
     },
     "page.list": {
-      "$ref": "#/$defs/T367"
+      "$ref": "#/$defs/T418"
     },
     "page.permissions": {
-      "$ref": "#/$defs/T134"
+      "$ref": "#/$defs/T138"
     },
     "page.restore": {
-      "$ref": "#/$defs/T132"
+      "$ref": "#/$defs/T136"
     },
     "page.revisions": {
-      "$ref": "#/$defs/T131"
-    },
-    "page.setPermissions": {
       "$ref": "#/$defs/T135"
     },
+    "page.setPermissions": {
+      "$ref": "#/$defs/T139"
+    },
     "page.update": {
-      "$ref": "#/$defs/T410"
+      "$ref": "#/$defs/T461"
     },
     "ping": {
-      "$ref": "#/$defs/T329"
+      "$ref": "#/$defs/T380"
     },
     "plan.addMilestoneProgressUpdate": {
       "type": "object",
@@ -659,7 +689,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T283"
+          "$ref": "#/$defs/T287"
         }
       },
       "required": [
@@ -775,7 +805,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T261"
+          "$ref": "#/$defs/T265"
         }
       },
       "required": [
@@ -791,7 +821,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T261"
+          "$ref": "#/$defs/T265"
         }
       },
       "required": [
@@ -807,7 +837,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T428"
+          "$ref": "#/$defs/T479"
         }
       },
       "required": [
@@ -823,7 +853,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T278"
+          "$ref": "#/$defs/T282"
         }
       },
       "required": [
@@ -839,7 +869,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T429"
+          "$ref": "#/$defs/T480"
         }
       },
       "required": [
@@ -855,7 +885,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T430"
+          "$ref": "#/$defs/T481"
         }
       },
       "required": [
@@ -871,7 +901,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T265"
+          "$ref": "#/$defs/T269"
         }
       },
       "required": [
@@ -881,40 +911,40 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "additionalProperties": false
     },
     "plan.getIteration": {
-      "$ref": "#/$defs/T428"
+      "$ref": "#/$defs/T479"
     },
     "plan.getMilestone": {
-      "$ref": "#/$defs/T354"
+      "$ref": "#/$defs/T405"
     },
     "plan.getModule": {
-      "$ref": "#/$defs/T429"
+      "$ref": "#/$defs/T480"
     },
     "plan.getRelease": {
-      "$ref": "#/$defs/T430"
+      "$ref": "#/$defs/T481"
     },
     "plan.iterationCapacity": {
-      "$ref": "#/$defs/T271"
+      "$ref": "#/$defs/T275"
     },
     "plan.listIterations": {
-      "$ref": "#/$defs/T355"
+      "$ref": "#/$defs/T406"
     },
     "plan.listMilestones": {
-      "$ref": "#/$defs/T352"
+      "$ref": "#/$defs/T403"
     },
     "plan.listModules": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/T270"
+        "$ref": "#/$defs/T274"
       }
     },
     "plan.listReleases": {
-      "$ref": "#/$defs/T357"
+      "$ref": "#/$defs/T408"
     },
     "plan.milestoneDetail": {
-      "$ref": "#/$defs/T277"
+      "$ref": "#/$defs/T281"
     },
     "plan.milestoneProgressUpdates": {
-      "$ref": "#/$defs/T282"
+      "$ref": "#/$defs/T286"
     },
     "plan.setIterationCapacity": {
       "type": "object",
@@ -923,7 +953,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T273"
+          "$ref": "#/$defs/T277"
         }
       },
       "required": [
@@ -1039,7 +1069,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T428"
+          "$ref": "#/$defs/T479"
         }
       },
       "required": [
@@ -1055,7 +1085,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T278"
+          "$ref": "#/$defs/T282"
         }
       },
       "required": [
@@ -1071,7 +1101,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T429"
+          "$ref": "#/$defs/T480"
         }
       },
       "required": [
@@ -1087,7 +1117,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T430"
+          "$ref": "#/$defs/T481"
         }
       },
       "required": [
@@ -1103,7 +1133,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T227"
+          "$ref": "#/$defs/T231"
         }
       },
       "required": [
@@ -1113,16 +1143,16 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "additionalProperties": false
     },
     "portfolio.create": {
-      "$ref": "#/$defs/T225"
+      "$ref": "#/$defs/T229"
     },
     "portfolio.delete": {
-      "$ref": "#/$defs/T387"
+      "$ref": "#/$defs/T438"
     },
     "portfolio.get": {
-      "$ref": "#/$defs/T223"
+      "$ref": "#/$defs/T227"
     },
     "portfolio.list": {
-      "$ref": "#/$defs/T386"
+      "$ref": "#/$defs/T437"
     },
     "portfolio.removeProject": {
       "type": "object",
@@ -1131,7 +1161,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T228"
+          "$ref": "#/$defs/T232"
         }
       },
       "required": [
@@ -1141,28 +1171,46 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "additionalProperties": false
     },
     "portfolio.summary": {
-      "$ref": "#/$defs/T229"
+      "$ref": "#/$defs/T233"
     },
     "portfolio.update": {
-      "$ref": "#/$defs/T226"
+      "$ref": "#/$defs/T230"
     },
     "position.archive": {
-      "$ref": "#/$defs/T290"
+      "$ref": "#/$defs/T294"
     },
     "position.create": {
-      "$ref": "#/$defs/T99"
+      "$ref": "#/$defs/T103"
     },
     "position.list": {
-      "$ref": "#/$defs/T97"
+      "$ref": "#/$defs/T101"
     },
     "position.update": {
-      "$ref": "#/$defs/T100"
+      "$ref": "#/$defs/T104"
     },
     "prefs.get": {
-      "$ref": "#/$defs/T118"
+      "$ref": "#/$defs/T122"
     },
     "prefs.update": {
-      "$ref": "#/$defs/T118"
+      "$ref": "#/$defs/T122"
+    },
+    "product.create": {
+      "$ref": "#/$defs/T309"
+    },
+    "product.get": {
+      "$ref": "#/$defs/T309"
+    },
+    "product.linkProject": {
+      "$ref": "#/$defs/T309"
+    },
+    "product.list": {
+      "$ref": "#/$defs/T308"
+    },
+    "product.unlinkProject": {
+      "$ref": "#/$defs/T310"
+    },
+    "product.update": {
+      "$ref": "#/$defs/T309"
     },
     "project.archive": {
       "type": "object",
@@ -1171,7 +1219,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T181"
+          "$ref": "#/$defs/T185"
         }
       },
       "required": [
@@ -1187,12 +1235,12 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "string"
         },
         "project": {
-          "$ref": "#/$defs/T338"
+          "$ref": "#/$defs/T389"
         },
         "members": {
           "anyOf": [
             {
-              "$ref": "#/$defs/T344"
+              "$ref": "#/$defs/T395"
             },
             {
               "type": "object",
@@ -1220,7 +1268,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "workflows": {
           "anyOf": [
             {
-              "$ref": "#/$defs/T363"
+              "$ref": "#/$defs/T414"
             },
             {
               "type": "object",
@@ -1248,7 +1296,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "fields": {
           "anyOf": [
             {
-              "$ref": "#/$defs/T374"
+              "$ref": "#/$defs/T425"
             },
             {
               "type": "object",
@@ -1276,7 +1324,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "customFields": {
           "anyOf": [
             {
-              "$ref": "#/$defs/T238"
+              "$ref": "#/$defs/T242"
             },
             {
               "type": "object",
@@ -1304,7 +1352,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "iterations": {
           "anyOf": [
             {
-              "$ref": "#/$defs/T355"
+              "$ref": "#/$defs/T406"
             },
             {
               "type": "object",
@@ -1332,7 +1380,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "milestones": {
           "anyOf": [
             {
-              "$ref": "#/$defs/T352"
+              "$ref": "#/$defs/T403"
             },
             {
               "type": "object",
@@ -1360,7 +1408,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "releases": {
           "anyOf": [
             {
-              "$ref": "#/$defs/T357"
+              "$ref": "#/$defs/T408"
             },
             {
               "type": "object",
@@ -1390,7 +1438,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
             {
               "type": "array",
               "items": {
-                "$ref": "#/$defs/T270"
+                "$ref": "#/$defs/T274"
               }
             },
             {
@@ -1419,7 +1467,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "workItems": {
           "anyOf": [
             {
-              "$ref": "#/$defs/T346"
+              "$ref": "#/$defs/T397"
             },
             {
               "type": "object",
@@ -1480,10 +1528,10 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "$ref": "#/$defs/T28"
     },
     "project.exportCsv": {
-      "$ref": "#/$defs/T243"
+      "$ref": "#/$defs/T247"
     },
     "project.get": {
-      "$ref": "#/$defs/T338"
+      "$ref": "#/$defs/T389"
     },
     "project.list": {
       "type": "object",
@@ -1560,7 +1608,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T183"
+          "$ref": "#/$defs/T187"
         }
       },
       "required": [
@@ -1576,7 +1624,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T184"
+          "$ref": "#/$defs/T188"
         }
       },
       "required": [
@@ -1586,10 +1634,10 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "additionalProperties": false
     },
     "project.members": {
-      "$ref": "#/$defs/T344"
+      "$ref": "#/$defs/T395"
     },
     "project.report": {
-      "$ref": "#/$defs/T242"
+      "$ref": "#/$defs/T246"
     },
     "project.status": {
       "type": "object",
@@ -1598,7 +1646,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T182"
+          "$ref": "#/$defs/T186"
         }
       },
       "required": [
@@ -1614,7 +1662,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T181"
+          "$ref": "#/$defs/T185"
         }
       },
       "required": [
@@ -1630,7 +1678,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T180"
+          "$ref": "#/$defs/T184"
         }
       },
       "required": [
@@ -1678,7 +1726,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T184"
+          "$ref": "#/$defs/T188"
         }
       },
       "required": [
@@ -1691,7 +1739,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "$ref": "#/$defs/T24"
     },
     "projectTemplate.list": {
-      "$ref": "#/$defs/T188"
+      "$ref": "#/$defs/T192"
     },
     "projectTemplate.update": {
       "type": "object",
@@ -1710,189 +1758,285 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "additionalProperties": false
     },
     "rag.chat": {
-      "$ref": "#/$defs/T308"
+      "$ref": "#/$defs/T318"
     },
     "rag.conversation.action": {
-      "$ref": "#/$defs/T304"
+      "$ref": "#/$defs/T335"
     },
     "rag.conversation.cancel": {
-      "$ref": "#/$defs/T304"
+      "$ref": "#/$defs/T335"
     },
     "rag.conversation.create": {
-      "$ref": "#/$defs/T305"
+      "$ref": "#/$defs/T315"
+    },
+    "rag.conversation.execution": {
+      "$ref": "#/$defs/T311"
     },
     "rag.conversation.get": {
-      "$ref": "#/$defs/T324"
+      "$ref": "#/$defs/T337"
     },
     "rag.conversation.list": {
-      "$ref": "#/$defs/T323"
+      "$ref": "#/$defs/T336"
+    },
+    "rag.conversation.propose": {
+      "$ref": "#/$defs/T311"
+    },
+    "rag.conversation.revise": {
+      "$ref": "#/$defs/T311"
     },
     "rag.conversation.send": {
-      "$ref": "#/$defs/T304"
+      "$ref": "#/$defs/T335"
     },
     "rag.conversation.update": {
-      "$ref": "#/$defs/T305"
+      "$ref": "#/$defs/T315"
     },
     "rag.projects": {
-      "$ref": "#/$defs/T325"
+      "$ref": "#/$defs/T338"
     },
     "rag.search": {
-      "$ref": "#/$defs/T327"
+      "$ref": "#/$defs/T340"
+    },
+    "requirementChange.acknowledge": {
+      "$ref": "#/$defs/T353"
+    },
+    "requirementChange.apply": {
+      "$ref": "#/$defs/T353"
+    },
+    "requirementChange.context": {
+      "$ref": "#/$defs/T348"
+    },
+    "requirementChange.create": {
+      "$ref": "#/$defs/T353"
+    },
+    "requirementChange.decide": {
+      "$ref": "#/$defs/T353"
+    },
+    "requirementChange.get": {
+      "$ref": "#/$defs/T353"
+    },
+    "requirementChange.list": {
+      "$ref": "#/$defs/T351"
     },
     "role.assign": {
-      "$ref": "#/$defs/T92"
+      "$ref": "#/$defs/T96"
     },
     "role.assignments": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/T92"
+        "$ref": "#/$defs/T96"
       }
     },
     "role.create": {
-      "$ref": "#/$defs/T84"
+      "$ref": "#/$defs/T88"
     },
     "role.createAssignment": {
-      "$ref": "#/$defs/T92"
+      "$ref": "#/$defs/T96"
     },
     "role.delete": {
-      "$ref": "#/$defs/T301"
+      "$ref": "#/$defs/T305"
     },
     "role.deleteAssignment": {
-      "$ref": "#/$defs/T303"
+      "$ref": "#/$defs/T307"
     },
     "role.getAssignment": {
-      "$ref": "#/$defs/T92"
+      "$ref": "#/$defs/T96"
     },
     "role.list": {
-      "$ref": "#/$defs/T299"
+      "$ref": "#/$defs/T303"
     },
     "role.listAssignments": {
-      "$ref": "#/$defs/T302"
+      "$ref": "#/$defs/T306"
     },
     "role.listPermissions": {
-      "$ref": "#/$defs/T300"
+      "$ref": "#/$defs/T304"
     },
     "role.listScopes": {
       "anyOf": [
         {
-          "$ref": "#/$defs/T86"
-        },
-        {
-          "$ref": "#/$defs/T88"
-        },
-        {
           "$ref": "#/$defs/T90"
+        },
+        {
+          "$ref": "#/$defs/T92"
+        },
+        {
+          "$ref": "#/$defs/T94"
         }
       ]
     },
     "role.permissions": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/T82"
+        "$ref": "#/$defs/T86"
       }
     },
     "role.revoke": {
-      "$ref": "#/$defs/T85"
+      "$ref": "#/$defs/T89"
     },
     "role.scopeOptions": {
       "anyOf": [
         {
-          "$ref": "#/$defs/T86"
-        },
-        {
-          "$ref": "#/$defs/T88"
-        },
-        {
           "$ref": "#/$defs/T90"
+        },
+        {
+          "$ref": "#/$defs/T92"
+        },
+        {
+          "$ref": "#/$defs/T94"
         }
       ]
     },
     "role.update": {
-      "$ref": "#/$defs/T84"
+      "$ref": "#/$defs/T88"
     },
     "role.updateAssignment": {
-      "$ref": "#/$defs/T92"
+      "$ref": "#/$defs/T96"
     },
     "savedView.create": {
-      "$ref": "#/$defs/T399"
+      "$ref": "#/$defs/T450"
     },
     "savedView.delete": {
-      "$ref": "#/$defs/T401"
+      "$ref": "#/$defs/T452"
     },
     "savedView.get": {
-      "$ref": "#/$defs/T275"
+      "$ref": "#/$defs/T279"
     },
     "savedView.list": {
-      "$ref": "#/$defs/T398"
+      "$ref": "#/$defs/T449"
     },
     "savedView.reorder": {
-      "$ref": "#/$defs/T402"
+      "$ref": "#/$defs/T453"
     },
     "savedView.update": {
-      "$ref": "#/$defs/T400"
+      "$ref": "#/$defs/T451"
     },
     "sla.createPolicy": {
-      "$ref": "#/$defs/T121"
+      "$ref": "#/$defs/T125"
     },
     "sla.deletePolicy": {
-      "$ref": "#/$defs/T124"
+      "$ref": "#/$defs/T128"
     },
     "sla.get": {
-      "$ref": "#/$defs/T377"
+      "$ref": "#/$defs/T428"
     },
     "sla.listPolicies": {
-      "$ref": "#/$defs/T119"
-    },
-    "sla.pause": {
-      "$ref": "#/$defs/T436"
-    },
-    "sla.resume": {
-      "$ref": "#/$defs/T436"
-    },
-    "sla.updatePolicy": {
       "$ref": "#/$defs/T123"
     },
+    "sla.pause": {
+      "$ref": "#/$defs/T487"
+    },
+    "sla.resume": {
+      "$ref": "#/$defs/T487"
+    },
+    "sla.updatePolicy": {
+      "$ref": "#/$defs/T127"
+    },
     "team.create": {
-      "$ref": "#/$defs/T106"
+      "$ref": "#/$defs/T110"
     },
     "team.delete": {
-      "$ref": "#/$defs/T292"
+      "$ref": "#/$defs/T296"
     },
     "team.list": {
-      "$ref": "#/$defs/T291"
+      "$ref": "#/$defs/T295"
     },
     "team.members": {
-      "$ref": "#/$defs/T104"
-    },
-    "team.update": {
-      "$ref": "#/$defs/T107"
-    },
-    "timeLog.create": {
-      "$ref": "#/$defs/T113"
-    },
-    "timeLog.delete": {
-      "$ref": "#/$defs/T85"
-    },
-    "timeLog.list": {
-      "$ref": "#/$defs/T111"
-    },
-    "timeLog.update": {
       "$ref": "#/$defs/T108"
     },
+    "team.update": {
+      "$ref": "#/$defs/T111"
+    },
+    "testCase.create": {
+      "$ref": "#/$defs/T377"
+    },
+    "testCase.get": {
+      "$ref": "#/$defs/T377"
+    },
+    "testCase.getRevision": {
+      "$ref": "#/$defs/T367"
+    },
+    "testCase.list": {
+      "$ref": "#/$defs/T375"
+    },
+    "testCase.revisions": {
+      "$ref": "#/$defs/T378"
+    },
+    "testCase.update": {
+      "$ref": "#/$defs/T377"
+    },
+    "testPlan.create": {
+      "$ref": "#/$defs/T358"
+    },
+    "testPlan.get": {
+      "$ref": "#/$defs/T358"
+    },
+    "testPlan.list": {
+      "$ref": "#/$defs/T356"
+    },
+    "testPlan.report": {
+      "$ref": "#/$defs/T361"
+    },
+    "testPlan.transition": {
+      "$ref": "#/$defs/T358"
+    },
+    "testPlan.update": {
+      "$ref": "#/$defs/T358"
+    },
+    "testRun.complete": {
+      "$ref": "#/$defs/T365"
+    },
+    "testRun.createDefect": {
+      "$ref": "#/$defs/T371"
+    },
+    "testRun.get": {
+      "$ref": "#/$defs/T365"
+    },
+    "testRun.linkDefect": {
+      "$ref": "#/$defs/T371"
+    },
+    "testRun.record": {
+      "$ref": "#/$defs/T365"
+    },
+    "testRun.start": {
+      "$ref": "#/$defs/T365"
+    },
+    "testSuite.create": {
+      "$ref": "#/$defs/T374"
+    },
+    "testSuite.get": {
+      "$ref": "#/$defs/T374"
+    },
+    "testSuite.list": {
+      "$ref": "#/$defs/T373"
+    },
+    "testSuite.update": {
+      "$ref": "#/$defs/T374"
+    },
+    "timeLog.create": {
+      "$ref": "#/$defs/T117"
+    },
+    "timeLog.delete": {
+      "$ref": "#/$defs/T89"
+    },
+    "timeLog.list": {
+      "$ref": "#/$defs/T115"
+    },
+    "timeLog.update": {
+      "$ref": "#/$defs/T112"
+    },
     "todo.create": {
-      "$ref": "#/$defs/T171"
+      "$ref": "#/$defs/T175"
     },
     "todo.delete": {
-      "$ref": "#/$defs/T394"
+      "$ref": "#/$defs/T445"
     },
     "todo.list": {
-      "$ref": "#/$defs/T393"
+      "$ref": "#/$defs/T444"
     },
     "todo.update": {
-      "$ref": "#/$defs/T172"
+      "$ref": "#/$defs/T176"
     },
     "webhook.create": {
-      "$ref": "#/$defs/T254"
+      "$ref": "#/$defs/T258"
     },
     "webhook.delete": {
       "type": "object",
@@ -1901,7 +2045,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T257"
+          "$ref": "#/$defs/T261"
         }
       },
       "required": [
@@ -1911,10 +2055,10 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "additionalProperties": false
     },
     "webhook.deliveries": {
-      "$ref": "#/$defs/T258"
+      "$ref": "#/$defs/T262"
     },
     "webhook.list": {
-      "$ref": "#/$defs/T252"
+      "$ref": "#/$defs/T256"
     },
     "webhook.replay": {
       "type": "object",
@@ -1923,7 +2067,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T260"
+          "$ref": "#/$defs/T264"
         }
       },
       "required": [
@@ -1939,7 +2083,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T256"
+          "$ref": "#/$defs/T260"
         }
       },
       "required": [
@@ -1949,10 +2093,10 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "additionalProperties": false
     },
     "whoami": {
-      "$ref": "#/$defs/T332"
+      "$ref": "#/$defs/T383"
     },
     "workbench.get": {
-      "$ref": "#/$defs/T164"
+      "$ref": "#/$defs/T168"
     },
     "workflow.addState": {
       "$ref": "#/$defs/T38"
@@ -1961,7 +2105,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "$ref": "#/$defs/T43"
     },
     "workflow.archiveState": {
-      "$ref": "#/$defs/T85"
+      "$ref": "#/$defs/T89"
     },
     "workflow.create": {
       "$ref": "#/$defs/T34"
@@ -1979,7 +2123,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "$ref": "#/$defs/T41"
     },
     "workflow.removeTransition": {
-      "$ref": "#/$defs/T85"
+      "$ref": "#/$defs/T89"
     },
     "workflow.states": {
       "type": "array",
@@ -2025,28 +2169,28 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "additionalProperties": false
     },
     "workitem.assign": {
-      "$ref": "#/$defs/T417"
+      "$ref": "#/$defs/T468"
     },
     "workitem.children": {
-      "$ref": "#/$defs/T262"
+      "$ref": "#/$defs/T266"
     },
     "workitem.collaborators": {
-      "$ref": "#/$defs/T109"
+      "$ref": "#/$defs/T113"
     },
     "workitem.comment": {
-      "$ref": "#/$defs/T418"
+      "$ref": "#/$defs/T469"
     },
     "workitem.comments": {
-      "$ref": "#/$defs/T351"
+      "$ref": "#/$defs/T402"
     },
     "workitem.contentLinks": {
-      "$ref": "#/$defs/T114"
+      "$ref": "#/$defs/T118"
     },
     "workitem.create": {
-      "$ref": "#/$defs/T416"
+      "$ref": "#/$defs/T467"
     },
     "workitem.createContentLink": {
-      "$ref": "#/$defs/T117"
+      "$ref": "#/$defs/T121"
     },
     "workitem.delete": {
       "type": "object",
@@ -2055,7 +2199,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T265"
+          "$ref": "#/$defs/T269"
         }
       },
       "required": [
@@ -2065,7 +2209,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "additionalProperties": false
     },
     "workitem.deleteContentLink": {
-      "$ref": "#/$defs/T85"
+      "$ref": "#/$defs/T89"
     },
     "workitem.deleteProgress": {
       "$ref": "#/$defs/T5"
@@ -2077,7 +2221,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T265"
+          "$ref": "#/$defs/T269"
         }
       },
       "required": [
@@ -2087,16 +2231,16 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "additionalProperties": false
     },
     "workitem.follow": {
-      "$ref": "#/$defs/T85"
+      "$ref": "#/$defs/T89"
     },
     "workitem.get": {
-      "$ref": "#/$defs/T348"
+      "$ref": "#/$defs/T399"
     },
     "workitem.link": {
-      "$ref": "#/$defs/T419"
+      "$ref": "#/$defs/T470"
     },
     "workitem.list": {
-      "$ref": "#/$defs/T346"
+      "$ref": "#/$defs/T397"
     },
     "workitem.listCollaborators": {
       "$ref": "#/$defs/T9"
@@ -2111,13 +2255,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "$ref": "#/$defs/T13"
     },
     "workitem.progressUpdates": {
-      "$ref": "#/$defs/T276"
+      "$ref": "#/$defs/T280"
     },
     "workitem.relations": {
-      "$ref": "#/$defs/T266"
+      "$ref": "#/$defs/T270"
     },
     "workitem.removeCollaborator": {
-      "$ref": "#/$defs/T85"
+      "$ref": "#/$defs/T89"
     },
     "workitem.transfer": {
       "type": "object",
@@ -2152,7 +2296,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "$ref": "#/$defs/T8"
     },
     "workitem.unfollow": {
-      "$ref": "#/$defs/T85"
+      "$ref": "#/$defs/T89"
     },
     "workitem.unlink": {
       "type": "object",
@@ -2161,7 +2305,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T265"
+          "$ref": "#/$defs/T269"
         }
       },
       "required": [
@@ -2181,7 +2325,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ]
     },
     "workitem.watchers": {
-      "$ref": "#/$defs/T110"
+      "$ref": "#/$defs/T114"
     }
   },
   "definitions": {
@@ -2575,6 +2719,16 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
             }
           ]
         },
+        "productId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
         "assigneeId": {
           "anyOf": [
             {
@@ -2699,6 +2853,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "iterationId",
         "releaseId",
         "moduleId",
+        "productId",
         "assigneeId",
         "reporterId",
         "priority",
@@ -2969,13 +3124,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
             }
           ]
         },
-        "targetType": {
+        "authorId": {
           "type": "string"
         },
         "targetId": {
           "type": "string"
         },
-        "authorId": {
+        "targetType": {
           "type": "string"
         },
         "body": {
@@ -2999,9 +3154,9 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "updatedAt",
         "parentId",
         "deletedAt",
-        "targetType",
-        "targetId",
         "authorId",
+        "targetId",
+        "targetType",
         "body",
         "editedAt"
       ],
@@ -4337,31 +4492,295 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
     "T57": {
       "type": "object",
       "properties": {
+        "id": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "integrationId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "repository": {
+          "type": "string"
+        },
+        "apiBaseUrl": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "configCurrent": {
+          "type": "boolean"
+        },
+        "hasWebhookSecret": {
+          "type": "boolean"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "projectId",
+        "integrationId",
+        "name",
+        "repository",
+        "apiBaseUrl",
+        "version",
+        "enabled",
+        "configCurrent",
+        "hasWebhookSecret",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "T58": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T59"
+          }
+        },
+        "nextCursor": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "nextCursor"
+      ],
+      "additionalProperties": false
+    },
+    "T59": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "sourceId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "sourceVersion": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "COMMIT",
+            "PULL_REQUEST",
+            "CI",
+            "BUILD",
+            "DEPLOYMENT"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "repository": {
+          "type": "string"
+        },
+        "commitSha": {
+          "type": "string"
+        },
+        "build": {
+          "type": "string"
+        },
+        "environment": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "PENDING",
+            "CANCELLED",
+            "FAILED",
+            "SUCCEEDED"
+          ]
+        },
+        "verification": {
+          "type": "string",
+          "enum": [
+            "SELF_REPORTED",
+            "PROVIDER_API"
+          ]
+        },
+        "externalId": {
+          "type": "string"
+        },
+        "attempt": {
+          "type": "number"
+        },
+        "providerUpdatedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
+        },
+        "url": {
+          "type": "string"
+        },
+        "details": {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean",
+                "const": false
+              },
+              {
+                "type": "boolean",
+                "const": true
+              }
+            ]
+          }
+        },
+        "createdBy": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "receivedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "sourceCurrent": {
+          "type": "boolean"
+        },
+        "workItems": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T60"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "projectId",
+        "sourceId",
+        "sourceVersion",
+        "kind",
+        "title",
+        "repository",
+        "commitSha",
+        "build",
+        "environment",
+        "status",
+        "verification",
+        "externalId",
+        "attempt",
+        "providerUpdatedAt",
+        "url",
+        "details",
+        "createdBy",
+        "receivedAt",
+        "sourceCurrent",
+        "workItems"
+      ],
+      "additionalProperties": false
+    },
+    "T60": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "key",
+        "title"
+      ],
+      "additionalProperties": false
+    },
+    "T61": {
+      "type": "object",
+      "properties": {
         "toolCount": {
           "type": "integer"
         },
         "tools": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T58"
+            "$ref": "#/$defs/T62"
           }
         },
         "workflows": {
           "type": "array",
           "items": {
             "anyOf": [
-              {
-                "$ref": "#/$defs/T59"
-              },
-              {
-                "$ref": "#/$defs/T60"
-              },
-              {
-                "$ref": "#/$defs/T61"
-              },
-              {
-                "$ref": "#/$defs/T62"
-              },
               {
                 "$ref": "#/$defs/T63"
               },
@@ -4412,6 +4831,18 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               },
               {
                 "$ref": "#/$defs/T79"
+              },
+              {
+                "$ref": "#/$defs/T80"
+              },
+              {
+                "$ref": "#/$defs/T81"
+              },
+              {
+                "$ref": "#/$defs/T82"
+              },
+              {
+                "$ref": "#/$defs/T83"
               }
             ]
           }
@@ -4420,7 +4851,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "string"
         },
         "boundaries": {
-          "$ref": "#/$defs/T80"
+          "$ref": "#/$defs/T84"
         }
       },
       "required": [
@@ -4432,7 +4863,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T58": {
+    "T62": {
       "type": "object",
       "properties": {
         "available": {
@@ -4480,7 +4911,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T59": {
+    "T63": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -4668,7 +5099,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T60": {
+    "T64": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -4868,7 +5299,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T61": {
+    "T65": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -5040,7 +5471,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T62": {
+    "T66": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -5212,7 +5643,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T63": {
+    "T67": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -5380,7 +5811,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T64": {
+    "T68": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -5556,7 +5987,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T65": {
+    "T69": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -5728,7 +6159,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T66": {
+    "T70": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -5904,7 +6335,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T67": {
+    "T71": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -6068,7 +6499,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T68": {
+    "T72": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -6240,7 +6671,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T69": {
+    "T73": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -6416,7 +6847,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T70": {
+    "T74": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -6584,7 +7015,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T71": {
+    "T75": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -6760,7 +7191,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T72": {
+    "T76": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -6928,7 +7359,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T73": {
+    "T77": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -7096,7 +7527,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T74": {
+    "T78": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -7264,7 +7695,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T75": {
+    "T79": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -7436,7 +7867,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T76": {
+    "T80": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -7608,7 +8039,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T77": {
+    "T81": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -7776,7 +8207,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T78": {
+    "T82": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -7944,7 +8375,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T79": {
+    "T83": {
       "type": "object",
       "properties": {
         "missingTools": {
@@ -8128,7 +8559,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T80": {
+    "T84": {
       "type": "object",
       "properties": {
         "humanAuthentication": {
@@ -8152,7 +8583,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T81": {
+    "T85": {
       "type": "object",
       "properties": {
         "available": {
@@ -8198,7 +8629,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T82": {
+    "T86": {
       "type": "object",
       "properties": {
         "group": {
@@ -8207,7 +8638,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "permissions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T83"
+            "$ref": "#/$defs/T87"
           }
         }
       },
@@ -8217,7 +8648,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T83": {
+    "T87": {
       "type": "object",
       "properties": {
         "key": {
@@ -8237,7 +8668,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T84": {
+    "T88": {
       "type": "object",
       "properties": {
         "id": {
@@ -8272,7 +8703,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T85": {
+    "T89": {
       "type": "object",
       "properties": {
         "ok": {
@@ -8284,84 +8715,12 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T86": {
-      "type": "object",
-      "properties": {
-        "scopeType": {
-          "type": "string",
-          "const": "DEPARTMENT"
-        },
-        "scopes": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/T87"
-          }
-        }
-      },
-      "required": [
-        "scopeType",
-        "scopes"
-      ],
-      "additionalProperties": false
-    },
-    "T87": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "name"
-      ],
-      "additionalProperties": false
-    },
-    "T88": {
-      "type": "object",
-      "properties": {
-        "scopeType": {
-          "type": "string",
-          "const": "TEAM"
-        },
-        "scopes": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/T89"
-          }
-        }
-      },
-      "required": [
-        "scopeType",
-        "scopes"
-      ],
-      "additionalProperties": false
-    },
-    "T89": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "name"
-      ],
-      "additionalProperties": false
-    },
     "T90": {
       "type": "object",
       "properties": {
         "scopeType": {
           "type": "string",
-          "const": "PROJECT"
+          "const": "DEPARTMENT"
         },
         "scopes": {
           "type": "array",
@@ -8393,6 +8752,78 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "additionalProperties": false
     },
     "T92": {
+      "type": "object",
+      "properties": {
+        "scopeType": {
+          "type": "string",
+          "const": "TEAM"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T93"
+          }
+        }
+      },
+      "required": [
+        "scopeType",
+        "scopes"
+      ],
+      "additionalProperties": false
+    },
+    "T93": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "T94": {
+      "type": "object",
+      "properties": {
+        "scopeType": {
+          "type": "string",
+          "const": "PROJECT"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T95"
+          }
+        }
+      },
+      "required": [
+        "scopeType",
+        "scopes"
+      ],
+      "additionalProperties": false
+    },
+    "T95": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "T96": {
       "type": "object",
       "properties": {
         "id": {
@@ -8456,13 +8887,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T93": {
+    "T97": {
       "type": "object",
       "properties": {
         "departments": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T94"
+            "$ref": "#/$defs/T98"
           }
         },
         "metric": {
@@ -8475,7 +8906,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T94": {
+    "T98": {
       "type": "object",
       "properties": {
         "memberCount": {
@@ -8527,7 +8958,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T95": {
+    "T99": {
       "type": "object",
       "properties": {
         "id": {
@@ -8575,7 +9006,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T96": {
+    "T100": {
       "type": "object",
       "properties": {
         "id": {
@@ -8623,13 +9054,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T97": {
+    "T101": {
       "type": "object",
       "properties": {
         "positions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T98"
+            "$ref": "#/$defs/T102"
           }
         }
       },
@@ -8638,7 +9069,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T98": {
+    "T102": {
       "type": "object",
       "properties": {
         "memberCount": {
@@ -8711,7 +9142,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T99": {
+    "T103": {
       "type": "object",
       "properties": {
         "code": {
@@ -8781,7 +9212,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T100": {
+    "T104": {
       "type": "object",
       "properties": {
         "id": {
@@ -8851,7 +9282,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T101": {
+    "T105": {
       "type": "object",
       "properties": {
         "id": {
@@ -8885,7 +9316,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T102": {
+    "T106": {
       "type": "object",
       "properties": {
         "ok": {
@@ -8913,7 +9344,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T103": {
+    "T107": {
       "type": "object",
       "properties": {
         "id": {
@@ -8941,7 +9372,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "children": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T103"
+            "$ref": "#/$defs/T107"
           }
         }
       },
@@ -8955,7 +9386,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T104": {
+    "T108": {
       "type": "object",
       "properties": {
         "teamIds": {
@@ -8967,7 +9398,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "members": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T105"
+            "$ref": "#/$defs/T109"
           }
         }
       },
@@ -8977,7 +9408,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T105": {
+    "T109": {
       "type": "object",
       "properties": {
         "id": {
@@ -9004,178 +9435,89 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T106": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "parentId": {
-          "anyOf": [
-            {
-              "type": "null"
-            },
-            {
-              "type": "string"
-            }
-          ]
-        },
-        "sortOrder": {
-          "type": "integer"
-        },
-        "archivedAt": {
-          "anyOf": [
-            {
-              "type": "null"
-            },
-            {
-              "type": "string",
-              "format": "date-time"
-            }
-          ]
-        }
-      },
-      "required": [
-        "id",
-        "name",
-        "parentId",
-        "sortOrder",
-        "archivedAt"
-      ],
-      "additionalProperties": false
-    },
-    "T107": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "parentId": {
-          "anyOf": [
-            {
-              "type": "null"
-            },
-            {
-              "type": "string"
-            }
-          ]
-        },
-        "sortOrder": {
-          "type": "integer"
-        },
-        "archivedAt": {
-          "anyOf": [
-            {
-              "type": "null"
-            },
-            {
-              "type": "string",
-              "format": "date-time"
-            }
-          ]
-        }
-      },
-      "required": [
-        "id",
-        "name",
-        "parentId",
-        "sortOrder",
-        "archivedAt"
-      ],
-      "additionalProperties": false
-    },
-    "T108": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "workItemId": {
-          "type": "string"
-        },
-        "memberId": {
-          "type": "string"
-        },
-        "minutes": {
-          "type": "number"
-        },
-        "loggedDate": {
-          "type": "string"
-        },
-        "note": {
-          "anyOf": [
-            {
-              "type": "null"
-            },
-            {
-              "type": "string"
-            }
-          ]
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "workItemId",
-        "memberId",
-        "minutes",
-        "loggedDate",
-        "note",
-        "createdAt"
-      ],
-      "additionalProperties": false
-    },
-    "T109": {
-      "type": "object",
-      "properties": {
-        "collaborators": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/T10"
-          }
-        }
-      },
-      "required": [
-        "collaborators"
-      ],
-      "additionalProperties": false
-    },
     "T110": {
       "type": "object",
       "properties": {
-        "watchers": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/T14"
-          }
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "parentId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "sortOrder": {
+          "type": "integer"
+        },
+        "archivedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
         }
       },
       "required": [
-        "watchers"
+        "id",
+        "name",
+        "parentId",
+        "sortOrder",
+        "archivedAt"
       ],
       "additionalProperties": false
     },
     "T111": {
       "type": "object",
       "properties": {
-        "timeLogs": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/T112"
-          }
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "parentId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "sortOrder": {
+          "type": "integer"
+        },
+        "archivedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
         }
       },
       "required": [
-        "timeLogs"
+        "id",
+        "name",
+        "parentId",
+        "sortOrder",
+        "archivedAt"
       ],
       "additionalProperties": false
     },
@@ -9226,15 +9568,56 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
     "T113": {
       "type": "object",
       "properties": {
-        "workItemId": {
-          "type": "string"
-        },
+        "collaborators": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T10"
+          }
+        }
+      },
+      "required": [
+        "collaborators"
+      ],
+      "additionalProperties": false
+    },
+    "T114": {
+      "type": "object",
+      "properties": {
+        "watchers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T14"
+          }
+        }
+      },
+      "required": [
+        "watchers"
+      ],
+      "additionalProperties": false
+    },
+    "T115": {
+      "type": "object",
+      "properties": {
+        "timeLogs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T116"
+          }
+        }
+      },
+      "required": [
+        "timeLogs"
+      ],
+      "additionalProperties": false
+    },
+    "T116": {
+      "type": "object",
+      "properties": {
         "id": {
           "type": "string"
         },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
+        "workItemId": {
+          "type": "string"
         },
         "memberId": {
           "type": "string"
@@ -9254,6 +9637,54 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               "type": "string"
             }
           ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "workItemId",
+        "memberId",
+        "minutes",
+        "loggedDate",
+        "note",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "T117": {
+      "type": "object",
+      "properties": {
+        "workItemId": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "memberId": {
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "minutes": {
+          "type": "number"
+        },
+        "loggedDate": {
+          "type": "string"
         }
       },
       "required": [
@@ -9261,19 +9692,19 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "id",
         "createdAt",
         "memberId",
+        "note",
         "minutes",
-        "loggedDate",
-        "note"
+        "loggedDate"
       ],
       "additionalProperties": false
     },
-    "T114": {
+    "T118": {
       "type": "object",
       "properties": {
         "links": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T115"
+            "$ref": "#/$defs/T119"
           }
         }
       },
@@ -9282,7 +9713,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T115": {
+    "T119": {
       "type": "object",
       "properties": {
         "id": {
@@ -9292,7 +9723,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "string"
         },
         "target": {
-          "$ref": "#/$defs/T116"
+          "$ref": "#/$defs/T120"
         }
       },
       "required": [
@@ -9302,17 +9733,17 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T116": {
+    "T120": {
       "type": "object",
       "properties": {
         "type": {
           "type": "string",
           "enum": [
-            "PAGE",
             "WORK_ITEM",
             "MILESTONE",
-            "IDEA",
-            "ITERATION"
+            "ITERATION",
+            "PAGE",
+            "IDEA"
           ]
         },
         "id": {
@@ -9340,7 +9771,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T117": {
+    "T121": {
       "type": "object",
       "properties": {
         "id": {
@@ -9350,7 +9781,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "string"
         },
         "target": {
-          "$ref": "#/$defs/T116"
+          "$ref": "#/$defs/T120"
         }
       },
       "required": [
@@ -9360,7 +9791,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T118": {
+    "T122": {
       "type": "object",
       "properties": {
         "memberId": {
@@ -9400,13 +9831,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T119": {
+    "T123": {
       "type": "object",
       "properties": {
         "policies": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T120"
+            "$ref": "#/$defs/T124"
           }
         }
       },
@@ -9415,7 +9846,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T120": {
+    "T124": {
       "type": "object",
       "properties": {
         "id": {
@@ -9505,14 +9936,14 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T121": {
+    "T125": {
       "type": "object",
       "properties": {
         "replayed": {
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T122"
+          "$ref": "#/$defs/T126"
         }
       },
       "required": [
@@ -9521,7 +9952,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T122": {
+    "T126": {
       "type": "object",
       "properties": {
         "type": {
@@ -9611,7 +10042,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T123": {
+    "T127": {
       "type": "object",
       "properties": {
         "id": {
@@ -9701,7 +10132,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T124": {
+    "T128": {
       "type": "object",
       "properties": {
         "ok": {
@@ -9713,13 +10144,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T125": {
+    "T129": {
       "type": "object",
       "properties": {
         "items": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T126"
+            "$ref": "#/$defs/T130"
           }
         },
         "total": {
@@ -9740,7 +10171,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T126": {
+    "T130": {
       "type": "object",
       "properties": {
         "id": {
@@ -9834,13 +10265,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T127": {
+    "T131": {
       "type": "object",
       "properties": {
         "votes": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T128"
+            "$ref": "#/$defs/T132"
           }
         },
         "voteCount": {
@@ -9939,7 +10370,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T128": {
+    "T132": {
       "type": "object",
       "properties": {
         "ideaId": {
@@ -9964,7 +10395,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T129": {
+    "T133": {
       "type": "object",
       "properties": {
         "id": {
@@ -10058,7 +10489,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T130": {
+    "T134": {
       "type": "object",
       "properties": {
         "ok": {
@@ -10070,7 +10501,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T131": {
+    "T135": {
       "type": "object",
       "properties": {
         "revisions": {
@@ -10085,14 +10516,14 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T132": {
+    "T136": {
       "type": "object",
       "properties": {
         "replayed": {
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T133"
+          "$ref": "#/$defs/T137"
         }
       },
       "required": [
@@ -10101,7 +10532,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T133": {
+    "T137": {
       "type": "object",
       "properties": {
         "revisionNo": {
@@ -10145,7 +10576,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T134": {
+    "T138": {
       "type": "object",
       "properties": {
         "permissions": {
@@ -10160,7 +10591,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T135": {
+    "T139": {
       "type": "object",
       "properties": {
         "permissions": {
@@ -10175,7 +10606,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T136": {
+    "T140": {
       "type": "object",
       "properties": {
         "attachmentId": {
@@ -10203,7 +10634,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T137": {
+    "T141": {
       "type": "object",
       "properties": {
         "id": {
@@ -10248,7 +10679,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T138": {
+    "T142": {
       "type": "object",
       "properties": {
         "id": {
@@ -10343,7 +10774,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T139": {
+    "T143": {
       "type": "object",
       "properties": {
         "ok": {
@@ -10355,7 +10786,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T140": {
+    "T144": {
       "type": "object",
       "properties": {
         "matched": {
@@ -10367,7 +10798,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T141": {
+    "T145": {
       "type": "object",
       "properties": {
         "memberId": {
@@ -10418,13 +10849,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T142": {
+    "T146": {
       "type": "object",
       "properties": {
         "announcements": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T143"
+            "$ref": "#/$defs/T147"
           }
         }
       },
@@ -10433,7 +10864,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T143": {
+    "T147": {
       "type": "object",
       "properties": {
         "id": {
@@ -10486,112 +10917,18 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T144": {
+    "T148": {
       "type": "object",
       "properties": {
         "forms": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T145"
+            "$ref": "#/$defs/T149"
           }
         }
       },
       "required": [
         "forms"
-      ],
-      "additionalProperties": false
-    },
-    "T145": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "projectId": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "schema": {
-          "$ref": "#/$defs/JsonValue"
-        },
-        "isActive": {
-          "type": "boolean"
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "projectId",
-        "name",
-        "schema",
-        "isActive",
-        "createdAt"
-      ],
-      "additionalProperties": false
-    },
-    "T146": {
-      "type": "object",
-      "properties": {
-        "replayed": {
-          "type": "boolean"
-        },
-        "result": {
-          "$ref": "#/$defs/T147"
-        }
-      },
-      "required": [
-        "replayed",
-        "result"
-      ],
-      "additionalProperties": false
-    },
-    "T147": {
-      "type": "object",
-      "properties": {
-        "form": {
-          "$ref": "#/$defs/T148"
-        }
-      },
-      "required": [
-        "form"
-      ],
-      "additionalProperties": false
-    },
-    "T148": {
-      "type": "object",
-      "properties": {
-        "projectId": {
-          "type": "string"
-        },
-        "id": {
-          "type": "string"
-        },
-        "schema": {
-          "$ref": "#/$defs/JsonValue"
-        },
-        "name": {
-          "type": "string"
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "isActive": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "projectId",
-        "id",
-        "schema",
-        "name",
-        "createdAt",
-        "isActive"
       ],
       "additionalProperties": false
     },
@@ -10631,10 +10968,104 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
     "T150": {
       "type": "object",
       "properties": {
+        "replayed": {
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/T151"
+        }
+      },
+      "required": [
+        "replayed",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "T151": {
+      "type": "object",
+      "properties": {
+        "form": {
+          "$ref": "#/$defs/T152"
+        }
+      },
+      "required": [
+        "form"
+      ],
+      "additionalProperties": false
+    },
+    "T152": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "schema": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "name": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "isActive": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "projectId",
+        "id",
+        "schema",
+        "name",
+        "createdAt",
+        "isActive"
+      ],
+      "additionalProperties": false
+    },
+    "T153": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "schema": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "isActive": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "projectId",
+        "name",
+        "schema",
+        "isActive",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "T154": {
+      "type": "object",
+      "properties": {
         "items": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T151"
+            "$ref": "#/$defs/T155"
           }
         },
         "total": {
@@ -10647,7 +11078,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T151": {
+    "T155": {
       "type": "object",
       "properties": {
         "id": {
@@ -10691,7 +11122,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T152": {
+    "T156": {
       "type": "object",
       "properties": {
         "idea": {
@@ -10700,7 +11131,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               "type": "null"
             },
             {
-              "$ref": "#/$defs/T126"
+              "$ref": "#/$defs/T130"
             }
           ]
         },
@@ -10714,11 +11145,11 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T153": {
+    "T157": {
       "type": "object",
       "properties": {
         "idea": {
-          "$ref": "#/$defs/T154"
+          "$ref": "#/$defs/T158"
         },
         "alreadyConverted": {
           "type": "boolean"
@@ -10729,7 +11160,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T154": {
+    "T158": {
       "type": "object",
       "properties": {
         "projectId": {
@@ -10823,7 +11254,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T155": {
+    "T159": {
       "type": "object",
       "properties": {
         "batchId": {
@@ -10864,7 +11295,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T156": {
+    "T160": {
       "type": "object",
       "properties": {
         "errorCount": {
@@ -10948,7 +11379,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T157": {
+    "T161": {
       "type": "object",
       "properties": {
         "rows": {
@@ -10972,7 +11403,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "errorReport": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T161"
+            "$ref": "#/$defs/T165"
           }
         },
         "errorOffset": {
@@ -11113,14 +11544,14 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T158": {
+    "T162": {
       "type": "object",
       "properties": {
         "ok": {
           "type": "boolean"
         },
         "mapping": {
-          "$ref": "#/$defs/T159"
+          "$ref": "#/$defs/T163"
         }
       },
       "required": [
@@ -11129,7 +11560,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T159": {
+    "T163": {
       "type": "object",
       "properties": {
         "fieldMap": {
@@ -11191,7 +11622,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "$ref": "#/$defs/JsonValue"
       }
     },
-    "T160": {
+    "T164": {
       "type": "object",
       "properties": {
         "totalRows": {
@@ -11209,7 +11640,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "errorReport": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T161"
+            "$ref": "#/$defs/T165"
           }
         }
       },
@@ -11222,7 +11653,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T161": {
+    "T165": {
       "type": "object",
       "properties": {
         "index": {
@@ -11254,7 +11685,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T162": {
+    "T166": {
       "type": "object",
       "properties": {
         "created": {
@@ -11272,7 +11703,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "errorReport": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T161"
+            "$ref": "#/$defs/T165"
           }
         }
       },
@@ -11285,7 +11716,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T163": {
+    "T167": {
       "type": "object",
       "properties": {
         "ok": {
@@ -11317,30 +11748,102 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T164": {
+    "T168": {
       "type": "object",
       "properties": {
         "groups": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T165"
+            "$ref": "#/$defs/T169"
+          }
+        },
+        "attentionItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "key": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "priority": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "dueDate": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "projectKey": {
+                "type": "string"
+              },
+              "statusName": {
+                "type": "string"
+              },
+              "statusKey": {
+                "type": "string"
+              },
+              "statusCategory": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "key",
+              "title",
+              "type",
+              "priority",
+              "dueDate",
+              "version",
+              "projectKey",
+              "statusName",
+              "statusKey",
+              "statusCategory"
+            ],
+            "additionalProperties": false
           }
         },
         "total": {
           "type": "integer"
         },
         "crossDomain": {
-          "$ref": "#/$defs/T166"
+          "$ref": "#/$defs/T170"
         }
       },
       "required": [
         "groups",
+        "attentionItems",
         "total",
         "crossDomain"
       ],
       "additionalProperties": false
     },
-    "T165": {
+    "T169": {
       "type": "object",
       "properties": {
         "key": {
@@ -11399,6 +11902,15 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               },
               "projectKey": {
                 "type": "string"
+              },
+              "statusName": {
+                "type": "string"
+              },
+              "statusKey": {
+                "type": "string"
+              },
+              "statusCategory": {
+                "type": "string"
               }
             },
             "required": [
@@ -11409,7 +11921,10 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               "priority",
               "dueDate",
               "version",
-              "projectKey"
+              "projectKey",
+              "statusName",
+              "statusKey",
+              "statusCategory"
             ],
             "additionalProperties": false
           }
@@ -11426,17 +11941,17 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T166": {
+    "T170": {
       "type": "object",
       "properties": {
         "defects": {
-          "$ref": "#/$defs/T167"
+          "$ref": "#/$defs/T171"
         },
         "myOpenDefects": {
           "type": "number"
         },
         "milestones": {
-          "$ref": "#/$defs/T168"
+          "$ref": "#/$defs/T172"
         }
       },
       "required": [
@@ -11446,7 +11961,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T167": {
+    "T171": {
       "type": "object",
       "properties": {
         "total": {
@@ -11478,7 +11993,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T168": {
+    "T172": {
       "type": "object",
       "properties": {
         "overdue": {
@@ -11490,7 +12005,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "items": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T169"
+            "$ref": "#/$defs/T173"
           }
         }
       },
@@ -11501,7 +12016,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T169": {
+    "T173": {
       "type": "object",
       "properties": {
         "id": {
@@ -11530,7 +12045,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T170": {
+    "T174": {
       "type": "object",
       "properties": {
         "id": {
@@ -11583,7 +12098,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T171": {
+    "T175": {
       "type": "object",
       "properties": {
         "id": {
@@ -11636,7 +12151,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T172": {
+    "T176": {
       "type": "object",
       "properties": {
         "id": {
@@ -11689,7 +12204,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T173": {
+    "T177": {
       "type": "object",
       "properties": {
         "id": {
@@ -11762,7 +12277,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T174": {
+    "T178": {
       "type": "object",
       "properties": {
         "id": {
@@ -11807,7 +12322,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T175": {
+    "T179": {
       "type": "object",
       "properties": {
         "projectId": {
@@ -11880,7 +12395,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T176": {
+    "T180": {
       "type": "object",
       "properties": {
         "id": {
@@ -11953,7 +12468,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T177": {
+    "T181": {
       "type": "object",
       "properties": {
         "id": {
@@ -11998,7 +12513,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T178": {
+    "T182": {
       "type": "object",
       "properties": {
         "id": {
@@ -12043,7 +12558,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T179": {
+    "T183": {
       "type": "object",
       "properties": {
         "day": {
@@ -12053,13 +12568,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "blocks": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T173"
+            "$ref": "#/$defs/T177"
           }
         },
         "sessions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T174"
+            "$ref": "#/$defs/T178"
           }
         },
         "plannedMinutes": {
@@ -12082,7 +12597,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T180": {
+    "T184": {
       "type": "object",
       "properties": {
         "ok": {
@@ -12094,7 +12609,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T181": {
+    "T185": {
       "type": "object",
       "properties": {
         "ok": {
@@ -12106,7 +12621,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T182": {
+    "T186": {
       "type": "object",
       "properties": {
         "ok": {
@@ -12118,7 +12633,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T183": {
+    "T187": {
       "type": "object",
       "properties": {
         "ok": {
@@ -12149,7 +12664,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T184": {
+    "T188": {
       "type": "object",
       "properties": {
         "ok": {
@@ -12161,13 +12676,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T185": {
+    "T189": {
       "type": "object",
       "properties": {
         "members": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T186"
+            "$ref": "#/$defs/T190"
           }
         },
         "page": {
@@ -12188,7 +12703,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T186": {
+    "T190": {
       "type": "object",
       "properties": {
         "id": {
@@ -12234,13 +12749,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T187": {
+    "T191": {
       "type": "object",
       "properties": {
         "roles": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T84"
+            "$ref": "#/$defs/T88"
           }
         }
       },
@@ -12249,7 +12764,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T188": {
+    "T192": {
       "type": "object",
       "properties": {
         "templates": {
@@ -12264,11 +12779,11 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T189": {
+    "T193": {
       "type": "object",
       "properties": {
         "iteration": {
-          "$ref": "#/$defs/T190"
+          "$ref": "#/$defs/T194"
         },
         "metric": {
           "type": "string"
@@ -12276,7 +12791,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "points": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T191"
+            "$ref": "#/$defs/T195"
           }
         }
       },
@@ -12287,7 +12802,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T190": {
+    "T194": {
       "type": "object",
       "properties": {
         "id": {
@@ -12313,7 +12828,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T191": {
+    "T195": {
       "type": "object",
       "properties": {
         "date": {
@@ -12346,11 +12861,11 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T192": {
+    "T196": {
       "type": "object",
       "properties": {
         "iteration": {
-          "$ref": "#/$defs/T193"
+          "$ref": "#/$defs/T197"
         },
         "metric": {
           "type": "string"
@@ -12364,7 +12879,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "series": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T194"
+            "$ref": "#/$defs/T198"
           }
         }
       },
@@ -12376,7 +12891,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T193": {
+    "T197": {
       "type": "object",
       "properties": {
         "id": {
@@ -12402,7 +12917,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T194": {
+    "T198": {
       "type": "object",
       "properties": {
         "total": {
@@ -12434,7 +12949,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T195": {
+    "T199": {
       "type": "object",
       "properties": {
         "metric": {
@@ -12446,11 +12961,11 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "points": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T196"
+            "$ref": "#/$defs/T200"
           }
         },
         "series": {
-          "$ref": "#/$defs/T197"
+          "$ref": "#/$defs/T201"
         }
       },
       "required": [
@@ -12461,7 +12976,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T196": {
+    "T200": {
       "type": "object",
       "properties": {
         "d": {
@@ -12477,19 +12992,19 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T197": {
+    "T201": {
       "type": "object",
       "properties": {
         "activity": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T198"
+            "$ref": "#/$defs/T202"
           }
         },
         "created": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T199"
+            "$ref": "#/$defs/T203"
           }
         }
       },
@@ -12499,210 +13014,50 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T198": {
-      "type": "object",
-      "properties": {
-        "d": {
-          "type": "string"
-        },
-        "n": {
-          "type": "number"
-        }
-      },
-      "required": [
-        "d",
-        "n"
-      ],
-      "additionalProperties": false
-    },
-    "T199": {
-      "type": "object",
-      "properties": {
-        "d": {
-          "type": "string"
-        },
-        "n": {
-          "type": "number"
-        }
-      },
-      "required": [
-        "d",
-        "n"
-      ],
-      "additionalProperties": false
-    },
-    "T200": {
-      "type": "object",
-      "properties": {
-        "dashboards": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/T201"
-          }
-        }
-      },
-      "required": [
-        "dashboards"
-      ],
-      "additionalProperties": false
-    },
-    "T201": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "projectId": {
-          "anyOf": [
-            {
-              "type": "null"
-            },
-            {
-              "type": "string"
-            }
-          ]
-        },
-        "ownerId": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "isDefault": {
-          "type": "boolean"
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "projectId",
-        "ownerId",
-        "name",
-        "isDefault",
-        "createdAt"
-      ],
-      "additionalProperties": false
-    },
     "T202": {
       "type": "object",
       "properties": {
-        "widgets": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/T203"
-          }
-        },
-        "id": {
+        "d": {
           "type": "string"
         },
-        "projectId": {
-          "anyOf": [
-            {
-              "type": "null"
-            },
-            {
-              "type": "string"
-            }
-          ]
-        },
-        "ownerId": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "isDefault": {
-          "type": "boolean"
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
+        "n": {
+          "type": "number"
         }
       },
       "required": [
-        "widgets",
-        "id",
-        "projectId",
-        "ownerId",
-        "name",
-        "isDefault",
-        "createdAt"
+        "d",
+        "n"
       ],
       "additionalProperties": false
     },
     "T203": {
       "type": "object",
       "properties": {
-        "id": {
+        "d": {
           "type": "string"
         },
-        "dashboardId": {
-          "type": "string"
-        },
-        "type": {
-          "type": "string"
-        },
-        "config": {
-          "$ref": "#/$defs/JsonValue"
-        },
-        "sortOrder": {
-          "type": "integer"
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
+        "n": {
+          "type": "number"
         }
       },
       "required": [
-        "id",
-        "dashboardId",
-        "type",
-        "config",
-        "sortOrder",
-        "createdAt"
+        "d",
+        "n"
       ],
       "additionalProperties": false
     },
     "T204": {
       "type": "object",
       "properties": {
-        "projectId": {
-          "anyOf": [
-            {
-              "type": "null"
-            },
-            {
-              "type": "string"
-            }
-          ]
-        },
-        "id": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "isDefault": {
-          "type": "boolean"
-        },
-        "ownerId": {
-          "type": "string"
+        "dashboards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T205"
+          }
         }
       },
       "required": [
-        "projectId",
-        "id",
-        "name",
-        "createdAt",
-        "isDefault",
-        "ownerId"
+        "dashboards"
       ],
       "additionalProperties": false
     },
@@ -12752,49 +13107,48 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "widgets": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T203"
+            "$ref": "#/$defs/T207"
           }
-        }
-      },
-      "required": [
-        "widgets"
-      ],
-      "additionalProperties": false
-    },
-    "T207": {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string"
         },
         "id": {
           "type": "string"
         },
+        "projectId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "ownerId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "isDefault": {
+          "type": "boolean"
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time"
-        },
-        "sortOrder": {
-          "type": "integer"
-        },
-        "dashboardId": {
-          "type": "string"
-        },
-        "config": {
-          "$ref": "#/$defs/JsonValue"
         }
       },
       "required": [
-        "type",
+        "widgets",
         "id",
-        "createdAt",
-        "sortOrder",
-        "dashboardId",
-        "config"
+        "projectId",
+        "ownerId",
+        "name",
+        "isDefault",
+        "createdAt"
       ],
       "additionalProperties": false
     },
-    "T208": {
+    "T207": {
       "type": "object",
       "properties": {
         "id": {
@@ -12827,7 +13181,168 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
+    "T208": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "isDefault": {
+          "type": "boolean"
+        },
+        "ownerId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "projectId",
+        "id",
+        "name",
+        "createdAt",
+        "isDefault",
+        "ownerId"
+      ],
+      "additionalProperties": false
+    },
     "T209": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "projectId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "ownerId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "isDefault": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "projectId",
+        "ownerId",
+        "name",
+        "isDefault",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "T210": {
+      "type": "object",
+      "properties": {
+        "widgets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T207"
+          }
+        }
+      },
+      "required": [
+        "widgets"
+      ],
+      "additionalProperties": false
+    },
+    "T211": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "sortOrder": {
+          "type": "integer"
+        },
+        "dashboardId": {
+          "type": "string"
+        },
+        "config": {
+          "$ref": "#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "createdAt",
+        "sortOrder",
+        "dashboardId",
+        "config"
+      ],
+      "additionalProperties": false
+    },
+    "T212": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "dashboardId": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "config": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "sortOrder": {
+          "type": "integer"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "dashboardId",
+        "type",
+        "config",
+        "sortOrder",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "T213": {
       "type": "object",
       "properties": {
         "type": {
@@ -12847,7 +13362,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T210": {
+    "T214": {
       "type": "object",
       "properties": {
         "type": {
@@ -12858,7 +13373,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "string"
         },
         "data": {
-          "$ref": "#/$defs/T211"
+          "$ref": "#/$defs/T215"
         }
       },
       "required": [
@@ -12868,7 +13383,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T211": {
+    "T215": {
       "type": "object",
       "properties": {
         "total": {
@@ -12880,7 +13395,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T212": {
+    "T216": {
       "type": "object",
       "properties": {
         "type": {
@@ -12891,7 +13406,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "string"
         },
         "data": {
-          "$ref": "#/$defs/T213"
+          "$ref": "#/$defs/T217"
         }
       },
       "required": [
@@ -12901,13 +13416,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T213": {
+    "T217": {
       "type": "object",
       "properties": {
         "slices": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T214"
+            "$ref": "#/$defs/T218"
           }
         }
       },
@@ -12916,7 +13431,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T214": {
+    "T218": {
       "type": "object",
       "properties": {
         "label": {
@@ -12932,7 +13447,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T215": {
+    "T219": {
       "type": "object",
       "properties": {
         "type": {
@@ -12943,7 +13458,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "string"
         },
         "data": {
-          "$ref": "#/$defs/T216"
+          "$ref": "#/$defs/T220"
         }
       },
       "required": [
@@ -12953,13 +13468,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T216": {
+    "T220": {
       "type": "object",
       "properties": {
         "rows": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T217"
+            "$ref": "#/$defs/T221"
           }
         }
       },
@@ -12968,7 +13483,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T217": {
+    "T221": {
       "type": "object",
       "properties": {
         "key": {
@@ -12995,7 +13510,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T218": {
+    "T222": {
       "type": "object",
       "properties": {
         "type": {
@@ -13006,7 +13521,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "string"
         },
         "data": {
-          "$ref": "#/$defs/T219"
+          "$ref": "#/$defs/T223"
         }
       },
       "required": [
@@ -13016,13 +13531,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T219": {
+    "T223": {
       "type": "object",
       "properties": {
         "cells": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T220"
+            "$ref": "#/$defs/T224"
           }
         }
       },
@@ -13031,7 +13546,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T220": {
+    "T224": {
       "type": "object",
       "properties": {
         "date": {
@@ -13048,13 +13563,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T221": {
+    "T225": {
       "type": "object",
       "properties": {
         "portfolios": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T222"
+            "$ref": "#/$defs/T226"
           }
         }
       },
@@ -13063,7 +13578,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T222": {
+    "T226": {
       "type": "object",
       "properties": {
         "projectCount": {
@@ -13096,7 +13611,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T223": {
+    "T227": {
       "type": "object",
       "properties": {
         "projectCount": {
@@ -13108,7 +13623,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "projects": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T224"
+            "$ref": "#/$defs/T228"
           }
         },
         "id": {
@@ -13136,7 +13651,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T224": {
+    "T228": {
       "type": "object",
       "properties": {
         "id": {
@@ -13156,7 +13671,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T225": {
+    "T229": {
       "type": "object",
       "properties": {
         "projectCount": {
@@ -13189,7 +13704,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T226": {
+    "T230": {
       "type": "object",
       "properties": {
         "id": {
@@ -13214,7 +13729,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T227": {
+    "T231": {
       "type": "object",
       "properties": {
         "ok": {
@@ -13226,7 +13741,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T228": {
+    "T232": {
       "type": "object",
       "properties": {
         "ok": {
@@ -13238,37 +13753,37 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T229": {
+    "T233": {
       "type": "object",
       "properties": {
         "portfolio": {
-          "$ref": "#/$defs/T230"
-        },
-        "projects": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/T231"
-          }
-        },
-        "totals": {
           "$ref": "#/$defs/T234"
         },
-        "risks": {
+        "projects": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/T235"
           }
         },
+        "totals": {
+          "$ref": "#/$defs/T238"
+        },
+        "risks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T239"
+          }
+        },
         "milestones": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T236"
+            "$ref": "#/$defs/T240"
           }
         },
         "activity": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T237"
+            "$ref": "#/$defs/T241"
           }
         }
       },
@@ -13282,7 +13797,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T230": {
+    "T234": {
       "type": "object",
       "properties": {
         "id": {
@@ -13303,7 +13818,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T231": {
+    "T235": {
       "type": "object",
       "properties": {
         "id": {
@@ -13321,7 +13836,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               "type": "null"
             },
             {
-              "$ref": "#/$defs/T232"
+              "$ref": "#/$defs/T236"
             }
           ]
         },
@@ -13343,7 +13858,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               "type": "null"
             },
             {
-              "$ref": "#/$defs/T233"
+              "$ref": "#/$defs/T237"
             }
           ]
         }
@@ -13361,7 +13876,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T232": {
+    "T236": {
       "type": "object",
       "properties": {
         "key": {
@@ -13381,7 +13896,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T233": {
+    "T237": {
       "type": "object",
       "properties": {
         "overdueMilestones": {
@@ -13417,7 +13932,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T234": {
+    "T238": {
       "type": "object",
       "properties": {
         "projectCount": {
@@ -13445,7 +13960,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T235": {
+    "T239": {
       "type": "object",
       "properties": {
         "projectId": {
@@ -13469,7 +13984,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T236": {
+    "T240": {
       "type": "object",
       "properties": {
         "projectName": {
@@ -13529,7 +14044,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T237": {
+    "T241": {
       "type": "object",
       "properties": {
         "projectName": {
@@ -13565,13 +14080,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T238": {
+    "T242": {
       "type": "object",
       "properties": {
         "definitions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T239"
+            "$ref": "#/$defs/T243"
           }
         }
       },
@@ -13580,7 +14095,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T239": {
+    "T243": {
       "type": "object",
       "properties": {
         "id": {
@@ -13644,7 +14159,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T240": {
+    "T244": {
       "type": "object",
       "properties": {
         "type": {
@@ -13708,7 +14223,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T241": {
+    "T245": {
       "type": "object",
       "properties": {
         "id": {
@@ -13772,7 +14287,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T242": {
+    "T246": {
       "type": "object",
       "properties": {
         "filename": {
@@ -13796,7 +14311,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T243": {
+    "T247": {
       "type": "object",
       "properties": {
         "mimeType": {
@@ -13820,13 +14335,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T244": {
+    "T248": {
       "type": "object",
       "properties": {
         "integrations": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T245"
+            "$ref": "#/$defs/T249"
           }
         }
       },
@@ -13835,7 +14350,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T245": {
+    "T249": {
       "type": "object",
       "properties": {
         "id": {
@@ -13878,7 +14393,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T246": {
+    "T250": {
       "type": "object",
       "properties": {
         "id": {
@@ -13928,7 +14443,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T247": {
+    "T251": {
       "type": "object",
       "properties": {
         "ok": {
@@ -13940,7 +14455,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T248": {
+    "T252": {
       "type": "object",
       "properties": {
         "integrationId": {
@@ -13988,7 +14503,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T249": {
+    "T253": {
       "type": "object",
       "properties": {
         "integrationId": {
@@ -14007,10 +14522,10 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "number"
         },
         "pulls": {
-          "$ref": "#/$defs/T250"
+          "$ref": "#/$defs/T254"
         },
         "reviews": {
-          "$ref": "#/$defs/T251"
+          "$ref": "#/$defs/T255"
         },
         "members": {
           "type": "number"
@@ -14028,7 +14543,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T250": {
+    "T254": {
       "type": "object",
       "properties": {
         "fetched": {
@@ -14048,7 +14563,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T251": {
+    "T255": {
       "type": "object",
       "properties": {
         "fetched": {
@@ -14068,13 +14583,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T252": {
+    "T256": {
       "type": "object",
       "properties": {
         "endpoints": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T253"
+            "$ref": "#/$defs/T257"
           }
         }
       },
@@ -14083,7 +14598,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T253": {
+    "T257": {
       "type": "object",
       "properties": {
         "id": {
@@ -14130,11 +14645,11 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T254": {
+    "T258": {
       "type": "object",
       "properties": {
         "endpoint": {
-          "$ref": "#/$defs/T255"
+          "$ref": "#/$defs/T259"
         },
         "secret": {
           "type": "string"
@@ -14146,7 +14661,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T255": {
+    "T259": {
       "type": "object",
       "properties": {
         "projectId": {
@@ -14169,11 +14684,11 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "string",
           "format": "date-time"
         },
-        "isActive": {
-          "type": "boolean"
-        },
         "url": {
           "type": "string"
+        },
+        "isActive": {
+          "type": "boolean"
         },
         "events": {
           "type": "array",
@@ -14187,13 +14702,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "id",
         "name",
         "createdAt",
-        "isActive",
         "url",
+        "isActive",
         "events"
       ],
       "additionalProperties": false
     },
-    "T256": {
+    "T260": {
       "type": "object",
       "properties": {
         "id": {
@@ -14240,7 +14755,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T257": {
+    "T261": {
       "type": "object",
       "properties": {
         "ok": {
@@ -14252,13 +14767,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T258": {
+    "T262": {
       "type": "object",
       "properties": {
         "deliveries": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T259"
+            "$ref": "#/$defs/T263"
           }
         }
       },
@@ -14267,7 +14782,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T259": {
+    "T263": {
       "type": "object",
       "properties": {
         "id": {
@@ -14335,7 +14850,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T260": {
+    "T264": {
       "type": "object",
       "properties": {
         "dead": {
@@ -14380,7 +14895,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T261": {
+    "T265": {
       "type": "object",
       "properties": {
         "id": {
@@ -14459,16 +14974,16 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T262": {
+    "T266": {
       "type": "object",
       "properties": {
         "parent": {
-          "$ref": "#/$defs/T263"
+          "$ref": "#/$defs/T267"
         },
         "children": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T264"
+            "$ref": "#/$defs/T268"
           }
         }
       },
@@ -14478,7 +14993,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T263": {
+    "T267": {
       "type": "object",
       "properties": {
         "id": {
@@ -14498,7 +15013,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T264": {
+    "T268": {
       "type": "object",
       "properties": {
         "id": {
@@ -14525,6 +15040,67 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         },
         "status_id": {
           "type": "string"
+        },
+        "statusKey": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "statusName": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "statusCategory": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "assigneeId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "assigneeName": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "dueDate": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          ]
         }
       },
       "required": [
@@ -14533,11 +15109,17 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "title",
         "type",
         "priority",
-        "status_id"
+        "status_id",
+        "statusKey",
+        "statusName",
+        "statusCategory",
+        "assigneeId",
+        "assigneeName",
+        "dueDate"
       ],
       "additionalProperties": false
     },
-    "T265": {
+    "T269": {
       "type": "object",
       "properties": {
         "ok": {
@@ -14549,25 +15131,25 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T266": {
+    "T270": {
       "type": "object",
       "properties": {
         "blocks": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T267"
+            "$ref": "#/$defs/T271"
           }
         },
         "blockedBy": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T268"
+            "$ref": "#/$defs/T272"
           }
         },
         "others": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T269"
+            "$ref": "#/$defs/T273"
           }
         }
       },
@@ -14578,7 +15160,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T267": {
+    "T271": {
       "type": "object",
       "properties": {
         "id": {
@@ -14610,7 +15192,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T268": {
+    "T272": {
       "type": "object",
       "properties": {
         "id": {
@@ -14642,7 +15224,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T269": {
+    "T273": {
       "type": "object",
       "properties": {
         "id": {
@@ -14678,7 +15260,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T270": {
+    "T274": {
       "type": "object",
       "properties": {
         "projectId": {
@@ -14736,13 +15318,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T271": {
+    "T275": {
       "type": "object",
       "properties": {
         "members": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T272"
+            "$ref": "#/$defs/T276"
           }
         }
       },
@@ -14751,7 +15333,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T272": {
+    "T276": {
       "type": "object",
       "properties": {
         "memberId": {
@@ -14797,14 +15379,14 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T273": {
+    "T277": {
       "type": "object",
       "properties": {
         "ok": {
           "type": "boolean"
         },
         "capacity": {
-          "$ref": "#/$defs/T274"
+          "$ref": "#/$defs/T278"
         }
       },
       "required": [
@@ -14812,7 +15394,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T274": {
+    "T278": {
       "type": "object",
       "properties": {
         "id": {
@@ -14858,7 +15440,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T275": {
+    "T279": {
       "type": "object",
       "properties": {
         "id": {
@@ -14923,7 +15505,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T276": {
+    "T280": {
       "type": "object",
       "properties": {
         "updates": {
@@ -14938,11 +15520,11 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T277": {
+    "T281": {
       "type": "object",
       "properties": {
         "milestone": {
-          "$ref": "#/$defs/T278"
+          "$ref": "#/$defs/T282"
         },
         "project": {
           "anyOf": [
@@ -14950,20 +15532,20 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               "type": "null"
             },
             {
-              "$ref": "#/$defs/T279"
+              "$ref": "#/$defs/T283"
             }
           ]
         },
         "relatedWorkItems": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T280"
+            "$ref": "#/$defs/T284"
           }
         },
         "progressUpdates": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T281"
+            "$ref": "#/$defs/T285"
           }
         }
       },
@@ -14975,7 +15557,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T278": {
+    "T282": {
       "type": "object",
       "properties": {
         "projectId": {
@@ -15083,7 +15665,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T279": {
+    "T283": {
       "type": "object",
       "properties": {
         "id": {
@@ -15103,7 +15685,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T280": {
+    "T284": {
       "type": "object",
       "properties": {
         "id": {
@@ -15172,7 +15754,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T281": {
+    "T285": {
       "type": "object",
       "properties": {
         "id": {
@@ -15226,13 +15808,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T282": {
+    "T286": {
       "type": "object",
       "properties": {
         "updates": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T281"
+            "$ref": "#/$defs/T285"
           }
         }
       },
@@ -15241,7 +15823,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T283": {
+    "T287": {
       "type": "object",
       "properties": {
         "projectId": {
@@ -15303,7 +15885,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T284": {
+    "T288": {
       "type": "object",
       "properties": {
         "id": {
@@ -15362,7 +15944,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T285": {
+    "T289": {
       "type": "object",
       "properties": {
         "id": {
@@ -15407,19 +15989,19 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T286": {
+    "T290": {
       "type": "object",
       "properties": {
         "departments": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T287"
+            "$ref": "#/$defs/T291"
           }
         },
         "positions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T288"
+            "$ref": "#/$defs/T292"
           }
         }
       },
@@ -15429,7 +16011,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T287": {
+    "T291": {
       "type": "object",
       "properties": {
         "name": {
@@ -15438,7 +16020,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "children": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T287"
+            "$ref": "#/$defs/T291"
           }
         }
       },
@@ -15447,7 +16029,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T288": {
+    "T292": {
       "type": "object",
       "properties": {
         "name": {
@@ -15462,7 +16044,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T289": {
+    "T293": {
       "type": "object",
       "properties": {
         "ok": {
@@ -15474,7 +16056,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T290": {
+    "T294": {
       "type": "object",
       "properties": {
         "ok": {
@@ -15486,13 +16068,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T291": {
+    "T295": {
       "type": "object",
       "properties": {
         "teams": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T103"
+            "$ref": "#/$defs/T107"
           }
         }
       },
@@ -15501,7 +16083,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T292": {
+    "T296": {
       "type": "object",
       "properties": {
         "ok": {
@@ -15513,7 +16095,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T293": {
+    "T297": {
       "type": "object",
       "properties": {
         "id": {
@@ -15636,16 +16218,16 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T294": {
+    "T298": {
       "type": "object",
       "properties": {
         "member": {
-          "$ref": "#/$defs/T295"
+          "$ref": "#/$defs/T299"
         },
         "assignments": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T296"
+            "$ref": "#/$defs/T300"
           }
         },
         "permissions": {
@@ -15662,7 +16244,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T295": {
+    "T299": {
       "type": "object",
       "properties": {
         "id": {
@@ -15682,7 +16264,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T296": {
+    "T300": {
       "type": "object",
       "properties": {
         "id": {
@@ -15702,7 +16284,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           ]
         },
         "role": {
-          "$ref": "#/$defs/T297"
+          "$ref": "#/$defs/T301"
         }
       },
       "required": [
@@ -15713,7 +16295,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T297": {
+    "T301": {
       "type": "object",
       "properties": {
         "id": {
@@ -15733,7 +16315,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T298": {
+    "T302": {
       "type": "object",
       "properties": {
         "ok": {
@@ -15745,13 +16327,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T299": {
+    "T303": {
       "type": "object",
       "properties": {
         "roles": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T84"
+            "$ref": "#/$defs/T88"
           }
         }
       },
@@ -15760,13 +16342,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T300": {
+    "T304": {
       "type": "object",
       "properties": {
         "groups": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T82"
+            "$ref": "#/$defs/T86"
           }
         }
       },
@@ -15775,7 +16357,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T301": {
+    "T305": {
       "type": "object",
       "properties": {
         "ok": {
@@ -15787,13 +16369,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T302": {
+    "T306": {
       "type": "object",
       "properties": {
         "assignments": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T92"
+            "$ref": "#/$defs/T96"
           }
         }
       },
@@ -15802,7 +16384,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T303": {
+    "T307": {
       "type": "object",
       "properties": {
         "ok": {
@@ -15814,23 +16396,273 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T304": {
+    "T308": {
       "type": "object",
       "properties": {
-        "conversation": {
-          "$ref": "#/$defs/T305"
-        },
-        "message": {
-          "$ref": "#/$defs/T306"
+        "products": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T309"
+          }
         }
       },
       "required": [
+        "products"
+      ],
+      "additionalProperties": false
+    },
+    "T309": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "version": {
+          "type": "integer"
+        },
+        "archivedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "canManage": {
+          "type": "boolean"
+        },
+        "canUnlink": {
+          "type": "boolean"
+        },
+        "requirementCount": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "version",
+        "archivedAt",
+        "createdAt",
+        "updatedAt",
+        "canManage",
+        "canUnlink",
+        "requirementCount"
+      ],
+      "additionalProperties": false
+    },
+    "T310": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "T311": {
+      "type": "object",
+      "properties": {
+        "execution": {
+          "$ref": "#/$defs/T312"
+        },
+        "conversation": {
+          "$ref": "#/$defs/T315"
+        },
+        "message": {
+          "$ref": "#/$defs/T316"
+        }
+      },
+      "required": [
+        "execution",
         "conversation",
         "message"
       ],
       "additionalProperties": false
     },
-    "T305": {
+    "T312": {
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "CANCELLED",
+            "RUNNING",
+            "FAILED",
+            "PARTIAL",
+            "AWAITING_CONFIRMATION",
+            "QUEUED",
+            "WAITING_APPROVAL",
+            "VERIFIED",
+            "EXECUTED",
+            "UNCERTAIN",
+            "EXPIRED",
+            "SUPERSEDED",
+            "EMPTY",
+            "UNAVAILABLE"
+          ]
+        },
+        "verifiedCount": {
+          "type": "integer"
+        },
+        "remainingCount": {
+          "type": "integer"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T313"
+          }
+        }
+      },
+      "required": [
+        "runId",
+        "status",
+        "verifiedCount",
+        "remainingCount",
+        "createdAt",
+        "updatedAt",
+        "steps"
+      ],
+      "additionalProperties": false
+    },
+    "T313": {
+      "type": "object",
+      "properties": {
+        "stepId": {
+          "type": "string"
+        },
+        "toolName": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "CANCELLED",
+            "RUNNING",
+            "FAILED",
+            "AWAITING_CONFIRMATION",
+            "QUEUED",
+            "WAITING_APPROVAL",
+            "VERIFIED",
+            "EXECUTED",
+            "UNCERTAIN",
+            "EXPIRED",
+            "SUPERSEDED"
+          ]
+        },
+        "jobId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "observedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T314"
+          }
+        }
+      },
+      "required": [
+        "stepId",
+        "toolName",
+        "title",
+        "status",
+        "jobId",
+        "observedAt",
+        "resources"
+      ],
+      "additionalProperties": false
+    },
+    "T314": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "milestone",
+            "iteration",
+            "release",
+            "module",
+            "comment",
+            "workItem",
+            "page",
+            "idea"
+          ]
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "T315": {
       "type": "object",
       "properties": {
         "id": {
@@ -15894,11 +16726,11 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T306": {
+    "T316": {
       "type": "object",
       "properties": {
         "references": {
-          "$ref": "#/$defs/T307"
+          "$ref": "#/$defs/T317"
         },
         "id": {
           "type": "string"
@@ -15928,7 +16760,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               "type": "null"
             },
             {
-              "$ref": "#/$defs/T308"
+              "$ref": "#/$defs/T318"
             }
           ]
         },
@@ -15953,7 +16785,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T307": {
+    "T317": {
       "type": "object",
       "properties": {
         "artifactIds": {
@@ -15972,19 +16804,22 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "required": [],
       "additionalProperties": false
     },
-    "T308": {
+    "T318": {
       "type": "object",
       "properties": {
+        "executionRequest": {
+          "$ref": "#/$defs/T319"
+        },
         "evidence": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T309"
+            "$ref": "#/$defs/T320"
           }
         },
         "actions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T314"
+            "$ref": "#/$defs/T324"
           }
         },
         "ok": {
@@ -16003,7 +16838,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "citations": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T321"
+            "$ref": "#/$defs/T333"
           }
         },
         "mode": {
@@ -16018,7 +16853,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "string"
         },
         "scope": {
-          "$ref": "#/$defs/T322"
+          "$ref": "#/$defs/T334"
         }
       },
       "required": [
@@ -16030,7 +16865,24 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T309": {
+    "T319": {
+      "type": "object",
+      "properties": {
+        "origin": {
+          "type": "string",
+          "const": "agent"
+        },
+        "requestHash": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "origin",
+        "requestHash"
+      ],
+      "additionalProperties": false
+    },
+    "T320": {
       "type": "object",
       "properties": {
         "id": {
@@ -16052,17 +16904,17 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "scope": {
           "anyOf": [
             {
-              "$ref": "#/$defs/T310"
+              "$ref": "#/$defs/T321"
             },
             {
-              "$ref": "#/$defs/T311"
+              "$ref": "#/$defs/T322"
             }
           ]
         },
         "verificationReads": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T312"
+            "$ref": "#/$defs/T323"
           }
         },
         "observedAt": {
@@ -16072,7 +16924,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "resources": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T313"
+            "$ref": "#/$defs/T314"
           }
         },
         "summary": {
@@ -16095,7 +16947,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T310": {
+    "T321": {
       "type": "object",
       "properties": {
         "kind": {
@@ -16118,7 +16970,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T311": {
+    "T322": {
       "type": "object",
       "properties": {
         "kind": {
@@ -16138,7 +16990,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T312": {
+    "T323": {
       "type": "object",
       "properties": {
         "toolName": {
@@ -16157,37 +17009,23 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T313": {
+    "T324": {
       "type": "object",
       "properties": {
-        "kind": {
-          "type": "string",
-          "enum": [
-            "milestone",
-            "iteration",
-            "release",
-            "module",
-            "comment",
-            "workItem",
-            "page",
-            "idea"
-          ]
+        "id": {
+          "type": "string"
         },
-        "id": {
+        "supersedesId": {
           "type": "string"
-        }
-      },
-      "required": [
-        "kind",
-        "id"
-      ],
-      "additionalProperties": false
-    },
-    "T314": {
-      "type": "object",
-      "properties": {
-        "id": {
+        },
+        "supersededById": {
           "type": "string"
+        },
+        "revisionRequest": {
+          "$ref": "#/$defs/T325"
+        },
+        "lastFailure": {
+          "$ref": "#/$defs/T326"
         },
         "toolName": {
           "type": "string"
@@ -16205,17 +17043,17 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "scope": {
           "anyOf": [
             {
-              "$ref": "#/$defs/T310"
+              "$ref": "#/$defs/T321"
             },
             {
-              "$ref": "#/$defs/T311"
+              "$ref": "#/$defs/T322"
             }
           ]
         },
         "verificationReads": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T312"
+            "$ref": "#/$defs/T323"
           }
         },
         "targetId": {
@@ -16245,25 +17083,25 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           ]
         },
         "target": {
-          "$ref": "#/$defs/T315"
+          "$ref": "#/$defs/T327"
         },
         "resources": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T313"
+            "$ref": "#/$defs/T314"
           }
         },
         "observations": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T316"
+            "$ref": "#/$defs/T328"
           }
         },
         "presentation": {
-          "$ref": "#/$defs/T317"
+          "$ref": "#/$defs/T329"
         },
         "result": {
-          "$ref": "#/$defs/T319"
+          "$ref": "#/$defs/T331"
         },
         "status": {
           "type": "string",
@@ -16300,7 +17138,40 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T315": {
+    "T325": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "hash": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "hash"
+      ],
+      "additionalProperties": false
+    },
+    "T326": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "recordedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "code",
+        "recordedAt"
+      ],
+      "additionalProperties": false
+    },
+    "T327": {
       "type": "object",
       "properties": {
         "kind": {
@@ -16346,7 +17217,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T316": {
+    "T328": {
       "type": "object",
       "properties": {
         "toolName": {
@@ -16369,7 +17240,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T317": {
+    "T329": {
       "type": "object",
       "properties": {
         "title": {
@@ -16378,7 +17249,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "fields": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T318"
+            "$ref": "#/$defs/T330"
           }
         }
       },
@@ -16388,7 +17259,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T318": {
+    "T330": {
       "type": "object",
       "properties": {
         "label": {
@@ -16404,13 +17275,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T319": {
+    "T331": {
       "type": "object",
       "properties": {
         "verificationReads": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T312"
+            "$ref": "#/$defs/T323"
           }
         },
         "projectIds": {
@@ -16426,7 +17297,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "resources": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T313"
+            "$ref": "#/$defs/T314"
           }
         },
         "value": {
@@ -16440,7 +17311,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "const": "approval_pending"
         },
         "approval": {
-          "$ref": "#/$defs/T320"
+          "$ref": "#/$defs/T332"
         }
       },
       "required": [
@@ -16450,7 +17321,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T320": {
+    "T332": {
       "type": "object",
       "properties": {
         "status": {
@@ -16463,7 +17334,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T321": {
+    "T333": {
       "type": "object",
       "properties": {
         "pageId": {
@@ -16502,7 +17373,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T322": {
+    "T334": {
       "type": "object",
       "properties": {
         "projectIds": {
@@ -16521,13 +17392,29 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T323": {
+    "T335": {
+      "type": "object",
+      "properties": {
+        "conversation": {
+          "$ref": "#/$defs/T315"
+        },
+        "message": {
+          "$ref": "#/$defs/T316"
+        }
+      },
+      "required": [
+        "conversation",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "T336": {
       "type": "object",
       "properties": {
         "items": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T305"
+            "$ref": "#/$defs/T315"
           }
         },
         "total": {
@@ -16548,16 +17435,16 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T324": {
+    "T337": {
       "type": "object",
       "properties": {
         "conversation": {
-          "$ref": "#/$defs/T305"
+          "$ref": "#/$defs/T315"
         },
         "messages": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T306"
+            "$ref": "#/$defs/T316"
           }
         },
         "hasMore": {
@@ -16571,13 +17458,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T325": {
+    "T338": {
       "type": "object",
       "properties": {
         "items": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T326"
+            "$ref": "#/$defs/T339"
           }
         }
       },
@@ -16586,7 +17473,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T326": {
+    "T339": {
       "type": "object",
       "properties": {
         "archived": {
@@ -16618,7 +17505,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T327": {
+    "T340": {
       "type": "object",
       "properties": {
         "mode": {
@@ -16631,14 +17518,14 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "hits": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T328"
+            "$ref": "#/$defs/T341"
           }
         },
         "note": {
           "type": "string"
         },
         "scope": {
-          "$ref": "#/$defs/T322"
+          "$ref": "#/$defs/T334"
         }
       },
       "required": [
@@ -16648,10 +17535,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T328": {
+    "T341": {
       "type": "object",
       "properties": {
         "chunkId": {
+          "type": "string"
+        },
+        "directoryPath": {
           "type": "string"
         },
         "score": {
@@ -16703,7 +17593,2267 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T329": {
+    "T342": {
+      "type": "object",
+      "properties": {
+        "releaseId": {
+          "type": "string"
+        },
+        "completedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
+        },
+        "candidate": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/T343"
+            }
+          ]
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T345"
+          }
+        },
+        "verification": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/T346"
+            }
+          ]
+        },
+        "feedback": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T347"
+          }
+        }
+      },
+      "required": [
+        "releaseId",
+        "completedAt",
+        "candidate",
+        "passed",
+        "checks",
+        "verification",
+        "feedback"
+      ],
+      "additionalProperties": false
+    },
+    "T343": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "releaseId": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer"
+        },
+        "sourceId": {
+          "type": "string"
+        },
+        "sourceVersion": {
+          "type": "integer"
+        },
+        "repository": {
+          "type": "string"
+        },
+        "commitSha": {
+          "type": "string"
+        },
+        "build": {
+          "type": "string"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "workflowIds": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "testPlanIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "workItems": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T344"
+          }
+        },
+        "createdBy": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "projectId",
+        "releaseId",
+        "number",
+        "sourceId",
+        "sourceVersion",
+        "repository",
+        "commitSha",
+        "build",
+        "environment",
+        "workflowIds",
+        "testPlanIds",
+        "workItems",
+        "createdBy",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "T344": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "key",
+        "title",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "T345": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "evidenceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "testPlanId": {
+          "type": "string"
+        },
+        "testRunIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "key",
+        "passed",
+        "message",
+        "evidenceIds"
+      ],
+      "additionalProperties": false
+    },
+    "T346": {
+      "type": "object",
+      "properties": {
+        "candidateId": {
+          "type": "string"
+        },
+        "candidateNumber": {
+          "type": "number"
+        },
+        "commitSha": {
+          "type": "string"
+        },
+        "build": {
+          "type": "string"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "sourceId": {
+          "type": "string"
+        },
+        "sourceVersion": {
+          "type": "integer"
+        },
+        "repository": {
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T345"
+          }
+        },
+        "checkedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "candidateId",
+        "candidateNumber",
+        "commitSha",
+        "build",
+        "environment",
+        "sourceId",
+        "sourceVersion",
+        "repository",
+        "passed",
+        "checks",
+        "checkedAt"
+      ],
+      "additionalProperties": false
+    },
+    "T347": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "releaseId": {
+          "type": "string"
+        },
+        "workItemId": {
+          "type": "string"
+        },
+        "sourceUrl": {
+          "type": "string"
+        },
+        "conclusion": {
+          "type": "string"
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "RESOLVED",
+            "FOLLOW_UP"
+          ]
+        },
+        "createdBy": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "projectId",
+        "releaseId",
+        "workItemId",
+        "sourceUrl",
+        "conclusion",
+        "outcome",
+        "createdBy",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "T348": {
+      "type": "object",
+      "properties": {
+        "workItemId": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "workItemVersion": {
+          "type": "integer"
+        },
+        "baseRevision": {
+          "$ref": "#/$defs/T349"
+        },
+        "impactFingerprint": {
+          "type": "string"
+        },
+        "impacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T350"
+          }
+        },
+        "canCreate": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "workItemId",
+        "projectId",
+        "workItemVersion",
+        "baseRevision",
+        "impactFingerprint",
+        "impacts",
+        "canCreate"
+      ],
+      "additionalProperties": false
+    },
+    "T349": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "workItemId": {
+          "type": "string"
+        },
+        "revisionNo": {
+          "type": "integer"
+        },
+        "workItemVersion": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "authorId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "authorName": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "INITIAL",
+            "EDIT",
+            "BASELINE"
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "description",
+        "id",
+        "workItemId",
+        "revisionNo",
+        "workItemVersion",
+        "title",
+        "authorId",
+        "authorName",
+        "source",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "T350": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "WORK_ITEM",
+            "MILESTONE",
+            "ITERATION",
+            "RELEASE",
+            "TEST_CASE"
+          ]
+        },
+        "targetId": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "key": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "ownerId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "sourceVersion": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "targetId",
+        "title",
+        "key",
+        "ownerId",
+        "sourceVersion"
+      ],
+      "additionalProperties": false
+    },
+    "T351": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T352"
+          }
+        },
+        "nextCursor": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "nextCursor"
+      ],
+      "additionalProperties": false
+    },
+    "T352": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "workItemId": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "PENDING",
+            "APPROVED",
+            "REJECTED",
+            "CANCELLED",
+            "APPLIED"
+          ]
+        },
+        "version": {
+          "type": "integer"
+        },
+        "proposedTitle": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "requestedBy": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "decidedBy": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "decidedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
+        },
+        "appliedBy": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "appliedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "workItemId",
+        "projectId",
+        "number",
+        "status",
+        "version",
+        "proposedTitle",
+        "reason",
+        "requestedBy",
+        "createdAt",
+        "decidedBy",
+        "decidedAt",
+        "appliedBy",
+        "appliedAt"
+      ],
+      "additionalProperties": false
+    },
+    "T353": {
+      "type": "object",
+      "properties": {
+        "baseRevision": {
+          "$ref": "#/$defs/T349"
+        },
+        "proposedDescription": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "requestedWorkItemVersion": {
+          "type": "integer"
+        },
+        "reviewNote": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "appliedRevisionId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "impacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T354"
+          }
+        },
+        "cancelledBy": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "cancelledAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
+        },
+        "cancelNote": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "participants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T355"
+          }
+        },
+        "canReview": {
+          "type": "boolean"
+        },
+        "canApply": {
+          "type": "boolean"
+        },
+        "canCancel": {
+          "type": "boolean"
+        },
+        "stale": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "workItemId": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "PENDING",
+            "APPROVED",
+            "REJECTED",
+            "CANCELLED",
+            "APPLIED"
+          ]
+        },
+        "version": {
+          "type": "integer"
+        },
+        "proposedTitle": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "requestedBy": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "decidedBy": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "decidedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
+        },
+        "appliedBy": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "appliedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
+        }
+      },
+      "required": [
+        "baseRevision",
+        "proposedDescription",
+        "requestedWorkItemVersion",
+        "reviewNote",
+        "appliedRevisionId",
+        "impacts",
+        "cancelledBy",
+        "cancelledAt",
+        "cancelNote",
+        "participants",
+        "canReview",
+        "canApply",
+        "canCancel",
+        "stale",
+        "id",
+        "workItemId",
+        "projectId",
+        "number",
+        "status",
+        "version",
+        "proposedTitle",
+        "reason",
+        "requestedBy",
+        "createdAt",
+        "decidedBy",
+        "decidedAt",
+        "appliedBy",
+        "appliedAt"
+      ],
+      "additionalProperties": false
+    },
+    "T354": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "acknowledgedBy": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "acknowledgedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "canAcknowledge": {
+          "type": "boolean"
+        },
+        "available": {
+          "type": "boolean"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "WORK_ITEM",
+            "MILESTONE",
+            "ITERATION",
+            "RELEASE",
+            "TEST_CASE"
+          ]
+        },
+        "targetId": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "key": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "ownerId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "sourceVersion": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "acknowledgedBy",
+        "acknowledgedAt",
+        "note",
+        "canAcknowledge",
+        "available",
+        "kind",
+        "targetId",
+        "title",
+        "key",
+        "ownerId",
+        "sourceVersion"
+      ],
+      "additionalProperties": false
+    },
+    "T355": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "T356": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T357"
+          }
+        },
+        "nextCursor": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "canManage": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "items",
+        "nextCursor",
+        "canManage"
+      ],
+      "additionalProperties": false
+    },
+    "T357": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer"
+        },
+        "key": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "build": {
+          "type": "string"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "CANCELLED",
+            "DRAFT",
+            "RUNNING",
+            "COMPLETED"
+          ]
+        },
+        "version": {
+          "type": "integer"
+        },
+        "createdBy": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "startedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
+        },
+        "finishedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
+        },
+        "cancelReason": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "canManage": {
+          "type": "boolean"
+        },
+        "canExecute": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "projectId",
+        "number",
+        "key",
+        "title",
+        "build",
+        "environment",
+        "status",
+        "version",
+        "createdBy",
+        "createdAt",
+        "startedAt",
+        "finishedAt",
+        "cancelReason",
+        "canManage",
+        "canExecute"
+      ],
+      "additionalProperties": false
+    },
+    "T358": {
+      "type": "object",
+      "properties": {
+        "cases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T359"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer"
+        },
+        "key": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "build": {
+          "type": "string"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "CANCELLED",
+            "DRAFT",
+            "RUNNING",
+            "COMPLETED"
+          ]
+        },
+        "version": {
+          "type": "integer"
+        },
+        "createdBy": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "startedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
+        },
+        "finishedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
+        },
+        "cancelReason": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "canManage": {
+          "type": "boolean"
+        },
+        "canExecute": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "cases",
+        "id",
+        "projectId",
+        "number",
+        "key",
+        "title",
+        "build",
+        "environment",
+        "status",
+        "version",
+        "createdBy",
+        "createdAt",
+        "startedAt",
+        "finishedAt",
+        "cancelReason",
+        "canManage",
+        "canExecute"
+      ],
+      "additionalProperties": false
+    },
+    "T359": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "caseId": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "revisionId": {
+          "type": "string"
+        },
+        "revisionNo": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "position": {
+          "type": "number"
+        },
+        "latestRun": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/T360"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "caseId",
+        "key",
+        "revisionId",
+        "revisionNo",
+        "title",
+        "position",
+        "latestRun"
+      ],
+      "additionalProperties": false
+    },
+    "T360": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "CANCELLED",
+            "IN_PROGRESS",
+            "PASSED",
+            "FAILED",
+            "BLOCKED",
+            "SKIPPED"
+          ]
+        },
+        "attempt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "attempt"
+      ],
+      "additionalProperties": false
+    },
+    "T361": {
+      "type": "object",
+      "properties": {
+        "plan": {
+          "$ref": "#/$defs/T357"
+        },
+        "totalCases": {
+          "type": "number"
+        },
+        "totalAttempts": {
+          "type": "number"
+        },
+        "latestResults": {
+          "$ref": "#/$defs/T362"
+        },
+        "allAttempts": {
+          "$ref": "#/$defs/T363"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "testedBuild": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "testedEnvironment": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "cases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T364"
+          }
+        },
+        "generatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "plan",
+        "totalCases",
+        "totalAttempts",
+        "latestResults",
+        "allAttempts",
+        "passed",
+        "testedBuild",
+        "testedEnvironment",
+        "cases",
+        "generatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "T362": {
+      "type": "object",
+      "properties": {
+        "CANCELLED": {
+          "type": "number"
+        },
+        "IN_PROGRESS": {
+          "type": "number"
+        },
+        "PASSED": {
+          "type": "number"
+        },
+        "FAILED": {
+          "type": "number"
+        },
+        "BLOCKED": {
+          "type": "number"
+        },
+        "SKIPPED": {
+          "type": "number"
+        },
+        "NOT_RUN": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "CANCELLED",
+        "IN_PROGRESS",
+        "PASSED",
+        "FAILED",
+        "BLOCKED",
+        "SKIPPED",
+        "NOT_RUN"
+      ],
+      "additionalProperties": false
+    },
+    "T363": {
+      "type": "object",
+      "properties": {
+        "CANCELLED": {
+          "type": "number"
+        },
+        "IN_PROGRESS": {
+          "type": "number"
+        },
+        "PASSED": {
+          "type": "number"
+        },
+        "FAILED": {
+          "type": "number"
+        },
+        "BLOCKED": {
+          "type": "number"
+        },
+        "SKIPPED": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "CANCELLED",
+        "IN_PROGRESS",
+        "PASSED",
+        "FAILED",
+        "BLOCKED",
+        "SKIPPED"
+      ],
+      "additionalProperties": false
+    },
+    "T364": {
+      "type": "object",
+      "properties": {
+        "planCaseId": {
+          "type": "string"
+        },
+        "caseId": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "revisionId": {
+          "type": "string"
+        },
+        "revisionNo": {
+          "type": "integer"
+        },
+        "latestStatus": {
+          "type": "string",
+          "enum": [
+            "CANCELLED",
+            "IN_PROGRESS",
+            "PASSED",
+            "FAILED",
+            "BLOCKED",
+            "SKIPPED",
+            "NOT_RUN"
+          ]
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T365"
+          }
+        }
+      },
+      "required": [
+        "planCaseId",
+        "caseId",
+        "key",
+        "title",
+        "revisionId",
+        "revisionNo",
+        "latestStatus",
+        "runs"
+      ],
+      "additionalProperties": false
+    },
+    "T365": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "planId": {
+          "type": "string"
+        },
+        "planCaseId": {
+          "type": "string"
+        },
+        "caseId": {
+          "type": "string"
+        },
+        "caseKey": {
+          "type": "string"
+        },
+        "planTitle": {
+          "type": "string"
+        },
+        "build": {
+          "type": "string"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "attempt": {
+          "type": "number"
+        },
+        "retestOf": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "CANCELLED",
+            "IN_PROGRESS",
+            "PASSED",
+            "FAILED",
+            "BLOCKED",
+            "SKIPPED"
+          ]
+        },
+        "version": {
+          "type": "integer"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "MANUAL",
+            "AGENT",
+            "AUTOMATION"
+          ]
+        },
+        "sourceReference": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "sourceVerification": {
+          "type": "string",
+          "const": "SELF_REPORTED"
+        },
+        "executorId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "executorName": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "finishedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
+        },
+        "cancelReason": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T366"
+          }
+        },
+        "revision": {
+          "$ref": "#/$defs/T367"
+        },
+        "defects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T370"
+          }
+        },
+        "canExecute": {
+          "type": "boolean"
+        },
+        "canRetest": {
+          "type": "boolean"
+        },
+        "canCreateDefect": {
+          "type": "boolean"
+        },
+        "canLinkDefect": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "projectId",
+        "planId",
+        "planCaseId",
+        "caseId",
+        "caseKey",
+        "planTitle",
+        "build",
+        "environment",
+        "attempt",
+        "retestOf",
+        "status",
+        "version",
+        "source",
+        "sourceReference",
+        "sourceVerification",
+        "executorId",
+        "executorName",
+        "startedAt",
+        "finishedAt",
+        "cancelReason",
+        "results",
+        "revision",
+        "defects",
+        "canExecute",
+        "canRetest",
+        "canCreateDefect",
+        "canLinkDefect"
+      ],
+      "additionalProperties": false
+    },
+    "T366": {
+      "type": "object",
+      "properties": {
+        "stepIndex": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "PASSED",
+            "FAILED",
+            "BLOCKED",
+            "SKIPPED"
+          ]
+        },
+        "actual": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "stepIndex",
+        "status",
+        "actual",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "T367": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "caseId": {
+          "type": "string"
+        },
+        "revisionNo": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "preconditions": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T368"
+          }
+        },
+        "requirements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T369"
+          }
+        },
+        "createdBy": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "authorName": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "caseId",
+        "revisionNo",
+        "title",
+        "preconditions",
+        "steps",
+        "requirements",
+        "createdBy",
+        "authorName",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "T368": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "expected": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "expected"
+      ],
+      "additionalProperties": false
+    },
+    "T369": {
+      "type": "object",
+      "properties": {
+        "workItemId": {
+          "type": "string"
+        },
+        "revisionId": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "revisionNo": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "workItemId",
+        "revisionId",
+        "key",
+        "title",
+        "revisionNo"
+      ],
+      "additionalProperties": false
+    },
+    "T370": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "statusKey": {
+          "type": "string"
+        },
+        "statusName": {
+          "type": "string"
+        },
+        "statusCategory": {
+          "type": "string"
+        },
+        "generated": {
+          "type": "boolean"
+        },
+        "inherited": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "key",
+        "title",
+        "statusKey",
+        "statusName",
+        "statusCategory",
+        "generated",
+        "inherited"
+      ],
+      "additionalProperties": false
+    },
+    "T371": {
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "defect": {
+          "$ref": "#/$defs/T372"
+        }
+      },
+      "required": [
+        "runId",
+        "defect"
+      ],
+      "additionalProperties": false
+    },
+    "T372": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "key",
+        "title",
+        "type",
+        "projectId"
+      ],
+      "additionalProperties": false
+    },
+    "T373": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T374"
+          }
+        },
+        "canManage": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "items",
+        "canManage"
+      ],
+      "additionalProperties": false
+    },
+    "T374": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "archivedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
+        },
+        "activeCaseCount": {
+          "type": "integer"
+        },
+        "canManage": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "projectId",
+        "name",
+        "description",
+        "version",
+        "archivedAt",
+        "activeCaseCount",
+        "canManage"
+      ],
+      "additionalProperties": false
+    },
+    "T375": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T376"
+          }
+        },
+        "nextCursor": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "canManage": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "items",
+        "nextCursor",
+        "canManage"
+      ],
+      "additionalProperties": false
+    },
+    "T376": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer"
+        },
+        "key": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "DRAFT",
+            "READY",
+            "ARCHIVED"
+          ]
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "LOWEST",
+            "LOW",
+            "MEDIUM",
+            "HIGH",
+            "URGENT"
+          ]
+        },
+        "version": {
+          "type": "integer"
+        },
+        "currentRevisionId": {
+          "type": "string"
+        },
+        "revisionNo": {
+          "type": "integer"
+        },
+        "suiteId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "suiteName": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "ownerId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "ownerName": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "canManage": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "projectId",
+        "number",
+        "key",
+        "title",
+        "status",
+        "priority",
+        "version",
+        "currentRevisionId",
+        "revisionNo",
+        "suiteId",
+        "suiteName",
+        "ownerId",
+        "ownerName",
+        "updatedAt",
+        "canManage"
+      ],
+      "additionalProperties": false
+    },
+    "T377": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "$ref": "#/$defs/T367"
+        },
+        "id": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer"
+        },
+        "key": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "DRAFT",
+            "READY",
+            "ARCHIVED"
+          ]
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "LOWEST",
+            "LOW",
+            "MEDIUM",
+            "HIGH",
+            "URGENT"
+          ]
+        },
+        "version": {
+          "type": "integer"
+        },
+        "currentRevisionId": {
+          "type": "string"
+        },
+        "revisionNo": {
+          "type": "integer"
+        },
+        "suiteId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "suiteName": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "ownerId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "ownerName": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "canManage": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "revision",
+        "id",
+        "projectId",
+        "number",
+        "key",
+        "title",
+        "status",
+        "priority",
+        "version",
+        "currentRevisionId",
+        "revisionNo",
+        "suiteId",
+        "suiteName",
+        "ownerId",
+        "ownerName",
+        "updatedAt",
+        "canManage"
+      ],
+      "additionalProperties": false
+    },
+    "T378": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/T379"
+          }
+        },
+        "nextCursor": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "nextCursor"
+      ],
+      "additionalProperties": false
+    },
+    "T379": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "revisionNo": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "revisionNo",
+        "title",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "T380": {
       "type": "object",
       "properties": {
         "ok": {
@@ -16719,7 +19869,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T330": {
+    "T381": {
       "type": "object",
       "properties": {
         "roomId": {
@@ -16754,7 +19904,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "boolean"
         },
         "rag": {
-          "$ref": "#/$defs/T331"
+          "$ref": "#/$defs/T382"
         },
         "actions": {
           "type": "array",
@@ -16788,7 +19938,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T331": {
+    "T382": {
       "type": "object",
       "properties": {
         "source": {
@@ -16811,11 +19961,11 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T332": {
+    "T383": {
       "type": "object",
       "properties": {
         "member": {
-          "$ref": "#/$defs/T333"
+          "$ref": "#/$defs/T384"
         },
         "tokenTier": {
           "type": "string",
@@ -16885,7 +20035,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T333": {
+    "T384": {
       "type": "object",
       "properties": {
         "id": {
@@ -16905,7 +20055,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T334": {
+    "T385": {
       "type": "object",
       "properties": {
         "id": {
@@ -16925,13 +20075,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T335": {
+    "T386": {
       "type": "object",
       "properties": {
         "items": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T336"
+            "$ref": "#/$defs/T387"
           }
         },
         "total": {
@@ -16944,7 +20094,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T336": {
+    "T387": {
       "type": "object",
       "properties": {
         "id": {
@@ -16962,7 +20112,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               "type": "null"
             },
             {
-              "$ref": "#/$defs/T337"
+              "$ref": "#/$defs/T388"
             }
           ]
         },
@@ -16979,7 +20129,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T337": {
+    "T388": {
       "type": "object",
       "properties": {
         "key": {
@@ -16999,7 +20149,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T338": {
+    "T389": {
       "type": "object",
       "properties": {
         "id": {
@@ -17037,7 +20187,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               "type": "null"
             },
             {
-              "$ref": "#/$defs/T339"
+              "$ref": "#/$defs/T390"
             }
           ]
         },
@@ -17057,7 +20207,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               "type": "null"
             },
             {
-              "$ref": "#/$defs/T340"
+              "$ref": "#/$defs/T391"
             }
           ]
         },
@@ -17083,13 +20233,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "statusDefs": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T341"
+            "$ref": "#/$defs/T392"
           }
         },
         "workflows": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T342"
+            "$ref": "#/$defs/T393"
           }
         }
       },
@@ -17110,7 +20260,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T339": {
+    "T390": {
       "type": "object",
       "properties": {
         "key": {
@@ -17134,7 +20284,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T340": {
+    "T391": {
       "type": "object",
       "properties": {
         "id": {
@@ -17150,7 +20300,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T341": {
+    "T392": {
       "type": "object",
       "properties": {
         "key": {
@@ -17174,7 +20324,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T342": {
+    "T393": {
       "type": "object",
       "properties": {
         "id": {
@@ -17192,7 +20342,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "states": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T343"
+            "$ref": "#/$defs/T394"
           }
         }
       },
@@ -17205,7 +20355,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T343": {
+    "T394": {
       "type": "object",
       "properties": {
         "key": {
@@ -17229,13 +20379,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T344": {
+    "T395": {
       "type": "object",
       "properties": {
         "members": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T345"
+            "$ref": "#/$defs/T396"
           }
         }
       },
@@ -17244,7 +20394,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T345": {
+    "T396": {
       "type": "object",
       "properties": {
         "id": {
@@ -17286,13 +20436,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T346": {
+    "T397": {
       "type": "object",
       "properties": {
         "items": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T347"
+            "$ref": "#/$defs/T398"
           }
         },
         "total": {
@@ -17313,7 +20463,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T347": {
+    "T398": {
       "type": "object",
       "properties": {
         "id": {
@@ -17501,16 +20651,16 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T348": {
+    "T399": {
       "type": "object",
       "properties": {
         "workItem": {
-          "$ref": "#/$defs/T349"
+          "$ref": "#/$defs/T400"
         },
         "allowedTransitions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T350"
+            "$ref": "#/$defs/T401"
           }
         }
       },
@@ -17520,7 +20670,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T349": {
+    "T400": {
       "type": "object",
       "properties": {
         "statusKey": {
@@ -17628,6 +20778,16 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           ]
         },
         "moduleId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "productId": {
           "anyOf": [
             {
               "type": "null"
@@ -17764,6 +20924,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "iterationId",
         "releaseId",
         "moduleId",
+        "productId",
         "assigneeId",
         "reporterId",
         "priority",
@@ -17780,7 +20941,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T350": {
+    "T401": {
       "type": "object",
       "properties": {
         "toStateKey": {
@@ -17818,7 +20979,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T351": {
+    "T402": {
       "type": "object",
       "properties": {
         "comments": {
@@ -17833,13 +20994,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T352": {
+    "T403": {
       "type": "object",
       "properties": {
         "milestones": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T353"
+            "$ref": "#/$defs/T404"
           }
         }
       },
@@ -17848,7 +21009,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T353": {
+    "T404": {
       "type": "object",
       "properties": {
         "projectId": {
@@ -17956,16 +21117,16 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T354": {
+    "T405": {
       "type": "object",
       "properties": {
         "milestone": {
-          "$ref": "#/$defs/T278"
+          "$ref": "#/$defs/T282"
         },
         "workItems": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T347"
+            "$ref": "#/$defs/T398"
           }
         }
       },
@@ -17975,13 +21136,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T355": {
+    "T406": {
       "type": "object",
       "properties": {
         "iterations": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T356"
+            "$ref": "#/$defs/T407"
           }
         }
       },
@@ -17990,7 +21151,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T356": {
+    "T407": {
       "type": "object",
       "properties": {
         "projectId": {
@@ -18041,7 +21202,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               "type": "null"
             },
             {
-              "$ref": "#/$defs/T261"
+              "$ref": "#/$defs/T265"
             }
           ]
         },
@@ -18067,13 +21228,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T357": {
+    "T408": {
       "type": "object",
       "properties": {
         "releases": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T358"
+            "$ref": "#/$defs/T409"
           }
         }
       },
@@ -18082,7 +21243,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T358": {
+    "T409": {
       "type": "object",
       "properties": {
         "projectId": {
@@ -18125,7 +21286,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               "type": "null"
             },
             {
-              "$ref": "#/$defs/T261"
+              "$ref": "#/$defs/T265"
             }
           ]
         },
@@ -18179,13 +21340,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T359": {
+    "T410": {
       "type": "object",
       "properties": {
         "items": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T360"
+            "$ref": "#/$defs/T411"
           }
         },
         "unreadCount": {
@@ -18198,7 +21359,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T360": {
+    "T411": {
       "type": "object",
       "properties": {
         "id": {
@@ -18284,13 +21445,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T361": {
+    "T412": {
       "type": "object",
       "properties": {
         "items": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T362"
+            "$ref": "#/$defs/T413"
           }
         },
         "total": {
@@ -18311,7 +21472,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T362": {
+    "T413": {
       "type": "object",
       "properties": {
         "id": {
@@ -18373,7 +21534,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T363": {
+    "T414": {
       "type": "object",
       "properties": {
         "projectId": {
@@ -18382,7 +21543,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "workflows": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T364"
+            "$ref": "#/$defs/T415"
           }
         }
       },
@@ -18392,7 +21553,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T364": {
+    "T415": {
       "type": "object",
       "properties": {
         "id": {
@@ -18410,13 +21571,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "states": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T365"
+            "$ref": "#/$defs/T416"
           }
         },
         "transitions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T366"
+            "$ref": "#/$defs/T417"
           }
         }
       },
@@ -18430,7 +21591,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T365": {
+    "T416": {
       "type": "object",
       "properties": {
         "key": {
@@ -18458,7 +21619,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T366": {
+    "T417": {
       "type": "object",
       "properties": {
         "from": {
@@ -18502,13 +21663,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T367": {
+    "T418": {
       "type": "object",
       "properties": {
         "pages": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T368"
+            "$ref": "#/$defs/T419"
           }
         }
       },
@@ -18517,18 +21678,9 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T368": {
+    "T419": {
       "type": "object",
       "properties": {
-        "id": {
-          "type": "string"
-        },
-        "title": {
-          "type": "string"
-        },
-        "slug": {
-          "type": "string"
-        },
         "parentId": {
           "anyOf": [
             {
@@ -18538,6 +21690,15 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               "type": "string"
             }
           ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
         },
         "visibility": {
           "type": "string"
@@ -18558,21 +21719,45 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "updatedAt": {
           "type": "string",
           "format": "date-time"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "structureVersion": {
+          "type": "integer"
+        },
+        "archivedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
+        },
+        "isArchived": {
+          "type": "boolean"
         }
       },
       "required": [
+        "parentId",
         "id",
         "title",
         "slug",
-        "parentId",
         "visibility",
         "sortOrder",
         "currentRevisionId",
-        "updatedAt"
+        "updatedAt",
+        "kind",
+        "structureVersion",
+        "archivedAt",
+        "isArchived"
       ],
       "additionalProperties": false
     },
-    "T369": {
+    "T420": {
       "type": "object",
       "properties": {
         "content": {
@@ -18590,6 +21775,9 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               "type": "string"
             }
           ]
+        },
+        "isArchived": {
+          "type": "boolean"
         },
         "id": {
           "type": "string"
@@ -18610,6 +21798,33 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
             },
             {
               "type": "string"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "structureVersion": {
+          "type": "integer"
+        },
+        "createdBy": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "archivedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
             }
           ]
         },
@@ -18663,11 +21878,16 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "content",
         "revisionNo",
         "changeSummary",
+        "isArchived",
         "id",
         "projectId",
         "title",
         "slug",
         "parentId",
+        "kind",
+        "structureVersion",
+        "createdBy",
+        "archivedAt",
         "visibility",
         "sortOrder",
         "searchVector",
@@ -18678,7 +21898,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T370": {
+    "T421": {
       "type": "object",
       "properties": {
         "mode": {
@@ -18687,7 +21907,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "hits": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T371"
+            "$ref": "#/$defs/T422"
           }
         },
         "note": {
@@ -18700,7 +21920,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T371": {
+    "T422": {
       "type": "object",
       "properties": {
         "chunkId": {
@@ -18710,6 +21930,9 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
           "type": "string"
         },
         "title": {
+          "type": "string"
+        },
+        "directoryPath": {
           "type": "string"
         },
         "headingPath": {
@@ -18747,7 +21970,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T372": {
+    "T423": {
       "type": "object",
       "properties": {
         "ok": {
@@ -18766,7 +21989,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "citations": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T373"
+            "$ref": "#/$defs/T424"
           }
         },
         "mode": {
@@ -18789,7 +22012,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T373": {
+    "T424": {
       "type": "object",
       "properties": {
         "pageId": {
@@ -18820,17 +22043,17 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T374": {
+    "T425": {
       "type": "object",
       "properties": {
         "fields": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T375"
+            "$ref": "#/$defs/T426"
           }
         },
         "schemas": {
-          "$ref": "#/$defs/T376"
+          "$ref": "#/$defs/T427"
         },
         "note": {
           "type": "string"
@@ -18843,7 +22066,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T375": {
+    "T426": {
       "type": "object",
       "properties": {
         "note": {
@@ -18894,7 +22117,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T376": {
+    "T427": {
       "type": "object",
       "properties": {
         "create": {
@@ -18916,7 +22139,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T377": {
+    "T428": {
       "type": "object",
       "properties": {
         "sla": {
@@ -18925,7 +22148,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               "type": "null"
             },
             {
-              "$ref": "#/$defs/T378"
+              "$ref": "#/$defs/T429"
             }
           ]
         }
@@ -18935,7 +22158,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T378": {
+    "T429": {
       "type": "object",
       "properties": {
         "policy": {
@@ -18944,7 +22167,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               "type": "null"
             },
             {
-              "$ref": "#/$defs/T120"
+              "$ref": "#/$defs/T124"
             }
           ]
         },
@@ -19054,13 +22277,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T379": {
+    "T430": {
       "type": "object",
       "properties": {
         "approvals": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T380"
+            "$ref": "#/$defs/T431"
           }
         }
       },
@@ -19069,7 +22292,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T380": {
+    "T431": {
       "type": "object",
       "properties": {
         "fromStateName": {
@@ -19187,13 +22410,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T381": {
+    "T432": {
       "type": "object",
       "properties": {
         "rules": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T382"
+            "$ref": "#/$defs/T433"
           }
         }
       },
@@ -19202,7 +22425,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T382": {
+    "T433": {
       "type": "object",
       "properties": {
         "id": {
@@ -19297,13 +22520,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T383": {
+    "T434": {
       "type": "object",
       "properties": {
         "runs": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T384"
+            "$ref": "#/$defs/T435"
           }
         }
       },
@@ -19312,11 +22535,11 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T384": {
+    "T435": {
       "type": "object",
       "properties": {
         "run": {
-          "$ref": "#/$defs/T385"
+          "$ref": "#/$defs/T436"
         },
         "ruleName": {
           "type": "string"
@@ -19328,7 +22551,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T385": {
+    "T436": {
       "type": "object",
       "properties": {
         "id": {
@@ -19383,13 +22606,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T386": {
+    "T437": {
       "type": "object",
       "properties": {
         "portfolios": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T222"
+            "$ref": "#/$defs/T226"
           }
         }
       },
@@ -19398,7 +22621,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T387": {
+    "T438": {
       "type": "object",
       "properties": {
         "ok": {
@@ -19410,13 +22633,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T388": {
+    "T439": {
       "type": "object",
       "properties": {
         "forms": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T145"
+            "$ref": "#/$defs/T149"
           }
         }
       },
@@ -19425,11 +22648,11 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T389": {
+    "T440": {
       "type": "object",
       "properties": {
         "form": {
-          "$ref": "#/$defs/T148"
+          "$ref": "#/$defs/T152"
         },
         "submitToken": {
           "type": "string"
@@ -19441,7 +22664,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T390": {
+    "T441": {
       "type": "object",
       "properties": {
         "submitToken": {
@@ -19453,7 +22676,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T391": {
+    "T442": {
       "type": "object",
       "properties": {
         "ok": {
@@ -19465,7 +22688,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T392": {
+    "T443": {
       "type": "object",
       "properties": {
         "ok": {
@@ -19477,13 +22700,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T393": {
+    "T444": {
       "type": "object",
       "properties": {
         "todos": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T170"
+            "$ref": "#/$defs/T174"
           }
         }
       },
@@ -19492,7 +22715,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T394": {
+    "T445": {
       "type": "object",
       "properties": {
         "ok": {
@@ -19504,13 +22727,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T395": {
+    "T446": {
       "type": "object",
       "properties": {
         "blocks": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T173"
+            "$ref": "#/$defs/T177"
           }
         }
       },
@@ -19519,7 +22742,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T396": {
+    "T447": {
       "type": "object",
       "properties": {
         "ok": {
@@ -19531,13 +22754,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T397": {
+    "T448": {
       "type": "object",
       "properties": {
         "sessions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T174"
+            "$ref": "#/$defs/T178"
           }
         }
       },
@@ -19546,13 +22769,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T398": {
+    "T449": {
       "type": "object",
       "properties": {
         "views": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T275"
+            "$ref": "#/$defs/T279"
           }
         }
       },
@@ -19561,7 +22784,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T399": {
+    "T450": {
       "type": "object",
       "properties": {
         "projectId": {
@@ -19626,7 +22849,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T400": {
+    "T451": {
       "type": "object",
       "properties": {
         "id": {
@@ -19691,7 +22914,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T401": {
+    "T452": {
       "type": "object",
       "properties": {
         "ok": {
@@ -19703,7 +22926,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T402": {
+    "T453": {
       "type": "object",
       "properties": {
         "ok": {
@@ -19715,13 +22938,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T403": {
+    "T454": {
       "type": "object",
       "properties": {
         "dashboards": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T201"
+            "$ref": "#/$defs/T205"
           }
         }
       },
@@ -19730,7 +22953,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T404": {
+    "T455": {
       "type": "object",
       "properties": {
         "ok": {
@@ -19742,13 +22965,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T405": {
+    "T456": {
       "type": "object",
       "properties": {
         "widgets": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/T203"
+            "$ref": "#/$defs/T207"
           }
         }
       },
@@ -19757,7 +22980,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T406": {
+    "T457": {
       "type": "object",
       "properties": {
         "ok": {
@@ -19769,7 +22992,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T407": {
+    "T458": {
       "type": "object",
       "properties": {
         "data": {
@@ -19778,25 +23001,25 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               "type": "null"
             },
             {
-              "$ref": "#/$defs/T189"
+              "$ref": "#/$defs/T193"
             },
             {
-              "$ref": "#/$defs/T192"
+              "$ref": "#/$defs/T196"
             },
             {
-              "$ref": "#/$defs/T209"
+              "$ref": "#/$defs/T213"
             },
             {
-              "$ref": "#/$defs/T210"
+              "$ref": "#/$defs/T214"
             },
             {
-              "$ref": "#/$defs/T212"
+              "$ref": "#/$defs/T216"
             },
             {
-              "$ref": "#/$defs/T215"
+              "$ref": "#/$defs/T219"
             },
             {
-              "$ref": "#/$defs/T218"
+              "$ref": "#/$defs/T222"
             }
           ]
         }
@@ -19806,7 +23029,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T408": {
+    "T459": {
       "type": "object",
       "properties": {
         "replayed": {
@@ -19822,7 +23045,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T409": {
+    "T460": {
       "type": "object",
       "properties": {
         "sequence": {
@@ -19842,14 +23065,14 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T410": {
+    "T461": {
       "type": "object",
       "properties": {
         "replayed": {
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T411"
+          "$ref": "#/$defs/T462"
         }
       },
       "required": [
@@ -19858,11 +23081,11 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T411": {
+    "T462": {
       "type": "object",
       "properties": {
         "page": {
-          "$ref": "#/$defs/T412"
+          "$ref": "#/$defs/T463"
         },
         "sequence": {
           "type": "number"
@@ -19873,13 +23096,13 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "indexing": {
           "anyOf": [
             {
-              "$ref": "#/$defs/T413"
+              "$ref": "#/$defs/T464"
             },
             {
-              "$ref": "#/$defs/T414"
+              "$ref": "#/$defs/T465"
             },
             {
-              "$ref": "#/$defs/T415"
+              "$ref": "#/$defs/T466"
             }
           ]
         }
@@ -19892,7 +23115,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T412": {
+    "T463": {
       "type": "object",
       "properties": {
         "content": {
@@ -19920,6 +23143,33 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
             },
             {
               "type": "string"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "structureVersion": {
+          "type": "integer"
+        },
+        "createdBy": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "archivedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
             }
           ]
         },
@@ -19977,6 +23227,10 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "title",
         "slug",
         "parentId",
+        "kind",
+        "structureVersion",
+        "createdBy",
+        "archivedAt",
         "visibility",
         "sortOrder",
         "searchVector",
@@ -19987,7 +23241,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T413": {
+    "T464": {
       "type": "object",
       "properties": {
         "status": {
@@ -20012,7 +23266,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T414": {
+    "T465": {
       "type": "object",
       "properties": {
         "status": {
@@ -20029,7 +23283,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T415": {
+    "T466": {
       "type": "object",
       "properties": {
         "status": {
@@ -20042,7 +23296,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T416": {
+    "T467": {
       "type": "object",
       "properties": {
         "replayed": {
@@ -20065,7 +23319,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T417": {
+    "T468": {
       "type": "object",
       "properties": {
         "replayed": {
@@ -20088,7 +23342,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T418": {
+    "T469": {
       "type": "object",
       "properties": {
         "replayed": {
@@ -20103,7 +23357,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T419": {
+    "T470": {
       "type": "object",
       "properties": {
         "type": {
@@ -20136,7 +23390,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T420": {
+    "T471": {
       "type": "object",
       "properties": {
         "id": {
@@ -20209,7 +23463,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T421": {
+    "T472": {
       "type": "object",
       "properties": {
         "ok": {
@@ -20221,14 +23475,14 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T422": {
+    "T473": {
       "type": "object",
       "properties": {
         "replayed": {
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T154"
+          "$ref": "#/$defs/T158"
         }
       },
       "required": [
@@ -20236,7 +23490,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T423": {
+    "T474": {
       "type": "object",
       "properties": {
         "ideaId": {
@@ -20256,7 +23510,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T424": {
+    "T475": {
       "type": "object",
       "properties": {
         "workItem": {
@@ -20279,14 +23533,14 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T425": {
+    "T476": {
       "type": "object",
       "properties": {
         "replayed": {
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T426"
+          "$ref": "#/$defs/T477"
         }
       },
       "required": [
@@ -20295,14 +23549,24 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T426": {
+    "T477": {
       "type": "object",
       "properties": {
         "currentRevisionId": {
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
         },
         "revisionNo": {
           "type": "integer"
+        },
+        "kind": {
+          "type": "string"
         },
         "projectId": {
           "type": "string"
@@ -20334,6 +23598,27 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "sortOrder": {
           "type": "integer"
         },
+        "archivedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time"
+            }
+          ]
+        },
+        "createdBy": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
         "deletedAt": {
           "anyOf": [
             {
@@ -20347,6 +23632,9 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         },
         "slug": {
           "type": "string"
+        },
+        "structureVersion": {
+          "type": "integer"
         },
         "visibility": {
           "type": "string"
@@ -20365,6 +23653,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       "required": [
         "currentRevisionId",
         "revisionNo",
+        "kind",
         "projectId",
         "id",
         "title",
@@ -20372,14 +23661,17 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "updatedAt",
         "parentId",
         "sortOrder",
+        "archivedAt",
+        "createdBy",
         "deletedAt",
         "slug",
+        "structureVersion",
         "visibility",
         "searchVector"
       ],
       "additionalProperties": false
     },
-    "T427": {
+    "T478": {
       "type": "object",
       "properties": {
         "replayed": {
@@ -20388,16 +23680,16 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "result": {
           "anyOf": [
             {
-              "$ref": "#/$defs/T428"
+              "$ref": "#/$defs/T479"
             },
             {
-              "$ref": "#/$defs/T278"
+              "$ref": "#/$defs/T282"
             },
             {
-              "$ref": "#/$defs/T429"
+              "$ref": "#/$defs/T480"
             },
             {
-              "$ref": "#/$defs/T430"
+              "$ref": "#/$defs/T481"
             }
           ]
         }
@@ -20407,7 +23699,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T428": {
+    "T479": {
       "type": "object",
       "properties": {
         "projectId": {
@@ -20458,7 +23750,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               "type": "null"
             },
             {
-              "$ref": "#/$defs/T261"
+              "$ref": "#/$defs/T265"
             }
           ]
         },
@@ -20480,7 +23772,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T429": {
+    "T480": {
       "type": "object",
       "properties": {
         "projectId": {
@@ -20538,7 +23830,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T430": {
+    "T481": {
       "type": "object",
       "properties": {
         "projectId": {
@@ -20581,7 +23873,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
               "type": "null"
             },
             {
-              "$ref": "#/$defs/T261"
+              "$ref": "#/$defs/T265"
             }
           ]
         },
@@ -20631,7 +23923,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T431": {
+    "T482": {
       "type": "object",
       "properties": {
         "ok": {
@@ -20651,7 +23943,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T432": {
+    "T483": {
       "type": "object",
       "properties": {
         "ok": {
@@ -20667,14 +23959,14 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T433": {
+    "T484": {
       "type": "object",
       "properties": {
         "replayed": {
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T434"
+          "$ref": "#/$defs/T485"
         }
       },
       "required": [
@@ -20683,7 +23975,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T434": {
+    "T485": {
       "type": "object",
       "properties": {
         "deliveredCount": {
@@ -20744,7 +24036,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T435": {
+    "T486": {
       "type": "object",
       "properties": {
         "alreadyRevoked": {
@@ -20801,14 +24093,14 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T436": {
+    "T487": {
       "type": "object",
       "properties": {
         "replayed": {
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T437"
+          "$ref": "#/$defs/T488"
         }
       },
       "required": [
@@ -20817,7 +24109,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T437": {
+    "T488": {
       "type": "object",
       "properties": {
         "id": {
@@ -20925,7 +24217,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T438": {
+    "T489": {
       "type": "object",
       "properties": {
         "replayed": {
@@ -20934,10 +24226,10 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
         "result": {
           "anyOf": [
             {
-              "$ref": "#/$defs/T439"
+              "$ref": "#/$defs/T490"
             },
             {
-              "$ref": "#/$defs/T440"
+              "$ref": "#/$defs/T491"
             }
           ]
         }
@@ -20948,7 +24240,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T439": {
+    "T490": {
       "type": "object",
       "properties": {
         "workItemId": {
@@ -21044,7 +24336,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T440": {
+    "T491": {
       "type": "object",
       "properties": {
         "workItem": {
@@ -21144,14 +24436,14 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T441": {
+    "T492": {
       "type": "object",
       "properties": {
         "replayed": {
           "type": "boolean"
         },
         "result": {
-          "$ref": "#/$defs/T442"
+          "$ref": "#/$defs/T493"
         }
       },
       "required": [
@@ -21160,7 +24452,7 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
       ],
       "additionalProperties": false
     },
-    "T442": {
+    "T493": {
       "type": "object",
       "properties": {
         "projectId": {
@@ -21291,13 +24583,19 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
     "workflow.updateTransition": "src/server/application/capabilities/legacy/operations-tools.ts:43",
     "workflow.removeTransition": "src/server/application/capabilities/legacy/operations-tools.ts:44",
     "page.revisions": "src/server/application/capabilities/legacy/content-tools.ts:227",
-    "page.getRevision": "src/server/application/capabilities/content-tools.ts:48",
-    "page.getPermissions": "src/server/application/capabilities/content-tools.ts:58",
+    "page.getRevision": "src/server/application/capabilities/content-tools.ts:55",
+    "page.getPermissions": "src/server/application/capabilities/content-tools.ts:65",
     "import.list": "src/server/application/capabilities/legacy/operations-tools.ts:52",
     "import.get": "src/server/application/capabilities/legacy/operations-tools.ts:62",
     "import.suggestions": "src/server/application/capabilities/legacy/operations-tools.ts:74",
-    "export.workItems": "src/server/application/capabilities/content-tools.ts:91",
-    "export.projectReport": "src/server/application/capabilities/content-tools.ts:96",
+    "export.workItems": "src/server/application/capabilities/content-tools.ts:98",
+    "export.projectReport": "src/server/application/capabilities/content-tools.ts:103",
+    "delivery.sources": "src/server/application/capabilities/delivery-tools.ts:89",
+    "delivery.configureSource": "src/server/application/capabilities/delivery-tools.ts:99",
+    "delivery.listEvidence": "src/server/application/capabilities/delivery-tools.ts:113",
+    "delivery.getEvidence": "src/server/application/capabilities/delivery-tools.ts:121",
+    "delivery.createEvidence": "src/server/application/capabilities/delivery-tools.ts:133",
+    "delivery.linkEvidence": "src/server/application/capabilities/delivery-tools.ts:149",
     "meta.capabilities": "src/server/application/capabilities/intelligence-tools.ts:29",
     "meta.tool": "src/server/application/capabilities/intelligence-tools.ts:45",
     "project.context": "src/server/application/capabilities/intelligence-tools.ts:50",
@@ -21478,41 +24776,82 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
     "role.listAssignments": "src/server/application/capabilities/organization-tools.ts:117",
     "role.createAssignment": "src/server/application/capabilities/organization-tools.ts:119",
     "role.deleteAssignment": "src/server/application/capabilities/organization-tools.ts:123",
-    "rag.conversation.action": "src/server/application/capabilities/rag-conversation-tools.ts:18",
-    "rag.conversation.list": "src/server/application/capabilities/rag-conversation-tools.ts:19",
-    "rag.conversation.get": "src/server/application/capabilities/rag-conversation-tools.ts:20",
-    "rag.conversation.create": "src/server/application/capabilities/rag-conversation-tools.ts:21",
-    "rag.conversation.update": "src/server/application/capabilities/rag-conversation-tools.ts:22",
-    "rag.conversation.send": "src/server/application/capabilities/rag-conversation-tools.ts:23",
-    "rag.conversation.cancel": "src/server/application/capabilities/rag-conversation-tools.ts:24",
+    "product.list": "src/server/application/capabilities/product-tools.ts:19",
+    "product.get": "src/server/application/capabilities/product-tools.ts:21",
+    "product.create": "src/server/application/capabilities/product-tools.ts:23",
+    "product.update": "src/server/application/capabilities/product-tools.ts:33",
+    "product.linkProject": "src/server/application/capabilities/product-tools.ts:35",
+    "product.unlinkProject": "src/server/application/capabilities/product-tools.ts:37",
+    "rag.conversation.propose": "src/server/application/capabilities/rag-conversation-tools.ts:22",
+    "rag.conversation.revise": "src/server/application/capabilities/rag-conversation-tools.ts:23",
+    "rag.conversation.execution": "src/server/application/capabilities/rag-conversation-tools.ts:24",
+    "rag.conversation.action": "src/server/application/capabilities/rag-conversation-tools.ts:25",
+    "rag.conversation.list": "src/server/application/capabilities/rag-conversation-tools.ts:26",
+    "rag.conversation.get": "src/server/application/capabilities/rag-conversation-tools.ts:27",
+    "rag.conversation.create": "src/server/application/capabilities/rag-conversation-tools.ts:28",
+    "rag.conversation.update": "src/server/application/capabilities/rag-conversation-tools.ts:29",
+    "rag.conversation.send": "src/server/application/capabilities/rag-conversation-tools.ts:30",
+    "rag.conversation.cancel": "src/server/application/capabilities/rag-conversation-tools.ts:31",
     "rag.projects": "src/server/application/capabilities/rag-tools.ts:15",
     "rag.search": "src/server/application/capabilities/rag-tools.ts:16",
     "rag.chat": "src/server/application/capabilities/rag-tools.ts:17",
-    "ping": "src/server/application/capabilities/tools.ts:103",
-    "collab.inspect": "src/server/application/capabilities/tools.ts:114",
-    "whoami": "src/server/application/capabilities/tools.ts:146",
-    "project.list": "src/server/application/capabilities/tools.ts:170",
-    "project.get": "src/server/application/capabilities/tools.ts:183",
-    "project.members": "src/server/application/capabilities/tools.ts:194",
-    "workitem.list": "src/server/application/capabilities/tools.ts:219",
-    "workitem.get": "src/server/application/capabilities/tools.ts:241",
-    "workitem.comments": "src/server/application/capabilities/tools.ts:256",
-    "plan.listMilestones": "src/server/application/capabilities/tools.ts:273",
+    "delivery.releaseGate": "src/server/application/capabilities/release-gate-tools.ts:78",
+    "delivery.createCandidate": "src/server/application/capabilities/release-gate-tools.ts:86",
+    "delivery.recordFeedback": "src/server/application/capabilities/release-gate-tools.ts:101",
+    "requirementChange.context": "src/server/application/capabilities/requirement-change-tools.ts:32",
+    "requirementChange.list": "src/server/application/capabilities/requirement-change-tools.ts:39",
+    "requirementChange.get": "src/server/application/capabilities/requirement-change-tools.ts:53",
+    "requirementChange.create": "src/server/application/capabilities/requirement-change-tools.ts:69",
+    "requirementChange.decide": "src/server/application/capabilities/requirement-change-tools.ts:95",
+    "requirementChange.apply": "src/server/application/capabilities/requirement-change-tools.ts:110",
+    "requirementChange.acknowledge": "src/server/application/capabilities/requirement-change-tools.ts:125",
+    "testPlan.list": "src/server/application/capabilities/test-execution-tools.ts:83",
+    "testPlan.get": "src/server/application/capabilities/test-execution-tools.ts:93",
+    "testPlan.report": "src/server/application/capabilities/test-execution-tools.ts:101",
+    "testRun.get": "src/server/application/capabilities/test-execution-tools.ts:113",
+    "testPlan.create": "src/server/application/capabilities/test-execution-tools.ts:121",
+    "testPlan.update": "src/server/application/capabilities/test-execution-tools.ts:131",
+    "testPlan.transition": "src/server/application/capabilities/test-execution-tools.ts:146",
+    "testRun.start": "src/server/application/capabilities/test-execution-tools.ts:161",
+    "testRun.record": "src/server/application/capabilities/test-execution-tools.ts:176",
+    "testRun.complete": "src/server/application/capabilities/test-execution-tools.ts:191",
+    "testRun.createDefect": "src/server/application/capabilities/test-execution-tools.ts:206",
+    "testRun.linkDefect": "src/server/application/capabilities/test-execution-tools.ts:221",
+    "testSuite.list": "src/server/application/capabilities/test-management-tools.ts:40",
+    "testSuite.get": "src/server/application/capabilities/test-management-tools.ts:52",
+    "testSuite.create": "src/server/application/capabilities/test-management-tools.ts:60",
+    "testSuite.update": "src/server/application/capabilities/test-management-tools.ts:86",
+    "testCase.list": "src/server/application/capabilities/test-management-tools.ts:101",
+    "testCase.get": "src/server/application/capabilities/test-management-tools.ts:111",
+    "testCase.revisions": "src/server/application/capabilities/test-management-tools.ts:119",
+    "testCase.getRevision": "src/server/application/capabilities/test-management-tools.ts:134",
+    "testCase.create": "src/server/application/capabilities/test-management-tools.ts:147",
+    "testCase.update": "src/server/application/capabilities/test-management-tools.ts:173",
+    "ping": "src/server/application/capabilities/tools.ts:109",
+    "collab.inspect": "src/server/application/capabilities/tools.ts:120",
+    "whoami": "src/server/application/capabilities/tools.ts:152",
+    "project.list": "src/server/application/capabilities/tools.ts:176",
+    "project.get": "src/server/application/capabilities/tools.ts:189",
+    "project.members": "src/server/application/capabilities/tools.ts:200",
+    "workitem.list": "src/server/application/capabilities/tools.ts:225",
+    "workitem.get": "src/server/application/capabilities/tools.ts:247",
+    "workitem.comments": "src/server/application/capabilities/tools.ts:262",
+    "plan.listMilestones": "src/server/application/capabilities/tools.ts:279",
     "plan.getMilestone": "src/server/application/capabilities/legacy/work-planning-tools.ts:dynamic-milestone",
-    "plan.listIterations": "src/server/application/capabilities/tools.ts:304",
-    "plan.listReleases": "src/server/application/capabilities/tools.ts:315",
-    "notification.list": "src/server/application/capabilities/tools.ts:326",
-    "activity.project": "src/server/application/capabilities/tools.ts:346",
-    "meta.workflow": "src/server/application/capabilities/tools.ts:363",
-    "page.list": "src/server/application/capabilities/tools.ts:374",
-    "page.get": "src/server/application/capabilities/tools.ts:385",
-    "knowledge.search": "src/server/application/capabilities/tools.ts:401",
-    "knowledge.ask": "src/server/application/capabilities/tools.ts:417",
-    "meta.fields": "src/server/application/capabilities/tools.ts:428",
-    "sla.get": "src/server/application/capabilities/tools.ts:435",
-    "approval.list": "src/server/application/capabilities/tools.ts:446",
-    "automation.listRules": "src/server/application/capabilities/tools.ts:457",
-    "automation.listRuns": "src/server/application/capabilities/tools.ts:467",
+    "plan.listIterations": "src/server/application/capabilities/tools.ts:310",
+    "plan.listReleases": "src/server/application/capabilities/tools.ts:321",
+    "notification.list": "src/server/application/capabilities/tools.ts:332",
+    "activity.project": "src/server/application/capabilities/tools.ts:352",
+    "meta.workflow": "src/server/application/capabilities/tools.ts:369",
+    "page.list": "src/server/application/capabilities/tools.ts:380",
+    "page.get": "src/server/application/capabilities/tools.ts:391",
+    "knowledge.search": "src/server/application/capabilities/tools.ts:407",
+    "knowledge.ask": "src/server/application/capabilities/tools.ts:423",
+    "meta.fields": "src/server/application/capabilities/tools.ts:434",
+    "sla.get": "src/server/application/capabilities/tools.ts:441",
+    "approval.list": "src/server/application/capabilities/tools.ts:452",
+    "automation.listRules": "src/server/application/capabilities/tools.ts:463",
+    "automation.listRuns": "src/server/application/capabilities/tools.ts:473",
     "intake.rotateToken": "src/server/application/capabilities/workspace-tools.ts:216",
     "focus.listBlocks": "src/server/application/capabilities/workspace-tools.ts:227",
     "focus.listSessions": "src/server/application/capabilities/workspace-tools.ts:238",
@@ -21526,35 +24865,35 @@ export const generatedToolOutputs: { results: Record<string, Record<string, unkn
     "dashboard.widgetData": "src/server/application/capabilities/workspace-tools.ts:286",
     "insight.burndown": "src/server/application/capabilities/workspace-tools.ts:290",
     "insight.activitySeries": "src/server/application/capabilities/workspace-tools.ts:292",
-    "collab.command": "src/server/application/capabilities/write-tools.ts:87",
-    "collab.update": "src/server/application/capabilities/write-tools.ts:122",
-    "collab.publishPage": "src/server/application/capabilities/write-tools.ts:144",
-    "workitem.create": "src/server/application/capabilities/write-tools.ts:172",
-    "workitem.update": "src/server/application/capabilities/write-tools.ts:196",
-    "workitem.transition": "src/server/application/capabilities/write-tools.ts:217",
-    "workitem.assign": "src/server/application/capabilities/write-tools.ts:236",
-    "workitem.comment": "src/server/application/capabilities/write-tools.ts:254",
-    "workitem.link": "src/server/application/capabilities/write-tools.ts:276",
-    "comment.update": "src/server/application/capabilities/write-tools.ts:288",
-    "comment.delete": "src/server/application/capabilities/write-tools.ts:295",
-    "idea.submit": "src/server/application/capabilities/write-tools.ts:310",
-    "idea.vote": "src/server/application/capabilities/write-tools.ts:327",
-    "idea.promote": "src/server/application/capabilities/write-tools.ts:343",
-    "page.create": "src/server/application/capabilities/write-tools.ts:363",
-    "page.update": "src/server/application/capabilities/write-tools.ts:380",
-    "plan.createMilestone": "src/server/application/capabilities/write-tools.ts:415",
-    "plan.createIteration": "src/server/application/capabilities/write-tools.ts:434",
-    "plan.createRelease": "src/server/application/capabilities/write-tools.ts:450",
-    "plan.createModule": "src/server/application/capabilities/write-tools.ts:466",
-    "notification.markRead": "src/server/application/capabilities/write-tools.ts:485",
-    "notification.setPrefs": "src/server/application/capabilities/write-tools.ts:514",
-    "announcement.send": "src/server/application/capabilities/write-tools.ts:554",
-    "announcement.revoke": "src/server/application/capabilities/write-tools.ts:566",
-    "sla.pause": "src/server/application/capabilities/write-tools.ts:573",
-    "sla.resume": "src/server/application/capabilities/write-tools.ts:584",
-    "approval.approve": "src/server/application/capabilities/write-tools.ts:595",
-    "approval.reject": "src/server/application/capabilities/write-tools.ts:606",
-    "automation.createRule": "src/server/application/capabilities/write-tools.ts:617",
+    "collab.command": "src/server/application/capabilities/write-tools.ts:88",
+    "collab.update": "src/server/application/capabilities/write-tools.ts:123",
+    "collab.publishPage": "src/server/application/capabilities/write-tools.ts:145",
+    "workitem.create": "src/server/application/capabilities/write-tools.ts:173",
+    "workitem.update": "src/server/application/capabilities/write-tools.ts:197",
+    "workitem.transition": "src/server/application/capabilities/write-tools.ts:218",
+    "workitem.assign": "src/server/application/capabilities/write-tools.ts:237",
+    "workitem.comment": "src/server/application/capabilities/write-tools.ts:255",
+    "workitem.link": "src/server/application/capabilities/write-tools.ts:277",
+    "comment.update": "src/server/application/capabilities/write-tools.ts:289",
+    "comment.delete": "src/server/application/capabilities/write-tools.ts:296",
+    "idea.submit": "src/server/application/capabilities/write-tools.ts:311",
+    "idea.vote": "src/server/application/capabilities/write-tools.ts:328",
+    "idea.promote": "src/server/application/capabilities/write-tools.ts:344",
+    "page.create": "src/server/application/capabilities/write-tools.ts:365",
+    "page.update": "src/server/application/capabilities/write-tools.ts:382",
+    "plan.createMilestone": "src/server/application/capabilities/write-tools.ts:417",
+    "plan.createIteration": "src/server/application/capabilities/write-tools.ts:436",
+    "plan.createRelease": "src/server/application/capabilities/write-tools.ts:452",
+    "plan.createModule": "src/server/application/capabilities/write-tools.ts:468",
+    "notification.markRead": "src/server/application/capabilities/write-tools.ts:487",
+    "notification.setPrefs": "src/server/application/capabilities/write-tools.ts:516",
+    "announcement.send": "src/server/application/capabilities/write-tools.ts:556",
+    "announcement.revoke": "src/server/application/capabilities/write-tools.ts:568",
+    "sla.pause": "src/server/application/capabilities/write-tools.ts:575",
+    "sla.resume": "src/server/application/capabilities/write-tools.ts:586",
+    "approval.approve": "src/server/application/capabilities/write-tools.ts:597",
+    "approval.reject": "src/server/application/capabilities/write-tools.ts:608",
+    "automation.createRule": "src/server/application/capabilities/write-tools.ts:619",
     "plan.updateMilestone": "src/server/application/capabilities/legacy/work-planning-tools.ts:dynamic-milestone",
     "plan.archiveMilestone": "src/server/application/capabilities/legacy/work-planning-tools.ts:dynamic-milestone",
     "plan.unarchiveMilestone": "src/server/application/capabilities/legacy/work-planning-tools.ts:dynamic-milestone",

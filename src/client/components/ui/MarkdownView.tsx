@@ -2,9 +2,10 @@
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MermaidDiagram } from "./MermaidDiagram.tsx";
+import { markdownLinkIssue, markdownLinkIssueLabel } from "../../../shared/markdown-links.ts";
 import "./markdown-rich.css";
 
-interface MarkdownNode { type: string; value?: string; url?: string; children?: MarkdownNode[] }
+interface MarkdownNode { type: string; value?: string; url?: string; depth?: number; children?: MarkdownNode[] }
 export interface MarkdownCitation { href: string; label: string }
 
 /** 只处理正文文本；代码、既有链接、图片中的编号保持原样。 */
@@ -31,14 +32,32 @@ function citationPlugin(citations: MarkdownCitation[]) {
   };
 }
 
-export function MarkdownView({ text, draftImages, citations = [], streaming = false }: { text: string; draftImages?: ReadonlyMap<string, string>; citations?: MarkdownCitation[]; streaming?: boolean }) {
+/** 页面已显示同名标题时只省略首个纯文本标题；不改源文、版本或含链接的标题。 */
+function documentTitlePlugin(title?: string) {
+  return () => (tree: MarkdownNode) => {
+    const first = tree.children?.[0];
+    if (!title || first?.type !== "heading" || first.depth !== 1) return;
+    function plainText(node: MarkdownNode): string | null {
+      if (["text", "inlineCode"].includes(node.type)) return node.value ?? "";
+      if (!["heading", "strong", "emphasis"].includes(node.type)) return null;
+      const parts = (node.children ?? []).map(plainText);
+      return parts.includes(null) ? null : parts.join("");
+    }
+    if (plainText(first)?.trim() === title.trim()) tree.children!.shift();
+  };
+}
+
+export function MarkdownView({ text, draftImages, citations = [], streaming = false, documentTitle }: { text: string; draftImages?: ReadonlyMap<string, string>; citations?: MarkdownCitation[]; streaming?: boolean; documentTitle?: string }) {
   return (
     <div className="markdown-body">
       <Markdown
-        remarkPlugins={[remarkGfm, citationPlugin(citations)]}
-        urlTransform={(url, key) => key === "src" && draftImages?.has(url) ? draftImages.get(url)! : defaultUrlTransform(url)}
+        remarkPlugins={[remarkGfm, documentTitlePlugin(documentTitle), citationPlugin(citations)]}
+        urlTransform={(url, key) => key === "src" && draftImages?.has(url) ? draftImages.get(url)!
+          : markdownLinkIssue(url) ? url : defaultUrlTransform(url)}
         components={{
           a: ({ node: _node, ...props }) => {
+            const issue = markdownLinkIssue(props.href ?? "");
+            if (issue) return <span className="markdown-unavailable-link" title={`${markdownLinkIssueLabel(issue)}：${props.href ?? ""}`}>{props.children}</span>;
             const citation = citations.find(item => item.href === props.href);
             return citation ? <a {...props} className="markdown-citation" title={citation.label} aria-label={`${props.children} ${citation.label}`} /> : <a {...props} target="_blank" rel="noreferrer noopener" />;
           },
@@ -51,7 +70,13 @@ export function MarkdownView({ text, draftImages, citations = [], streaming = fa
             return <pre>{children}</pre>;
           },
           table: ({ node: _node, ...props }) => <div className="markdown-table-scroll" role="region" aria-label="Table" tabIndex={0}><table {...props} /></div>,
-          img: ({ node: _node, ...props }) => <img {...props} loading="lazy" decoding="async" />,
+          img: ({ node: _node, ...props }) => {
+            const src = typeof props.src === "string" ? props.src : "";
+            const isDraft = draftImages && [...draftImages.values()].includes(src);
+            const issue = isDraft ? null : markdownLinkIssue(src);
+            return issue ? <span className="markdown-unavailable-link" title={`${markdownLinkIssueLabel(issue)}：${src}`}>{props.alt || "图片"}（无法加载）</span>
+              : <img {...props} loading="lazy" decoding="async" />;
+          },
         }}
       >
         {text}

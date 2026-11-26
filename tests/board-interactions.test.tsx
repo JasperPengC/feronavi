@@ -7,9 +7,9 @@ import { makeRouter } from "../src/client/router.tsx";
 import { setLocale } from "../src/client/i18n/index.ts";
 
 // jsdom 没有布局/指针拖动，替换外部手势层，只向真实页面投递其 drag-end 事件。
-const gesture = vi.hoisted(() => ({ end: (_event: { active: { id: string }; over: { id: string } }) => {} }));
+const gesture = vi.hoisted(() => ({ start: (_event: { active: { id: string } }) => {}, end: (_event: { active: { id: string }; over: { id: string } }) => {} }));
 vi.mock("@dnd-kit/core", () => ({
-  DndContext: ({ children, onDragEnd }: { children: ReactNode; onDragEnd: typeof gesture.end }) => { gesture.end = onDragEnd; return children; },
+  DndContext: ({ children, onDragEnd, onDragStart }: { children: ReactNode; onDragEnd: typeof gesture.end; onDragStart: typeof gesture.start }) => { gesture.end = onDragEnd; gesture.start = onDragStart; return children; },
   DragOverlay: ({ children }: { children: ReactNode }) => children,
   PointerSensor: class {}, KeyboardSensor: class {}, useSensor: () => ({}), useSensors: () => [],
   useDraggable: () => ({ attributes: {}, listeners: {}, setNodeRef: () => {}, transform: null, isDragging: false }),
@@ -191,4 +191,83 @@ it("补填字段提交失败时保留抽屉、输入和可读错误", async () =
   fireEvent.click(within(drawer).getByRole("button", { name: "提交" }));
   expect((await within(drawer).findByRole("alert")).textContent).toContain("暂时无法保存");
   expect((within(drawer).getByLabelText("resolution") as HTMLTextAreaElement).value).toBe("已确认处理方案");
+});
+
+it("隐藏空列依据服务端总数，拖动期间恢复空目标列", async () => {
+  renderBoardReply(() => json({ columns: [
+    { ...emptyBoard.columns[0], items: [first], count: 1 },
+    { stateKey: "queued", name: "未加载列", category: "NOT_STARTED", color: "info", items: [], count: 3 },
+    { stateKey: "done", name: "已完成", category: "TERMINAL", color: "success", items: [], count: 0 },
+  ], total: 4 }));
+  await screen.findByRole("button", { name: first.title });
+  fireEvent.click(screen.getByRole("checkbox", { name: "隐藏空列" }));
+  expect(document.querySelector('[data-state-key="done"]')).toBeNull();
+  expect(document.querySelector('[data-state-key="queued"]')).toBeTruthy();
+  await act(async () => { gesture.start({ active: { id: first.id } }); });
+  expect(document.querySelector('[data-state-key="done"]')).toBeTruthy();
+});
+
+it("整个结果为空时隐藏空列仍保留工作流与清除筛选入口", async () => {
+  renderBoardReply(() => json(emptyBoard));
+  await screen.findByText("暂无数据");
+  fireEvent.click(screen.getByRole("checkbox", { name: "隐藏空列" }));
+  expect(document.querySelector('[data-state-key="todo"]')).toBeTruthy();
+  fireEvent.change(screen.getByRole("textbox", { name: "搜索编号/标题" }), { target: { value: "无结果" } });
+  await screen.findByText("没有匹配项");
+  expect(screen.getAllByRole("button", { name: "清除筛选" }).length).toBeGreaterThan(0);
+});
+
+const workflowChoices = [
+  { id: "11111111-1111-4111-8111-111111111111", name: "任务流程", appliesToType: "TASK" },
+  { id: "22222222-2222-4222-8222-222222222222", name: "任务备用流程", appliesToType: "TASK" },
+  { id: "33333333-3333-4333-8333-333333333333", name: "需求流程", appliesToType: "REQUIREMENT" },
+];
+
+it("类型与工作流同时筛选首屏和下一页，切换类型清除不适用工作流", async () => {
+  renderBoardReply(url => {
+    const scoped = url.searchParams.get("type") === "TASK" && url.searchParams.get("workflowId") === workflowChoices[0]!.id;
+    return json({ workflows: workflowChoices, columns: [{ ...emptyBoard.columns[0], items: scoped ? [first] : [], count: scoped ? 2 : 0 }], total: scoped ? 2 : 0 });
+  });
+  const previous = globalThis.fetch;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input), "http://localhost");
+    if (url.pathname.endsWith("/board/columns/todo")) {
+      const scoped = url.searchParams.get("type") === "TASK" && url.searchParams.get("workflowId") === workflowChoices[0]!.id && url.searchParams.get("offset") === "1";
+      return json({ items: scoped ? [extra] : [], count: 2 });
+    }
+    return previous(input, init);
+  }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "工作流", exact: true })).toHaveProperty("disabled", false));
+  fireEvent.click(screen.getByRole("button", { name: "类型", exact: true }));
+  fireEvent.click(screen.getByRole("option", { name: "任务", exact: true }));
+  fireEvent.click(screen.getByRole("button", { name: "工作流", exact: true }));
+  expect(screen.queryByRole("option", { name: "需求流程", exact: true })).toBeNull();
+  fireEvent.click(await screen.findByRole("option", { name: "任务流程", exact: true }));
+  await screen.findByRole("button", { name: first.title });
+  fireEvent.click(screen.getByRole("button", { name: /加载更多/ }));
+  await screen.findByRole("button", { name: extra.title });
+  fireEvent.click(screen.getByRole("button", { name: "类型", exact: true }));
+  fireEvent.click(screen.getByRole("option", { name: "需求", exact: true }));
+  expect(await screen.findByRole("button", { name: "工作流", exact: true })).toBeTruthy();
+  await waitFor(() => expect(screen.queryByRole("button", { name: extra.title })).toBeNull());
+});
+
+it("工作流切换后拒绝旧分页结果，保留新工作流卡片", async () => {
+  let finish: ((response: Response) => void) | undefined;
+  const current = { ...first, id: "w3", title: "备用工作流首项" };
+  renderBoardReply(url => {
+    const alternate = url.searchParams.get("workflowId") === workflowChoices[1]!.id;
+    return json({ workflows: workflowChoices, columns: [{ ...emptyBoard.columns[0], items: [alternate ? current : first], count: alternate ? 1 : 2 }], total: alternate ? 1 : 2 });
+  });
+  const previous = globalThis.fetch;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => String(input).includes("/board/columns/todo")
+    ? new Promise<Response>(resolve => { finish = resolve; }) : previous(input, init)));
+  await screen.findByRole("button", { name: first.title });
+  fireEvent.click(screen.getByRole("button", { name: /加载更多/ }));
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
+  fireEvent.click(screen.getByRole("button", { name: "工作流", exact: true }));
+  fireEvent.click(await screen.findByRole("option", { name: "任务备用流程", exact: true }));
+  await screen.findByRole("button", { name: current.title });
+  await act(async () => { finish?.(json({ items: [extra], count: 2 })); });
+  expect(screen.queryByRole("button", { name: extra.title })).toBeNull();
 });

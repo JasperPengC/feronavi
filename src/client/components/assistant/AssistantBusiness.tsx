@@ -4,9 +4,11 @@ import { apiGet, ApiError } from "../../lib/api.ts";
 import { useActor } from "../../lib/actor.ts";
 import { t, getLocale } from "../../i18n/index.ts";
 import { Button } from "../ui/Button.tsx";
+import { WorkItemTag } from "../work-item/WorkItemTag.tsx";
+import { AssistantActionStatus, AssistantActionFailure, actionNeedsRevision, useActionExpired } from "./AssistantActionStatus.tsx";
 import { Icon } from "../Icon.tsx";
 import { Drawer } from "../ui/Drawer.tsx";
-import { GenericAssistantAction } from "./GenericAssistantAction.tsx";
+import { GenericAssistantAction, AssistantActionText } from "./GenericAssistantAction.tsx";
 import { ClosureAssistantAction } from "./ClosureAssistantAction.tsx";
 import { WorkItemDrawer } from "../work-item/DeferredWorkItemDrawer.tsx";
 import type { RagActionProposal, RagBusinessEvidence, RagProject } from "../../../shared/rag.ts";
@@ -121,20 +123,21 @@ function WorkItemAction({ action, accountId, projects, canAct, onDecide }: {
   const inaccessible = !!action.targetId && (target.isError || (target.isSuccess && !current));
   const loading = !!action.targetId && target.isPending;
   const changed = !!current && action.expectedVersion !== null && current.version !== action.expectedVersion;
-  const expired = action.status === "expired" || (action.status === "pending" && Date.parse(action.expiresAt) <= Date.now());
+  const expired = useActionExpired(action);
   const pending = action.status === "pending" && !expired;
   const approvalSubmitted = action.result?.outcome === "approval_pending";
   const name = t(`assistant.action.${action.toolName.split(".").at(-1)}`);
   function value(field: string, input: unknown) {
     if (field === "assigneeId" && (input === null || input === undefined || input === "")) return t("assistant.value.unassigned");
     if (input === null || input === undefined || input === "") return t("assistant.value.empty");
+    if (field === "description" || field === "comment") return <AssistantActionText text={String(input)} />;
     const kind = relationFields[field];
     if (kind && typeof input === "string") {
       const index = references.findIndex(ref => ref.kind === kind && ref.id === input);
       const query = referenceQueries[index];
       return query?.isSuccess ? <RelationName resource={query.data.row} kind={kind} label={query.data.label} /> : t(query?.isError ? "assistant.value.referenceUnavailable" : "assistant.value.referenceLoading");
     }
-    if (field === "priority") return t(`board.priority.${String(input)}`);
+    if (field === "priority" || field === "severity") return <WorkItemTag kind={field} value={String(input)} />;
     if (field === "type") return t(`type.${String(input)}`);
     if (field === "assigneeId") return members.data?.members.find(member => member.id === input)?.name ?? t("assistant.value.memberUnknown");
     if (field === "toStateKey") return current?.allowedTransitions?.find(state => state.toStateKey === input)?.toName ?? (action.status === "confirmed" && statusName.data && statusName.data.stateKey === input ? statusName.data.name : t("assistant.value.stateUnavailable"));
@@ -148,7 +151,8 @@ function WorkItemAction({ action, accountId, projects, canAct, onDecide }: {
     finally { lock.current = false; setBusy(false); }
   }
   return <section className="assistant-action" aria-label={name}>
-    <div className="assistant-action-heading"><h3>{name}</h3><span role="status">{busy ? t("assistant.action.executing") : approvalSubmitted ? t("assistant.action.approvalSubmitted") : t(`assistant.action.status.${expired ? "expired" : action.status}`)}</span></div>
+    <div className="assistant-action-heading"><h3>{name}</h3><AssistantActionStatus action={action} busy={busy} /></div>
+    <AssistantActionFailure action={action} />
     <p className="assistant-action-project">{projectLabel(projects, action.projectId)}</p>
     {loading ? <p role="status">{t("assistant.action.loadingTarget")}</p> : inaccessible ? <p role="alert">{t("assistant.action.unavailable")}</p> : <>
       {current && <p className="assistant-action-target"><ResourceLink projectId={action.projectId} kind="workItem" id={current.id}>{current.key}</ResourceLink><span>{current.title}</span></p>}
@@ -159,11 +163,11 @@ function WorkItemAction({ action, accountId, projects, canAct, onDecide }: {
         </dd>
       </div>)}</dl>
       {approvalSubmitted && <p className="assistant-action-expiry" role="status">{t("assistant.action.approvalUnchanged", { state: current?.statusName ?? statusName.data?.name ?? t("assistant.value.stateUnavailable") })}</p>}
-      {(changed && pending || error?.blocked) && <p className="assistant-action-error" role="alert">{t("assistant.action.changed")}</p>}
+      {!action.lastFailure && (changed && pending || error?.blocked) && <p className="assistant-action-error" role="alert">{t("assistant.action.changed")}</p>}
       {pending && referencesLoading && <p role="status">{t("assistant.action.referencesLoading")}</p>}
       {pending && referencesFailed && <p className="assistant-action-error" role="alert">{t("assistant.action.referencesUnavailable")}</p>}
-      {error && <p className="assistant-action-error" role="alert">{error.message}</p>}
-      {pending && <div className="assistant-action-controls"><Button size="sm" disabled={!canAct || busy || changed || error?.blocked || (needsMembers && !members.isSuccess) || !transitionAllowed || referencesLoading || referencesFailed} onClick={() => void decide("confirm")}>{error && !error.blocked ? t("assistant.action.retry") : t("assistant.action.confirm")}</Button>
+      {!action.lastFailure && error && <p className="assistant-action-error" role="alert">{error.message}</p>}
+      {pending && <div className="assistant-action-controls"><Button size="sm" disabled={!canAct || busy || changed || error?.blocked || actionNeedsRevision(action) || (needsMembers && !members.isSuccess) || !transitionAllowed || referencesLoading || referencesFailed} onClick={() => void decide("confirm")}>{error && !error.blocked ? t("assistant.action.retry") : t("assistant.action.confirm")}</Button>
         <Button size="sm" variant="ghost" disabled={!canAct || busy} onClick={() => void decide("reject")}>{t("assistant.action.reject")}</Button></div>}
       {pending && <p className="assistant-action-expiry">{t("assistant.action.expires", { time: timeLabel(action.expiresAt) })}</p>}
       <details className="assistant-error-details"><summary>{t("assistant.errorDetails")}</summary><p>{action.toolName} · {action.id}</p><pre>{JSON.stringify(action.parameters, null, 2)}</pre></details>

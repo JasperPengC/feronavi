@@ -90,7 +90,7 @@ export async function search(actor: Actor, q: string, opts: { type?: string; lim
     sql<{ id: string; title: string; project_id: string; project_key: string }[]>`
       select pg.id, pg.title, p.id as project_id, p.key as project_key
       from page pg join project p on p.id = pg.project_id
-      where pg.deleted_at is null and pg.visibility = 'PROJECT' and ${projectScope}
+      where pg.deleted_at is null and pg.kind = 'DOCUMENT' and not exists(select 1 from archived_page a where a.id = pg.id) and pg.visibility = 'PROJECT' and ${projectScope}
         and pg.title ilike ${like}
       order by pg.updated_at desc limit ${limit}
     `,

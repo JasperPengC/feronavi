@@ -5,6 +5,7 @@ import { can } from "../../permission/engine.ts";
 import { projectAllowed } from "../../services/token.service.ts";
 import { requireUserConfirmation } from "../../services/collab-room.service.ts";
 import * as items from "../../services/work-item.service.ts";
+import * as revisions from "../../services/requirement-revision.service.ts";
 import * as relations from "../../services/relation.service.ts";
 import * as times from "../../services/prefs-time.service.ts";
 import { projectForMcpResource, type McpResourceKind } from "../../services/mcp-resource.service.ts";
@@ -36,6 +37,8 @@ const fieldPatch = { name: { type: "string", minLength: 1, maxLength: 80 }, opti
 const fieldResult = shape({ id: UUID, projectId: UUID, key: text, type: { type: "string", enum: [...fields.FIELD_TYPES] }, ...fieldPatch, archivedAt: { anyOf: [timestamp, { type: "null" }] }, createdAt: timestamp });
 const fieldValue = { anyOf: [{ type: "null" }, { type: "string", maxLength: 5000 }, { type: "number" }, { ...array({ type: "string", maxLength: 200 }), maxItems: 200 }] };
 const fieldValuesResult = shape({ fields: array(shape({ defId: UUID, key: text, name: text, type: { type: "string", enum: [...fields.FIELD_TYPES] }, archived: boolean, value: fieldValue })) });
+const revisionMetadata = { id: UUID, workItemId: UUID, revisionNo: { type: "integer", minimum: 1 }, workItemVersion: { type: "integer", minimum: 1 }, title: text,
+  authorId: { anyOf: [UUID, { type: "null" }] }, authorName: { type: ["string", "null"] }, source: { type: "string", enum: ["INITIAL", "EDIT", "BASELINE"] }, createdAt: timestamp };
 
 function missing(): never { throw new DomainError("NOT_FOUND", "资源不存在", null); }
 function present<T>(row: T | undefined): T {
@@ -102,6 +105,24 @@ function fieldView(row: Awaited<ReturnType<typeof fields.listDefs>>[number]) {
 }
 
 export const WORK_ITEM_TOOLS: ToolDef[] = [
+  {
+    name: "workitem.listRequirementRevisions", kind: "read", description: "分页读取需求正文历史元数据，按正文版本倒序；before 使用上一页 nextCursor。工作项乐观锁版本与正文版本独立。",
+    inputSchema: shape({ ...scoped, before: { type: "integer", minimum: 1, maximum: 2147483647 }, limit: { type: "integer", minimum: 1, maximum: 50 } }, ["projectId", "workItemId"]),
+    outputSchema: shape({ items: array(shape(revisionMetadata)), nextCursor: { type: ["integer", "null"], minimum: 1 } }),
+    handler: async (ctx, args) => {
+      await assertWorkItem(ctx, args);
+      return revisions.listRequirementRevisions(ctx.actor, String(args.workItemId), { before: args.before, limit: args.limit });
+    },
+  },
+  {
+    name: "workitem.getRequirementRevision", kind: "read", description: "读取指定需求的固定正文版本。旧数据 BASELINE 是捕获时的当前内容，不代表原始创建记录。",
+    inputSchema: shape({ ...scoped, revisionId: UUID }),
+    outputSchema: shape({ ...revisionMetadata, description: { type: ["string", "null"] } }),
+    handler: async (ctx, args) => {
+      await assertWorkItem(ctx, args);
+      return revisions.getRequirementRevision(ctx.actor, String(args.workItemId), String(args.revisionId));
+    },
+  },
   {
     name: "workitem.listRelations", kind: "read", description: "读取工作项关联；仅返回账号可见且处于令牌项目范围的对端。",
     inputSchema: shape(scoped), outputSchema: relationResult,

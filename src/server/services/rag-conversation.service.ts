@@ -13,6 +13,7 @@ import {
   type RagMessage,
   type RagMessageCreate,
   type RagMessageResult,
+  type RagExecutionResult,
 } from "../../shared/rag-conversations.ts";
 import type {
   RagChatInput,
@@ -25,6 +26,7 @@ import * as repo from "../repos/rag-conversation.repo.ts";
 import { chatRag, listRagProjects } from "./rag.service.ts";
 import { getPage } from "./wiki.service.ts";
 import { publishWorkspaceInvalidation } from "./workspace-events.service.ts";
+import { projectAgentExecution } from "../../shared/agent-execution.ts";
 
 const notFound = () =>
   new DomainError("NOT_FOUND", "会话不存在或不可访问", null);
@@ -174,6 +176,21 @@ async function resultDto(
     message: await messageDto(actor, message, projects, dto.available),
   };
 }
+/** 直接读取一轮，复用完整身份/资料投影；恢复运行无需重新发送模型请求。 */
+export async function getExecution(
+  actor: Actor, id: string, requestId: string, allowedProjectIds?: string[],
+  token?: import("./token.service.ts").TokenContext,
+): Promise<RagExecutionResult> {
+  if (token && token.memberId !== actor.memberId) throw new DomainError("FORBIDDEN", "令牌与账号不匹配", null);
+  actor = await activeActor(actor);
+  const conversation = requireConversation(await repo.findConversation(actor.memberId, id), allowedProjectIds);
+  if (conversation.deletedAt) throw notFound();
+  const message = await repo.findMessage(id, requestId);
+  if (!message) throw notFound();
+  const result = await resultDto(actor, conversation, message, allowedProjectIds, token);
+  return { ...result, execution: projectAgentExecution(result.message) };
+}
+
 export async function listConversations(
   actor: Actor,
   input: RagConversationListInput,
@@ -703,12 +720,31 @@ export async function decideAction(
       );
       action.result = execution.value;
       action.status = "confirmed";
+      delete action.lastFailure;
       return {
         conversation,
         message: await repo.updateMessage(message.id, { reply }),
       };
     },
-  );
+  ).catch(async (error: unknown) => {
+    // 失败事务已回滚。另行保存可恢复错误代码，绝不为了记录错误提交部分业务写入。
+    if (error instanceof DomainError && ["CONFLICT", "VERSION_CONFLICT", "VALIDATION", "BLOCKED_BY_PREREQUISITE"].includes(error.code)) {
+      try {
+        await repo.withConversationLock(actor.memberId, id, async row => {
+          const conversation = requireConversation(row, allowedProjectIds);
+          await getExecution(actor, id, requestId, allowedProjectIds, token);
+          const message = await repo.findMessage(id, requestId);
+          if (!message?.reply) return;
+          const reply = structuredClone(message.reply), action = reply.actions?.find(a => a.id === actionId);
+          if (!action || action.status !== "pending") return;
+          action.lastFailure = { code: error.code, recordedAt: new Date().toISOString() };
+          await repo.updateMessage(message.id, { reply });
+          await conversationChanged(conversation);
+        });
+      } catch { /* 撤权、会话删除或数据库故障不能覆盖原业务错误。 */ }
+    }
+    throw error;
+  });
   await conversationChanged(result.conversation);
   return resultDto(
     actor,

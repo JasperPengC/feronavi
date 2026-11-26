@@ -7,7 +7,7 @@
  */
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../../db/index.ts";
-import { workItem, workflow, workflowState } from "../../db/schema.ts";
+import { member, workItem, workflow, workflowState } from "../../db/schema.ts";
 
 export interface CreateRow {
   projectId: string;
@@ -31,6 +31,7 @@ export interface CreateRow {
   iterationId?: string | null;
   releaseId?: string | null;
   moduleId?: string | null;
+  productId?: string | null;
 }
 
 /**
@@ -54,14 +55,14 @@ export async function insertWithNumber(row: CreateRow): Promise<{ id: string; ke
       project_id, number, key, type, title, description, workflow_id, status_id,
       reporter_id, assignee_id, priority, severity, estimate_points, estimate_hours,
       start_date, due_date, parent_id,
-      milestone_id, iteration_id, release_id, module_id
+      milestone_id, iteration_id, release_id, module_id, product_id
     )
     SELECT ${row.projectId}, p.n, p.key || '-' || p.n, ${row.type}, ${row.title}, ${row.description},
            ${row.workflowId}, ${row.statusId}, ${row.reporterId}, ${row.assigneeId},
            ${row.priority}, ${row.severity},
            ${row.estimatePoints}::numeric, ${row.estimateHours}::numeric,
            ${row.startDate}::date, ${row.dueDate}::date, ${row.parentId},
-           ${row.milestoneId ?? null}, ${row.iterationId ?? null}, ${row.releaseId ?? null}, ${row.moduleId ?? null}
+           ${row.milestoneId ?? null}, ${row.iterationId ?? null}, ${row.releaseId ?? null}, ${row.moduleId ?? null}, ${row.productId ?? null}
       FROM p
     RETURNING id, key, number
   `);
@@ -272,6 +273,7 @@ export async function loadTimeline(projectId: string, from: string, to: string) 
 export async function loadTable(projectId: string, opts: {
   page?: number; pageSize?: number;
   type?: string; priority?: string; unscheduled?: boolean;
+  milestoneId?: string; iterationId?: string; releaseId?: string; moduleId?: string;
   sortBy?: "created_at" | "updated_at" | "due_date" | "priority" | "number";
   sortDir?: "asc" | "desc";
 } = {}) {
@@ -295,6 +297,10 @@ export async function loadTable(projectId: string, opts: {
     opts.type ? eq(workItem.type, opts.type) : undefined,
     opts.priority ? eq(workItem.priority, opts.priority) : undefined,
     opts.unscheduled ? and(isNull(workItem.startDate), isNull(workItem.dueDate)) : undefined,
+    opts.milestoneId ? eq(workItem.milestoneId, opts.milestoneId) : undefined,
+    opts.iterationId ? eq(workItem.iterationId, opts.iterationId) : undefined,
+    opts.releaseId ? eq(workItem.releaseId, opts.releaseId) : undefined,
+    opts.moduleId ? eq(workItem.moduleId, opts.moduleId) : undefined,
   );
 
   const rows = await db.select({
@@ -306,7 +312,11 @@ export async function loadTable(projectId: string, opts: {
     priority: workItem.priority,
     severity: workItem.severity,
     statusId: workItem.statusId,
+    statusName: workflowState.name,
+    statusKey: workflowState.key,
+    statusCategory: workflowState.category,
     assigneeId: workItem.assigneeId,
+    assigneeName: member.name,
     milestoneId: workItem.milestoneId,
     iterationId: workItem.iterationId,
     startDate: workItem.startDate,
@@ -315,7 +325,10 @@ export async function loadTable(projectId: string, opts: {
     version: workItem.version,
     createdAt: workItem.createdAt,
     updatedAt: workItem.updatedAt,
-  }).from(workItem).where(where).orderBy(dir(col), asc(workItem.number))
+  }).from(workItem)
+    .leftJoin(workflowState, eq(workflowState.id, workItem.statusId))
+    .leftJoin(member, eq(member.id, workItem.assigneeId))
+    .where(where).orderBy(dir(col), asc(workItem.number))
     .limit(pageSize).offset((page - 1) * pageSize);
 
   const cnt = await db.select({ n: sql<number>`count(*)::int` })

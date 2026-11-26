@@ -44,12 +44,12 @@ export function pgRestoreCustom(hostUrl: string, dumpFile: string): void {
     const remote = `/tmp/feronavi-restore-${process.pid}.dump`;
     execFileSync("docker", ["cp", dumpFile, `${process.env.PG_CONTAINER}:${remote}`], { stdio: "pipe" });
     try {
-      execFileSync("docker", ["exec", "--env", "PGPASSWORD", process.env.PG_CONTAINER, "pg_restore", "--clean", "--if-exists", "--no-owner", "--no-privileges", "--dbname", conn.url, remote], { env: conn.env, stdio: "pipe" });
+      execFileSync("docker", ["exec", "--env", "PGPASSWORD", process.env.PG_CONTAINER, "pg_restore", "--single-transaction", "--exit-on-error", "--clean", "--if-exists", "--no-owner", "--no-privileges", "--dbname", conn.url, remote], { env: conn.env, stdio: "pipe" });
     } finally {
       try { execFileSync("docker", ["exec", process.env.PG_CONTAINER, "rm", "-f", remote], { stdio: "pipe" }); } catch { /* ignore */ }
     }
   } else {
-    execFileSync(process.env.PG_RESTORE_BIN ?? "pg_restore", ["--clean", "--if-exists", "--no-owner", "--no-privileges", "--dbname", conn.url, dumpFile], { env: conn.env, stdio: "pipe" });
+    execFileSync(process.env.PG_RESTORE_BIN ?? "pg_restore", ["--single-transaction", "--exit-on-error", "--clean", "--if-exists", "--no-owner", "--no-privileges", "--dbname", conn.url, dumpFile], { env: conn.env, stdio: "pipe" });
   }
 }
 

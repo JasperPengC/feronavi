@@ -1,16 +1,17 @@
 /** 工作项阻塞/关联关系：后端已有 BLOCKS/BLOCKED_BY/RELATES_TO/DUPLICATES，此处接 UI。 */
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiDelete, apiGet, apiPost, ApiError } from "../../lib/api.ts";
 import { t } from "../../i18n/index.ts";
 import { Button } from "../ui/Button.tsx";
 import { Select } from "../Select.tsx";
+import { WorkItemPicker, type WorkItemOption } from "./WorkItemPicker.tsx";
 
-interface RelationItem { id: string; key: string; title: string; type?: string }
+interface RelationItem { id: string; workItemId?: string; key: string; title: string; type?: string }
 interface RelationView { blocks: RelationItem[]; blockedBy: RelationItem[]; others: RelationItem[] }
 const TYPES = ["BLOCKS", "BLOCKED_BY", "RELATES_TO", "DUPLICATES"] as const;
 
-export function RelationsPanel({ workItemId, projectId }: { workItemId: string; projectId: string }) {
+export function RelationsPanel({ workItemId, projectId, onOpen }: { workItemId: string; projectId: string; onOpen?: (item: WorkItemOption) => void }) {
   const qc = useQueryClient();
   const [type, setType] = useState<string>("BLOCKS");
   const [targetId, setTargetId] = useState("");
@@ -18,11 +19,6 @@ export function RelationsPanel({ workItemId, projectId }: { workItemId: string; 
   const rel = useQuery({
     queryKey: ["work-item-relations", workItemId],
     queryFn: () => apiGet<RelationView>(`/api/v1/work-items/${workItemId}/relations`),
-  });
-  const targets = useQuery({
-    queryKey: ["work-item-relation-targets", workItemId, projectId],
-    enabled: !!projectId,
-    queryFn: () => apiGet<{ rows?: { id: string; key: string; title: string }[] }>(`/api/v1/projects/${projectId}/work-items`, { view: "table", pageSize: 100 }),
   });
   const add = useMutation({
     mutationFn: () => apiPost(`/api/v1/work-items/${workItemId}/relations`, { targetId, type }),
@@ -34,8 +30,6 @@ export function RelationsPanel({ workItemId, projectId }: { workItemId: string; 
     onSuccess: async () => { await qc.invalidateQueries({ queryKey: ["work-item-relations", workItemId] }); },
     onError: (e) => setError(e instanceof ApiError ? e.message : t("wiRel.saveFailed")),
   });
-  const options = useMemo(() => [{ value: "", label: t("wiRel.target") },
-    ...(targets.data?.rows ?? []).filter((r) => r.id !== workItemId).map((r) => ({ value: r.id, label: `${r.key} ${r.title}` }))], [targets.data, workItemId]);
   const groups: { key: keyof RelationView; label: string }[] = [
     { key: "blocks", label: t("wiRel.blocks") },
     { key: "blockedBy", label: t("wiRel.blockedBy") },
@@ -56,7 +50,7 @@ export function RelationsPanel({ workItemId, projectId }: { workItemId: string; 
                 {rows.map((r) => (
                   <li key={r.id}>
                     <span className="tag">{r.type ? typeLabel(r.type) : g.label}</span>
-                    <span>{r.key} {r.title}</span>
+                    {onOpen && r.workItemId ? <button type="button" className="wi-related-open" onClick={() => onOpen({ id: r.workItemId!, key: r.key, title: r.title })}>{r.key} {r.title}</button> : <span>{r.key} {r.title}</span>}
                     <Button size="sm" variant="ghost" onClick={() => remove.mutate(r.id)}>{t("common.delete")}</Button>
                   </li>
                 ))}
@@ -68,7 +62,7 @@ export function RelationsPanel({ workItemId, projectId }: { workItemId: string; 
       <div className="wi-drawer__add-link">
         <Select ariaLabel={t("wiRel.type")} value={type} onChange={setType}
           options={TYPES.map((x) => ({ value: x, label: typeLabel(x) }))} />
-        <Select ariaLabel={t("wiRel.target")} value={targetId} onChange={setTargetId} searchable options={options} />
+        <WorkItemPicker projectId={projectId} value={targetId} onChange={setTargetId} label={t("wiRel.target")} emptyLabel={t("wiRel.target")} excludeId={workItemId} />
         <Button size="sm" variant="primary" disabled={!targetId || add.isPending} onClick={() => add.mutate()}>{t("common.add")}</Button>
       </div>
       {error && <p className="field-error" role="alert">{error}</p>}

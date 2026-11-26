@@ -20,6 +20,7 @@ import type { FeedbackHandlers } from "./types.ts";
 import { confirmDialog } from "../Dialog.tsx";
 import { Modal } from "../ui/Modal.tsx";
 import { Icon } from "../Icon.tsx";
+import { DeliverySourceEditor } from '../delivery/DeliverySourceEditor.tsx';
 
 interface IntegrationRow {
   id: string; kind: string; projectId: string | null; name: string; baseUrl: string;
@@ -29,6 +30,11 @@ interface ProjectRow { id: string; name: string; key: string }
 interface FormState { kind: string; name: string; baseUrl: string; token: string; projectId: string; configText: string }
 
 const KINDS = ["GITLAB", "GITHUB", "GITEE"];
+const KIND_BASE_URL: Record<string, string> = {
+  GITLAB: "https://gitlab.com",
+  GITHUB: "https://api.github.com",
+  GITEE: "https://gitee.com/api/v5",
+};
 const EMPTY_FORM: FormState = { kind: "GITLAB", name: "", baseUrl: "https://gitlab.com", token: "", projectId: "", configText: "{}" };
 const KIND_HINT: Record<string, string> = {
   GITLAB: "GitLab：Private-Token，仓库 group/project，支持 commits / MR",
@@ -55,6 +61,7 @@ export function IntegrationSettings({ onSuccess, onError, compact = false }: Fee
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [deliveryIntegration,setDeliveryIntegration]=useState<IntegrationRow|null>(null);
 
   const projectName = useMemo(() => {
     const map = new Map((projects.data ?? []).map((p) => [p.id, `${p.name}（${p.key}）`]));
@@ -63,6 +70,11 @@ export function IntegrationSettings({ onSuccess, onError, compact = false }: Fee
 
   const reset = () => { setFormError(null); setForm(EMPTY_FORM); setEditingId(null); setFormOpen(false); };
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((cur) => ({ ...cur, [key]: value }));
+  const setKind = (kind: string) => setForm((cur) => {
+    if (editingId) return cur;
+    const base = cur.baseUrl.trim().replace(/\/+$/u, "");
+    return { ...cur, kind, baseUrl: !base || base === KIND_BASE_URL[cur.kind] ? KIND_BASE_URL[kind]! : cur.baseUrl };
+  });
 
   const invalidate = async () => { await qc.invalidateQueries({ queryKey: ["integrations"] }); };
   const fail = (error: unknown, fallback: string) => onError(error instanceof ApiError ? error.message : fallback);
@@ -151,6 +163,7 @@ export function IntegrationSettings({ onSuccess, onError, compact = false }: Fee
               </span>
               <span className={row.isActive ? "tag tag-success" : "tag"}>{row.isActive ? t("se.enabled") : t("se.intgInactive")}</span>
               <Button size="sm" variant="ghost" onClick={() => startEdit(row)}>{t("se.intgEdit")}</Button>
+              {row.kind==='GITHUB'&&row.projectId&&<Button size="sm" variant="ghost" onClick={()=>setDeliveryIntegration(row)}>{t('delivery.source.title')}</Button>}
               {!!row.config && typeof (row.config as { repo?: unknown }).repo === "string" && (
                 <Button size="sm" variant="ghost" disabled={sync.isPending} onClick={() => sync.mutate(row)}>{t("se.intgSync")}</Button>
               )}
@@ -165,6 +178,7 @@ export function IntegrationSettings({ onSuccess, onError, compact = false }: Fee
 
 
       {draft.guard}
+      {deliveryIntegration?.projectId&&<DeliverySourceEditor projectId={deliveryIntegration.projectId} integrationId={deliveryIntegration.id} onClose={()=>setDeliveryIntegration(null)}/>}
       <Modal open={formOpen} title={editingId ? t("se.intgEdit") : t("se.intgNew")} onClose={requestClose}
         footer={<>
           <Button onClick={requestClose} disabled={submitting}>{t("se.intgCancel")}</Button>
@@ -183,11 +197,11 @@ export function IntegrationSettings({ onSuccess, onError, compact = false }: Fee
           </p>
 
         <Select className="settings-field" label={t("se.intgKind")} ariaLabel={t("se.intgKind")}
-          value={form.kind} onChange={(v) => set("kind", v)} options={KINDS.map((k) => ({ value: k, label: k }))} />
+          value={form.kind} disabled={editingId !== null} onChange={setKind} options={KINDS.map((k) => ({ value: k, label: k }))} />
         <TextInput className="settings-field" label={t("se.intgName")} placeholder={t("se.intgName")}
           value={form.name} aria-label={t("se.intgName")} onChange={(e) => set("name", e.target.value)} />
         <TextInput className="settings-field settings-field--span-two" label={t("se.intgBaseUrl")} type="url"
-          placeholder="https://gitlab.com" value={form.baseUrl} aria-label={t("se.intgBaseUrl")}
+          placeholder={KIND_BASE_URL[form.kind]} value={form.baseUrl} aria-label={t("se.intgBaseUrl")}
           onChange={(e) => set("baseUrl", e.target.value)} />
         <TextInput className="settings-field" label={t("se.intgToken")} type="password"
           placeholder={editingId ? t("se.intgTokenKeep") : t("se.intgToken")} value={form.token}

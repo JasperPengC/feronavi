@@ -284,6 +284,11 @@ export async function importDatasets(
       )) {
         const rows = [];
         for (const raw of batch) {
+          if(dataset.tableName==="test_run"&&!manifest.requiredFeatures.includes("test-execution-builds")&&!Object.hasOwn(raw,"build")&&!Object.hasOwn(raw,"environment")){
+            const [plan]=await sql`select p.build,p.environment from test_plan p join test_plan_case c on c.plan_id=p.id where c.id=${String(raw.plan_case_id)}`;
+            if(!plan)throw new DomainError("INVALID_BACKUP",messages.INVALID_BACKUP,null);
+            raw.build=plan.build;raw.environment=plan.environment;
+          }
           const validated = validateImportRow(dataset, upgradeLegacyDatasetRow(manifest, dataset.name, raw));
           if (manifest.mode === "full" && !keys)
             throw new DomainError(
@@ -305,6 +310,8 @@ export async function importDatasets(
             manifest.packageId,
           );
           const decoded = await decodeImportRow(dataset, row, manifest.mode);
+          // 先以草稿插入计划，恢复固定范围后再回填终态，保留正常业务的不可变约束。
+          if (dataset.tableName === "test_plan") decoded.insert.status = "DRAFT";
           rows.push(
             Object.fromEntries(
               Object.entries(decoded.insert).map(([column, value]) => [
@@ -335,8 +342,9 @@ export async function importDatasets(
         await entryStream(zip, entries.get(metadata.path)!),
       )) {
         for (const raw of batch) {
+          const upgraded = validateImportRow(dataset, upgradeLegacyDatasetRow(manifest, dataset.name, raw));
           const row = Object.fromEntries(
-            ["id", ...columns].map((column) => [column, raw[column]]),
+            ["id", ...columns].map((column) => [column, upgraded[column]]),
           );
           if (columns.every((column) => row[column] === null)) continue;
           const patch = Object.fromEntries(
@@ -382,10 +390,23 @@ export async function importDatasets(
         }
       }
     }
+    const planDataset = manifest.datasets.find(d => d.name === "projects.test_plan");
+    if (planDataset) {
+      for await (const batch of readJsonlBatches(await entryStream(zip,entries.get(planDataset.path)!))) {
+        for (const row of batch) await sql`update test_plan set status=${String(row.status)} where id=${String(row.id)}`;
+      }
+    }
+    if (!manifest.requiredFeatures.includes("document-folders")) {
+      await sql`update page p set created_by = r.author_id from page_revision r where r.page_id = p.id and r.revision_no = 1 and p.created_by is null`;
+    }
     await assertImportedInvariants(
       manifest,
       baseline.map((row) => row.id),
     );
+    const { needsRequirementBaselines } = await import("./compatibility.ts");
+    const { captureRestoredBaselines, restoredHistoryIsConsistent } = await import("../../repos/requirement-revision.repo.ts");
+    if (needsRequirementBaselines(manifest)) await captureRestoredBaselines();
+    if (!(await restoredHistoryIsConsistent())) throw new DomainError("INVALID_BACKUP", messages.INVALID_BACKUP, null);
   } finally {
     zip.close();
   }
@@ -416,6 +437,25 @@ async function assertImportedInvariants(
   const badWorkItems =
     await sql`select 1 from work_item i join workflow w on w.id=i.workflow_id join workflow_state s on s.id=i.status_id where s.workflow_id<>i.workflow_id or (w.project_id is not null and w.project_id<>i.project_id) or (w.project_id is null and w.is_builtin is not true) limit 1`;
   if (badWorkItems.length) throw invalid();
+  const badProducts = await sql`select 1 from product p where not exists(select 1 from product_project pp where pp.product_id=p.id) limit 1`;
+  const badProductRefs = await sql`select 1 from work_item w where w.product_id is not null and (w.type <> 'REQUIREMENT'
+    or not exists(select 1 from product_project pp where pp.product_id=w.product_id and pp.project_id=w.project_id)) limit 1`;
+  if (badProducts.length || badProductRefs.length) throw invalid();
+  const { restoredChangesAreConsistent } = await import("./requirement-changes.ts");
+  if (!await restoredChangesAreConsistent()) throw invalid();
+  const { restoredTestCasesAreConsistent } = await import("./test-cases.ts");
+  if (!await restoredTestCasesAreConsistent()) throw invalid();
+  const { restoredTestExecutionIsConsistent } = await import("./test-execution.ts");
+  if (!await restoredTestExecutionIsConsistent()) throw invalid();
+  const {restoredDeliveryIsConsistent}=await import('./delivery.ts');
+  if(!await restoredDeliveryIsConsistent())throw invalid();
+  const {restoredReleaseGateIsConsistent}=await import('./release-gate.ts');
+  if(!await restoredReleaseGateIsConsistent())throw invalid();
+  const badFolders = await sql`select 1 from page p where p.kind = 'FOLDER' and (
+    exists(select 1 from page_revision r where r.page_id = p.id)
+    or exists(select 1 from collab_room c where c.resource_type = 'PAGE' and c.resource_id = p.id)
+  ) limit 1`;
+  if (badFolders.length) throw invalid();
   for (const dataset of orderedDatasets(manifest.mode)) {
     const metadata = manifest.datasets.find(
       (item) => item.name === dataset.name,

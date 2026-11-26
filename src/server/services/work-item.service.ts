@@ -7,12 +7,15 @@ import { z } from "zod";
 import type { Actor } from "../permission/actor.ts";
 import { can, roleKeysForScope, type PermissionContext } from "../permission/engine.ts";
 import * as wiRepo from "../repos/work-item.repo.ts";
+import { appendRevision } from "../repos/requirement-revision.repo.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 import * as wfRepo from "../repos/workflow.repo.ts";
 import { db, sql } from "../../db/index.ts";
 import { and, asc, desc, eq, ilike, or, isNull, sql as dsql } from "drizzle-orm";
 import { workItem, workItemTransfer, workflowState } from "../../db/schema.ts";
 import { assertTreeParent, lockProjectTree } from "./project-tree.ts";
+import { assertRequirementProduct, lockProducts } from "./product.service.ts";
+import type { WorkItemChild } from "../../shared/work-item-children.ts";
 
 const serviceUpdateSchema = updateWorkItemSchema.extend({ assigneeReason: z.string().max(2000).nullable().optional() }).strict();
 
@@ -116,11 +119,13 @@ export async function createWorkItem(
   //    调用方拿不到 statusId/workflowId 等字段（实测两次因测试假设 title/workflowId
   //    存在而踩空）。与 updateWorkItem 的回读口径保持一致。
   const created = await db.transaction(async () => {
+    await lockProducts([input.productId]);
     await lockProjectTree(projectId);
+    await assertRequirementProduct(actor, projectId, input.type, input.productId);
     // 与完成/归档共用项目锁；校验与关联写入必须在同一事务。
     await assertPlanRefsSameProject(input, projectId);
     if (input.parentId) await assertTreeParent("work_item", projectId, input.parentId);
-    return wiRepo.insertWithNumber({
+    const inserted = await wiRepo.insertWithNumber({
     projectId,
     type: input.type,
     title: input.title,
@@ -143,7 +148,12 @@ export async function createWorkItem(
     iterationId: input.iterationId ?? null,
     releaseId: input.releaseId ?? null,
     moduleId: input.moduleId ?? null,
+    productId: input.productId ?? null,
     });
+    if (input.type === "REQUIREMENT") {
+      await appendRevision({ id: inserted.id, version: 1, title: input.title, description: input.description ?? null }, actor.memberId, "INITIAL");
+    }
+    return inserted;
   });
   const full = await wiRepo.findById(created.id);
   // 刚插入的行必然可回读；回读不到说明事务/可见性出了问题，宁可显式报错也不返回残缺对象
@@ -175,20 +185,29 @@ export async function getWorkItem(actor: Actor, id: string) {
 /** 子工作项列表（父子层级 UI 用；只读，不改变主列表投影）。 */
 export async function listChildren(actor: Actor, parentId: string) {
   const parent = await getWorkItem(actor, parentId);
-  const rows = await db.execute(dsql`
-    select wi.id, wi.key, wi.title, wi.type, wi.priority, wi.status_id as status_id
+  const projectVisible = await projectRepo.isVisibleTo(actor.memberId, parent.projectId, hasOrgGrant(actor));
+  const rows = await db.execute<WorkItemChild>(dsql`
+    select wi.id, wi.key, wi.title, wi.type, wi.priority, wi.status_id,
+      ws.key as "statusKey", ws.name as "statusName", ws.category as "statusCategory",
+      wi.assignee_id as "assigneeId", coalesce(nullif(m.name, ''), m.username) as "assigneeName",
+      wi.due_date::text as "dueDate"
     from work_item wi
-    where wi.parent_id = ${parentId} and wi.deleted_at is null
+    left join workflow_state ws on ws.id = wi.status_id and ws.workflow_id = wi.workflow_id
+    left join member m on m.id = wi.assignee_id
+    where wi.parent_id = ${parentId} and wi.project_id = ${parent.projectId} and wi.deleted_at is null
+      and (${projectVisible} or exists (
+        select 1 from work_item_collaborator c where c.work_item_id = wi.id and c.member_id = ${actor.memberId}
+      ))
     order by wi.number asc
-  `) as unknown as { id: string; key: string; title: string; type: string; priority: string | null; status_id: string }[];
-  return { parent: { id: parent.id, key: parent.key, title: parent.title }, children: rows };
+  `);
+  return { parent: { id: parent.id, key: parent.key, title: parent.title }, children: [...rows] };
 }
 
 /**
  * 更新（乐观锁）。
  *
  * ⚠️ 判定「能不能改」要区分 `_own` 与 `_any`：
- *    - 资源创建者可以用 `update_own`
+ *    - 资源创建者、当前负责人可以用项目范围内的 `update_own`
  *    - 其他人在有 `update_any` 时才可以
  * 两者都不满足 → FORBIDDEN（与资源不存在同形）
  */
@@ -216,12 +235,16 @@ export async function updateWorkItem(
     memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId,
   };
   const res = { projectId: wi.projectId, teamId: null, createdBy: wi.reporterId };
+  // 指派只扩展这条工作项的 own 编辑归属，仍须当前项目角色具有 update_own。
+  // 转派会递增工作项版本，过期负责人请求也由下面的 CAS 拒绝。
+  const ownedRes = wi.assigneeId === actor.memberId ? { ...res, createdBy: actor.memberId } : res;
   const allowed =
-    can(actor, "work_item:update_own", res, ctx) || can(actor, "work_item:update_any", res, ctx)
+    can(actor, "work_item:update_own", ownedRes, ctx) || can(actor, "work_item:update_any", res, ctx)
     || isCollab;   // 协作编辑权：**不含** delete / transition 之外的高权动作（C-24）
   if (!allowed) throw forbidden();
 
   const { version, assigneeReason, ...fields } = patch as { version: number; assigneeReason?: string | null } & Record<string, unknown>;
+  if (wi.version !== version) throw new DomainError("VERSION_CONFLICT", "该工作项已被他人修改，请刷新后重试", null);
 
   /**
    * 计划实体关联校验：**必须与工作项同项目**。
@@ -238,19 +261,22 @@ export async function updateWorkItem(
   if (wi.type === "SUBTASK" && fields.parentId === null) {
     throw new DomainError("VALIDATION", "子任务必须指定父工作项", null);
   }
-  const changesRelations = ["parentId", "milestoneId", "iterationId", "releaseId", "moduleId"].some(field => fields[field] !== undefined);
-  const updated = changesRelations
-    ? await db.transaction(async () => {
+  const changesRelations = ["parentId", "milestoneId", "iterationId", "releaseId", "moduleId", "productId"].some(field => fields[field] !== undefined);
+  const updated = await db.transaction(async () => {
+      if (fields.productId !== undefined) await lockProducts([wi.productId, fields.productId as string | null]);
+      if (changesRelations) {
         await lockProjectTree(wi.projectId);
+        if (fields.productId !== undefined) await assertRequirementProduct(actor, wi.projectId, wi.type, fields.productId as string | null, wi.productId);
         await assertPlanRefsSameProject(fields, wi.projectId, wi);
         if (typeof fields.parentId === "string") await assertTreeParent("work_item", wi.projectId, fields.parentId, id);
-        return wiRepo.updateWithVersion(id, version, fields);
-      })
-    : await wiRepo.updateWithVersion(id, version, fields);
-  if (!updated) {
-    // 版本不匹配 = 别人先改了（第 4.9 节）
-    throw new DomainError("VERSION_CONFLICT", "该工作项已被他人修改，请刷新后重试", null);
-  }
+      }
+      const row = await wiRepo.updateWithVersion(id, version, fields);
+      if (!row) throw new DomainError("VERSION_CONFLICT", "该工作项已被他人修改，请刷新后重试", null);
+      if (row.type === "REQUIREMENT" && (row.title !== wi.title || row.description !== wi.description)) {
+        await appendRevision(row, actor.memberId, "EDIT");
+      }
+      return row;
+    });
 
   // ── 转派历史（Round 79）：只有"真的换了人"才记一条（含 from/to/reason）──
   if (fields.assigneeId !== undefined && fields.assigneeId !== wi.assigneeId) {
@@ -526,6 +552,11 @@ export async function loadBoard(actor: Actor, projectId: string, perColumnLimit:
 export async function loadBoardColumn(actor: Actor, projectId: string, stateKey: string, offset: number, limit: number, filters: wfRepo.BoardFilters = {}) {
   await assertProjectVisible(actor, projectId);
   return wfRepo.loadBoardColumn(projectId, stateKey, offset, limit, filters);
+}
+
+export async function listBoardWorkflows(actor: Actor, projectId: string) {
+  await assertProjectVisible(actor, projectId);
+  return wfRepo.listBoardWorkflows(projectId);
 }
 
 /**

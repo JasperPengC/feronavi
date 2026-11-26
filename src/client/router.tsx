@@ -3,6 +3,7 @@ import { createRootRoute, createRoute, createRouter, Outlet, redirect, lazyRoute
 import type { RouterHistory } from "@tanstack/react-router";
 import { apiGet, ApiError } from "./lib/api.ts";
 import { authNavigationSearch } from "./lib/auth-navigation.ts";
+import { parsePlanningSearch, parseTableSearch } from "./lib/work-item-table-search.ts";
 import { RouteLoadError, RoutePending } from "./components/RouteFeedback.tsx";
 import { useCustomScrollbars } from "./lib/useCustomScrollbars.ts";
 import { WORKBENCH_GROUP_KEYS, type WorkbenchGroupKey } from "../shared/workbench.ts";
@@ -27,6 +28,7 @@ const WorkbenchPage = lazyRouteComponent(() => import("./routes/WorkbenchPage.ts
 const WorkbenchGroupPage = lazyRouteComponent(() => import("./routes/WorkbenchGroupPage.tsx"), "WorkbenchGroupPage");
 const AssistantPage = lazyRouteComponent(() => import("./routes/AssistantPage.tsx"), "AssistantPage");
 const TableViewPage = lazyRouteComponent(() => import("./routes/TableViewPage.tsx"), "TableViewPage");
+const TestManagementPage = lazyRouteComponent(() => import("./routes/TestManagementPage.tsx"), "TestManagementPage");
 const WorkflowConfigPage = lazyRouteComponent(() => import("./routes/WorkflowConfigPage.tsx"), "WorkflowConfigPage");
 const ProjectAutomationPage = lazyRouteComponent(() => import("./routes/ProjectAutomationPage.tsx"), "ProjectAutomationPage");
 const TokensPage = lazyRouteComponent(() => import("./routes/TokensPage.tsx"), "TokensPage");
@@ -156,6 +158,7 @@ const milestoneDetailRoute = createRoute({
 const milestonesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/projects/$projectId/milestones",
+  validateSearch: parsePlanningSearch,
   component: MilestonesPage,
 });
 
@@ -300,7 +303,14 @@ const tokensRoute = createRoute({
 const tableRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/projects/$projectId/table",
+  validateSearch: parseTableSearch,
   component: TableViewPage,
+});
+
+const testingRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/projects/$projectId/testing",
+  component: TestManagementPage,
 });
 
 const workbenchRoute = createRoute({
@@ -337,7 +347,7 @@ const publicIntakeRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute, setupRoute, loginRoute, changePasswordRoute, resetRoute, inviteRoute, publicIntakeRoute,
-  appRoute.addChildren([membersRoute, organizationAdminRoute, roleAdminRoute, changelogRoute, projectsRoute, projectOverviewRoute, issuesRoute, globalIssuesRoute, boardRoute, milestonesRoute, milestoneDetailRoute, calendarRoute, timelineRoute, tableRoute, workflowConfigRoute, projectAutomationRoute, wikiRoute, ideasRoute, insightRoute, activityRoute, importRoute, customFieldsRoute, adminAuditRoute, tokensRoute, systemRoute, settingsRoute, settingsPersonalRoute, settingsIntegrationsRoute, settingsInstanceRoute, portfoliosRoute, portfolioDetailRoute, focusRoute, announcementsRoute, intakeRoute, notificationsRoute, workbenchRoute, workbenchGroupRoute, assistantRoute]),
+  appRoute.addChildren([membersRoute, organizationAdminRoute, roleAdminRoute, changelogRoute, projectsRoute, projectOverviewRoute, issuesRoute, globalIssuesRoute, boardRoute, milestonesRoute, milestoneDetailRoute, calendarRoute, timelineRoute, tableRoute, testingRoute, workflowConfigRoute, projectAutomationRoute, wikiRoute, ideasRoute, insightRoute, activityRoute, importRoute, customFieldsRoute, adminAuditRoute, tokensRoute, systemRoute, settingsRoute, settingsPersonalRoute, settingsIntegrationsRoute, settingsInstanceRoute, portfoliosRoute, portfolioDetailRoute, focusRoute, announcementsRoute, intakeRoute, notificationsRoute, workbenchRoute, workbenchGroupRoute, assistantRoute]),
 ]);
 
 /**

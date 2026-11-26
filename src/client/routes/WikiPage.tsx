@@ -7,8 +7,8 @@
  *   3 版本历史可直接回滚，并说明回滚是**新增一个版本**（append-only），不是删除历史
  *   4 默认阅读 Markdown；编辑草稿显式保存，并保护切页和离开时的未保存内容。
  */
-import { useEffect, useRef, useState } from "react";
-import { Link, useBlocker, useParams, useSearch } from "@tanstack/react-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useBlocker, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { KnowledgePanel } from "../components/KnowledgePanel.tsx";
 import { CommentsPanel } from "./CommentsPanel.tsx";
 import { AttachmentsPanel } from "../components/work-item/AttachmentsPanel.tsx";
@@ -31,36 +31,43 @@ import type { TreeNode } from "../components/ui/Tree.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { useActor, useCan } from "../lib/actor.ts";
 import { useCollabDocument } from "../lib/collab-provider.ts";
+import { documentLinkIssues } from "../../shared/document-links.ts";
+import { markdownLinkIssueLabel } from "../../shared/markdown-links.ts";
+import { DocumentBreadcrumbs, DocumentOrganizeDialog, FolderContents, documentTrail, type PageRow } from "../components/wiki/DocumentStructure.tsx";
 
-interface PageRow {
-  id: string; title: string; slug: string; parentId: string | null;
-  visibility: "PROJECT" | "RESTRICTED"; sortOrder: number; currentRevisionId: string | null;
-  /** 接口**本来就返回**它（wiki.service 的 listPages 里选了 updatedAt），只是本类型此前没声明 */
-  updatedAt: string | null;
-}
 interface PageDetail extends PageRow { content: string; revisionNo: number; changeSummary: string | null }
 interface Revision { id: string; revisionNo: number; changeSummary: string | null; authorId: string; createdAt: string }
 interface Member { id: string; username: string; name: string; role_key: string | null; role_name: string | null }
 interface Permission { principalType: string; principalId: string; canRead: boolean; canWrite: boolean }
 interface PageDraft {
   pageId: string; title: string; content: string;
-  originalTitle: string; originalContent: string; revisionId: string | null;
+  originalTitle: string; originalContent: string; revisionId: string | null; structureVersion: number;
 }
 
 function draftFromPage(page: PageDetail): PageDraft {
   return { pageId: page.id, title: page.title, content: page.content,
-    originalTitle: page.title, originalContent: page.content, revisionId: page.currentRevisionId };
+    originalTitle: page.title, originalContent: page.content, revisionId: page.currentRevisionId, structureVersion: page.structureVersion };
 }
 
 export function WikiPage() {
   useLocale();   // 订阅语言，切换即时生效
   const { projectId } = useParams({ from: "/_app/projects/$projectId/wiki" });
   const { page: requestedPage } = useSearch({ from: "/_app/projects/$projectId/wiki" });
+  const navigate = useNavigate({ from: "/projects/$projectId/wiki" });
   const qc = useQueryClient();
   const actor = useActor();
   const canReindex = useCan("page:update_any");
   const [selected, setSelected] = useState<string | null>(requestedPage ?? null);
+  const selectionRoute = useRef({ projectId, page: requestedPage });
+  // 内部切页已检查未保存内容；同步地址时保留新建文档的编辑状态。
+  const updateSelection = useCallback((id: string | null, replace = false) => {
+    selectionRoute.current = { projectId, page: id ?? undefined };
+    setSelected(id);
+    void navigate({ search: { page: id ?? undefined }, replace, resetScroll: false, ignoreBlocker: true });
+  }, [navigate, projectId]);
   const [query, setQuery] = useState("");
+  const [archived, setArchived] = useState(false);
+  const [structureDialog, setStructureDialog] = useState<{ mode: "folder" | "organize"; target: PageRow | null } | null>(null);
   const [draft, setDraft] = useState<PageDraft | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [grantMember, setGrantMember] = useState("");
@@ -71,20 +78,31 @@ export function WikiPage() {
   const saveLock = useRef(false);
   const [editing, setEditing] = useState(false);
   const [directoryOpen, setDirectoryOpen] = useState(false);
+  const [wide, setWide] = useState(false);
   const [support, setSupport] = useState<"attachments" | "comments" | "history" | "access" | null>(null);
   const [ragOpen, setRagOpen] = useState(false);
   const dirty = editing && !!draft && (draft.title !== draft.originalTitle || draft.content !== draft.originalContent);
+  const draftContent = draft?.content ?? "";
+  const linkIssues = useMemo(() => editing ? documentLinkIssues(draftContent) : [], [editing, draftContent]);
   // 命令面板定位到命中的文档；导航前仍由下方 blocker 保护未保存内容。
   useEffect(() => {
+    if (selectionRoute.current.projectId === projectId && selectionRoute.current.page === requestedPage) return;
+    selectionRoute.current = { projectId, page: requestedPage };
     resetImages(); setSelected(requestedPage ?? null); setEditing(false); setDraft(null); setErr(null); setSupport(null);
   }, [projectId, requestedPage, resetImages]);
 
   const isSearch = query.trim().length > 0;
-  const tree = useQuery({
-    queryKey: ["wiki-tree", projectId, query, isSearch],
+  const directory = useQuery({
+    queryKey: ["wiki-tree", projectId, archived],
     queryFn: () => apiGet<{ pages: PageRow[] }>(
-      `/api/v1/projects/${projectId}/pages${isSearch ? `?q=${encodeURIComponent(query.trim())}` : ""}`),
+      `/api/v1/projects/${projectId}/pages${archived ? "?archived=true" : ""}`),
   });
+  const searchTree = useQuery({
+    queryKey: ["wiki-tree", projectId, archived, query],
+    queryFn: () => apiGet<{ pages: PageRow[] }>(`/api/v1/projects/${projectId}/pages?q=${encodeURIComponent(query.trim())}${archived ? "&archived=true" : ""}`),
+    enabled: isSearch,
+  });
+  const tree = isSearch ? searchTree : directory;
   const detail = useQuery({
     queryKey: ["wiki-page", selected],
     queryFn: () => apiGet<PageDetail>(`/api/v1/pages/${selected}`),
@@ -121,12 +139,12 @@ export function WikiPage() {
     if (save.isPending) return;
     if (id !== selected && !(await discardChanges())) return;
     if (id !== selected) {
-      images.reset(); setEditing(false); setDraft(null); setSupport(null); setErr(null); setSelected(id);
+      images.reset(); setEditing(false); setDraft(null); setSupport(null); setErr(null); updateSelection(id);
     }
     setDirectoryOpen(false);
   };
   const beginEditing = () => {
-    if (!detail.data || save.isPending) return;
+    if (!detail.data || save.isPending || detail.data.isArchived || detail.data.kind === "FOLDER") return;
     images.reset(); setDraft(draftFromPage(detail.data)); setEditing(true); setErr(null);
   };
   const cancelEditing = async () => {
@@ -147,10 +165,11 @@ export function WikiPage() {
   const onErr = (e: unknown, fallback: string) => setErr(e instanceof ApiError ? e.message : fallback);
 
   const create = useMutation({
-    mutationFn: () => apiPost<PageRow>(`/api/v1/projects/${projectId}/pages`, { title: tr("wk.untitledDoc"), content: "" }),
+    mutationFn: () => apiPost<PageRow>(`/api/v1/projects/${projectId}/pages`, { title: tr("wk.untitledDoc"), content: "",
+      parentId: detail.data?.kind === "FOLDER" && !detail.data.isArchived ? detail.data.id : null }),
     onSuccess: async (p) => {
-      setSelected(p.id);
-      setDraft({ pageId: p.id, title: p.title, content: "", originalTitle: p.title, originalContent: "", revisionId: p.currentRevisionId });
+      setArchived(false); updateSelection(p.id);
+      setDraft({ pageId: p.id, title: p.title, content: "", originalTitle: p.title, originalContent: "", revisionId: p.currentRevisionId, structureVersion: p.structureVersion });
       images.reset(); setEditing(true); setErr(null);
       setDirectoryOpen(false); setSupport(null); await invalidate();
     },
@@ -164,7 +183,7 @@ export function WikiPage() {
       if (draftImageTokens(submitted.content).length) throw new Error("正文包含尚未上传的图片，请重新插入图片后保存");
       await collab.flush();
       const published = await apiPost<{ page: PageRow & { revisionNo: number; content: string }; publishedRevisionId: string; indexing: { status: string; message?: string } }>(`/api/v1/collaboration/rooms/PAGE/${submitted.pageId}/publish`, {
-        title: submitted.title,
+        ...(submitted.title !== submitted.originalTitle ? { title: submitted.title, expectedStructureVersion: submitted.structureVersion } : {}),
         expectedRevisionId: collab.baseRevisionId ?? submitted.revisionId,
         userConfirmed: true,
         changeSummary: "Wiki 协作草稿发布",
@@ -192,7 +211,7 @@ export function WikiPage() {
     onSettled: () => { saveLock.current = false; },
   });
   const submitDraft = () => {
-    if (!draft || !dirty || !draft.title.trim() || saveLock.current || save.isPending || !collab.readyToEdit || uploadingImage) return;
+    if (!draft || !dirty || !draft.title.trim() || saveLock.current || save.isPending || !collab.readyToEdit || uploadingImage || linkIssues.length) return;
     saveLock.current = true; save.mutate(draft);
   };
 
@@ -216,7 +235,7 @@ export function WikiPage() {
 
   const remove = useMutation({
     mutationFn: () => apiDelete(`/api/v1/pages/${selected}`),
-    onSuccess: async () => { setSelected(null); setDraft(null); setEditing(false); await invalidate(); },
+    onSuccess: async () => { updateSelection(null, true); setDraft(null); setEditing(false); await invalidate(); },
     onError: (e) => onErr(e, tr("wk.deleteFailed")),
   });
 
@@ -226,22 +245,38 @@ export function WikiPage() {
     onError: (e) => onErr(e, tr("wk.grantFailed")),
   });
 
+  const archive = useMutation({
+    mutationFn: (target: PageDetail) => apiPatch<PageDetail>(`/api/v1/pages/${target.id}/structure`, {
+      archived: !target.isArchived, expectedStructureVersion: target.structureVersion,
+    }),
+    onSuccess: async page => { setErr(null); setArchived(page.isArchived); qc.setQueryData(["wiki-page", page.id], page); await invalidate(page.id); },
+    onError: e => onErr(e, tr("wk.saveFailed")),
+  });
+
+  const allPages = directory.data?.pages ?? [];
   const pages = tree.data?.pages ?? [];
 
   // 照原型：右栏默认显示**第一篇文档正文**（原型一进页面右栏就有内容，我此前是空白提示）
   useEffect(() => {
-    if (!selected && pages.length > 0) setSelected(pages[0]!.id);
-  }, [pages, selected]);
+    if (!selected && pages.length > 0) updateSelection(pages[0]!.id, true);
+  }, [pages, selected, updateSelection]);
 
   const roots = pages.filter((p) => !p.parentId);
   const childrenOf = (id: string) => pages.filter((p) => p.parentId === id);
   // 共享 Tree（a11y：role=tree/treeitem + 展开收起 + 键盘）；默认全部收起
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set<string>());
+  useEffect(() => {
+    const nodes = directory.data?.pages ?? [];
+    const current = nodes.find(page => page.id === selected);
+    if (!current) return;
+    const parents = documentTrail(current, nodes).slice(0, -1).map(page => page.id);
+    setExpandedIds(previous => parents.every(id => previous.has(id)) ? previous : new Set([...previous, ...parents]));
+  }, [directory.data, selected]);
   const toggleExpanded = (id: string) => setExpandedIds((prev) => {
     const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next;
   });
   const toTreeNode = (page: PageRow, ancestors = new Set<string>()): TreeNode => ({
-    id: page.id, label: page.title,
+    id: page.id, label: <span className="wiki-tree-label"><Icon name={page.kind === "FOLDER" ? "folder" : "file"} size={15} /><span>{page.title}</span></span>,
     extra: page.visibility === "RESTRICTED" ? <span className="tag tag-warning">{tr("wk.restricted")}</span> : undefined,
     children: isSearch ? [] : childrenOf(page.id).filter((child) => !ancestors.has(child.id))
       .map((child) => toTreeNode(child, new Set([...ancestors, page.id]))),
@@ -257,14 +292,19 @@ export function WikiPage() {
       <PageHead title={tr("nav.knowledge")}
         actions={<>
           <Button size="sm" className="wiki-directory-toggle" aria-expanded={directoryOpen} aria-controls="wiki-directory"
-            onClick={() => setDirectoryOpen((value) => !value)}><Icon name="list" size={14} />{tr("wk.contents")}</Button>
+            onClick={() => { setWide(false); setDirectoryOpen((value) => !value); }}><Icon name="list" size={14} />{tr("wk.contents")}</Button>
+          <Button size="sm" aria-pressed={wide} onClick={() => setWide(value => !value)}>{tr(wide ? "wk.standardWidth" : "wk.fullWidth")}</Button>
           <Button size="sm" variant={ragOpen ? "primary" : "secondary"} aria-expanded={ragOpen} aria-controls="wiki-knowledge"
-            onClick={() => setRagOpen((value) => !value)}><Icon name="book" size={14} />{tr("kn.indexTitle")}</Button>
+            disabled={detail.data?.kind === "FOLDER" || detail.data?.isArchived}
+            onClick={() => { setWide(false); setRagOpen((value) => !value); }}><Icon name="book" size={14} />{tr("kn.indexTitle")}</Button>
           <Button size="sm" variant="primary" loading={create.isPending} disabled={save.isPending} onClick={async () => {
             if (await discardChanges()) create.mutate();
           }}><Icon name="plus" size={14} />{tr("wk.new")}</Button>
+          <Button size="sm" disabled={save.isPending || archived} onClick={async () => {
+            if (await discardChanges()) setStructureDialog({ mode: "folder", target: detail.data?.isArchived ? null : detail.data ?? null });
+          }}><Icon name="folder" size={14} />{tr("wk.newFolder")}</Button>
         </>} />
-      <div className="wiki-layout" data-rag-open={ragOpen ? "true" : "false"} data-directory-open={directoryOpen ? "true" : "false"}>
+      <div className="wiki-layout" data-wide={wide ? "true" : "false"} data-rag-open={ragOpen ? "true" : "false"} data-directory-open={directoryOpen ? "true" : "false"}>
       {/* 左：树 + 检索 */}
       <aside className="wiki-directory" id="wiki-directory" aria-label={tr("wk.contents")}>
         {/* 照原型：搜索行在**面板内**（原型第一个面板 y=220 = 页头底 195 + 24，
@@ -272,9 +312,13 @@ export function WikiPage() {
         <div className="wiki-tree-panel">
           <div className="wiki-directory-head">
             <h2>{tr("wk.contents")}</h2>
-            {tree.isSuccess && <span>{tr("wk.documentsCount", { n: String(pages.length) })}</span>}
+            {tree.isSuccess && <span>{tr("wk.directoryCount", { documents: String(pages.filter(page => page.kind !== "FOLDER").length), folders: String(pages.filter(page => page.kind === "FOLDER").length) })}</span>}
           </div>
           <div className="wiki-directory-search">
+            <div className="wiki-directory-tabs" role="group" aria-label={tr("wk.contents")}>
+              {[false, true].map(value => <Button key={String(value)} size="sm" variant={archived === value ? "secondary" : "ghost"} aria-pressed={archived === value}
+                onClick={async () => { if (value !== archived && await discardChanges()) { setArchived(value); updateSelection(null, true); setEditing(false); setDraft(null); setQuery(""); setSupport(null); } }}>{tr(value ? "wk.archived" : "wk.activeDocuments")}</Button>)}
+            </div>
             <TextInput placeholder={tr("wiki.searchPlaceholder")} aria-label={tr("wiki.searchLabel")} value={query}
               onChange={(e) => setQuery(e.target.value)} />
           </div>
@@ -328,9 +372,10 @@ export function WikiPage() {
 
         {selected && detail.data && (
           <>
-            <article className="wiki-edit-panel" aria-label={detail.data.title} aria-busy={save.isPending} data-editing={editing ? "true" : "false"}>
+            <DocumentBreadcrumbs page={detail.data} pages={allPages} onSelect={id => { void selectPage(id); }} />
+            <article className="wiki-edit-panel" aria-label={detail.data.title} aria-busy={save.isPending} data-kind={detail.data.kind} data-editing={editing ? "true" : "false"}>
               <div className="wiki-document-toolbar">
-                <span className="wiki-document-state">{save.isPending ? tr("common.saving") : editing ? (dirty ? tr("wk.unsaved") : tr("wk.editingHint")) : tr("wk.reading")}</span>
+                <span className="wiki-document-state">{save.isPending ? tr("common.saving") : editing ? (dirty ? tr("wk.unsaved") : tr("wk.editingHint")) : tr(detail.data.kind === "FOLDER" ? "wk.folder" : "wk.reading")}</span>
                 {editing && <span className={`status-pill ${collab.status === "ready" ? "dot-green" : collab.status === "error" ? "dot-amber" : "dot-blue"}`} aria-live="polite">
                   {tr(`wk.collab.${collab.status}`)}
                 </span>}
@@ -338,9 +383,13 @@ export function WikiPage() {
                 <div className="wiki-primary-actions">
                   {editing ? <>
                     <Button size="sm" onClick={() => { void cancelEditing(); }} disabled={save.isPending}>{tr("wk.cancelEdit")}</Button>
-                    <Button size="sm" variant="primary" loading={save.isPending} disabled={!dirty || !draft?.title.trim() || !collab.readyToEdit || uploadingImage}
+                    <Button size="sm" variant="primary" loading={save.isPending} disabled={!dirty || !draft?.title.trim() || !collab.readyToEdit || uploadingImage || linkIssues.length > 0}
                       onClick={submitDraft}><Icon name="check" size={14} />{tr("wk.saveChanges")}</Button>
-                  </> : <Button size="sm" variant="primary" disabled={save.isPending} onClick={beginEditing}>{tr("wk.edit")}</Button>}
+                  </> : <>
+                    {!detail.data.isArchived && <Button size="sm" onClick={() => setStructureDialog({ mode: "organize", target: detail.data! })}>{tr("wk.organize")}</Button>}
+                    {!detail.data.isArchived && detail.data.kind !== "FOLDER" && <Button size="sm" variant="primary" disabled={save.isPending} onClick={beginEditing}>{tr("wk.edit")}</Button>}
+                    {detail.data.isArchived && detail.data.archivedAt && <Button size="sm" loading={archive.isPending} onClick={() => archive.mutate(detail.data!)}>{tr("wk.restoreFolder")}</Button>}
+                  </>}
                 </div>
               </div>
               <div className="wiki-doc-head">
@@ -351,11 +400,18 @@ export function WikiPage() {
                   <span className={`status-pill ${visibleStatus ? "dot-amber" : "dot-blue"}`}>
                     {visibleStatus ? tr("wk.restricted2") : tr("wk.projectVisible")}
                   </span>
-                  <span>{tr("wk.revisionNo", { n: String(detail.data.revisionNo) })}</span>
+                  <span>{detail.data.kind === "FOLDER" ? tr("wk.folder") : tr("wk.revisionNo", { n: String(detail.data.revisionNo) })}</span>
+                  {detail.data.isArchived && <span className="tag">{tr("wk.archived")}</span>}
                   {detail.data.updatedAt && <span>{new Date(detail.data.updatedAt).toLocaleString()}</span>}
                 </div>
               </div>
-              {editing && draft ? <MarkdownEditor key={draft.pageId} label={tr("wiki.bodyLabel")} rows={16} className="wiki-markdown-editor" disabled={save.isPending || !collab.readyToEdit}
+              {detail.data.isArchived && <p className="alert wiki-archive-notice">{tr(detail.data.archivedAt ? "wk.archivedHint" : "wk.inheritedArchiveHint")}</p>}
+              {editing && linkIssues.length > 0 && <div className="alert alert-warning wiki-link-feedback" role="status">
+                <strong>有 {linkIssues.length} 处链接需要修正</strong>
+                <ul>{linkIssues.slice(0, 3).map((issue, index) => <li key={`${issue.line}-${index}`}>第 {issue.line} 行：{markdownLinkIssueLabel(issue.reason)} <code>{issue.url}</code></li>)}</ul>
+                <p>请使用平台文档、附件或仓库网页地址。只需展示文件路径时，将它放入行内代码或代码块。</p>
+              </div>}
+              {detail.data.kind === "FOLDER" ? <FolderContents pages={allPages.filter(page => page.parentId === selected)} onSelect={id => { void selectPage(id); }} /> : editing && draft ? <MarkdownEditor key={draft.pageId} label={tr("wiki.bodyLabel")} rows={16} className="wiki-markdown-editor" disabled={save.isPending || !collab.readyToEdit}
                   imageTarget={{ type: "PAGE", id: draft.pageId }}
                   value={draft.content} images={images} onChange={(content) => { collab.setContent(content); setDraft((current) => current ? { ...current, content } : current); }}
                   onKeyDown={(event) => {
@@ -363,20 +419,24 @@ export function WikiPage() {
                       event.preventDefault(); submitDraft();
                     }
                   }} placeholder={tr("wk.bodyPlaceholder")} /> : <div className="wiki-reading-body">
-                {detail.data.content.trim() ? <MarkdownView text={detail.data.content} /> : <p className="muted">{tr("wk.previewEmpty")}</p>}
+                {detail.data.content.trim() ? <MarkdownView text={detail.data.content} documentTitle={detail.data.title} /> : <p className="muted">{tr("wk.previewEmpty")}</p>}
               </div>}
             <div className="wiki-support-nav" role="group" aria-label={tr("wk.documentOptions")}>
-              {(["comments", "attachments", "history", "access"] as const).map((section) => (
+              {(["comments", "attachments", "history", "access"] as const).filter(section =>
+                detail.data?.kind === "FOLDER" ? section === "access" : detail.data?.isArchived ? section !== "access" : true).map((section) => (
                 <Button key={section} size="sm" variant={support === section ? "secondary" : "ghost"}
                   aria-expanded={support === section} aria-controls={`wiki-support-${section}`}
                   onClick={() => setSupport((current) => current === section ? null : section)}>
                   {tr(section === "history" ? "wk.versions" : `wk.${section}`)}
                 </Button>
               ))}
-              <details className="wiki-more-actions">
+              <details key={`${selected}-${detail.data.structureVersion}`} className="wiki-more-actions">
                 <summary aria-label={tr("wk.documentOptions")}><Icon name="more" size={16} /></summary>
                 <div>
                   <Button size="sm" variant="ghost" disabled={save.isPending} onClick={() => { void reload(); }}>{tr("wk.reload")}</Button>
+                  {!detail.data.isArchived && <Button size="sm" variant="ghost" disabled={editing || archive.isPending} onClick={async () => {
+                    if (await confirmDialog(tr("wk.archiveHint"))) archive.mutate(detail.data!);
+                  }}><Icon name="archive" size={14} />{tr("wk.archive")}</Button>}
                   <Button size="sm" variant="danger" disabled={remove.isPending || save.isPending} onClick={async () => {
                     if (await discardChanges() && await confirmDialog(tr("wk.deleteConfirm"), { danger: true })) remove.mutate();
                   }}><Icon name="trash" size={14} />{tr("wk.delete")}</Button>
@@ -388,7 +448,7 @@ export function WikiPage() {
               <section className="wiki-support-panel" id="wiki-support-access" aria-label={tr("wk.access")}>
                 <div className="wiki-access-head">
                   <h3>{tr("wk.access")}</h3>
-                  <Button size="sm" disabled={editing || setVisibility.isPending}
+                  <Button size="sm" disabled={editing || setVisibility.isPending || detail.data.kind === "FOLDER" || detail.data.isArchived}
                     onClick={() => setVisibility.mutate(visibleStatus ? "PROJECT" : "RESTRICTED")}>
                     {visibleStatus ? tr("wk.toProjectVisible") : tr("wk.toRestricted")}
                   </Button>
@@ -452,7 +512,7 @@ export function WikiPage() {
                     <span className="muted">{new Date(r.createdAt).toLocaleString()}</span>
                     <span>
                       {r.revisionNo !== detail.data!.revisionNo && (
-                        <Button size="sm" disabled={restore.isPending} onClick={async () => {
+                        <Button size="sm" disabled={restore.isPending || detail.data?.isArchived} onClick={async () => {
                           if (await discardChanges() && await confirmDialog(tr("wk.rollbackHint"))) {
                             images.reset(); setEditing(false); restore.mutate(r.id);
                           }
@@ -464,25 +524,27 @@ export function WikiPage() {
               </div>
               {revisions.isSuccess && revisions.data.revisions.length === 0 && <p className="muted">{tr("wk.noRevisions")}</p>}
             </section>}
-            <section className="wiki-support-panel wiki-bottom-panels" hidden={support !== "attachments"} id="wiki-support-attachments" aria-label={tr("wk.attachments")}>
-              <AttachmentsPanel key={selected} targetType="PAGE" targetId={selected} />
+            {detail.data.kind !== "FOLDER" && <><section className="wiki-support-panel wiki-bottom-panels" hidden={support !== "attachments"} id="wiki-support-attachments" aria-label={tr("wk.attachments")}>
+              <AttachmentsPanel key={selected} targetType="PAGE" targetId={selected} readOnly={detail.data.isArchived} />
             </section>
             <section className="wiki-support-panel wiki-bottom-panels" hidden={support !== "comments"} id="wiki-support-comments" aria-label={tr("wk.comments")}>
-              <CommentsPanel key={selected} targetType="PAGE" targetId={selected} />
-            </section>
+              <CommentsPanel key={selected} targetType="PAGE" targetId={selected} readOnly={detail.data.isArchived} />
+            </section></>}
             </article>
           </>
         )}
       </div>
 
       {/* 文档页只维护当前文档索引；对话在独立知识助手中进行。 */}
-      {ragOpen && (
+      {ragOpen && detail.data?.kind !== "FOLDER" && !detail.data?.isArchived && (
         <aside className="wiki-rag-column" id="wiki-knowledge" aria-label={tr("kn.indexTitle")}>
           <KnowledgePanel projectId={projectId} pageId={detail.data?.id} revisionId={detail.data?.currentRevisionId}
             canReindex={canReindex} indexOnly />
         </aside>
       )}
     </div>
+    {structureDialog && <DocumentOrganizeDialog {...structureDialog} pages={allPages} projectId={projectId}
+      onClose={() => setStructureDialog(null)} onSuccess={async page => { setEditing(false); setDraft(null); setSupport(null); updateSelection(page.id); await invalidate(page.id); }} />}
     </div>
   );
 }

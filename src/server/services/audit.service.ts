@@ -18,7 +18,7 @@ import { can, type PermissionContext } from "../permission/engine.ts";
 /** changes 允许写入的键（白名单，第 2.6 节「审计与个人数据分离」） */
 const CHANGES_ALLOWED = new Set([
   "statusId", "statusKey", "priority", "severity", "type", "assigneeId",
-  "milestoneId", "iterationId", "releaseId", "moduleId", "roleId", "projectId",
+  "milestoneId", "iterationId", "releaseId", "moduleId", "productId", "roleId", "projectId",
   // 功能开关的 key 是稳定标识（非 PII）；audit_entry.target_id 是 uuid，不能塞 key
   "flagKey",
   "projectId", "teamId", "workflowId", "dueDate", "startDate", "estimatePoints",

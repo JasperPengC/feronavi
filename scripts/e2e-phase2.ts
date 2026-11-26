@@ -120,6 +120,11 @@ try {
   ok("工作台返回 4 个分组", wb.groups.length === 4, String(wb.groups.length));
   const assigned = wb.groups.find((g) => g.key === "assignedToMe");
   ok("「指派给我的」有内容", (assigned?.count ?? 0) >= 1, String(assigned?.count));
+  const assignedItem = assigned?.items.find((item) => item.id === d1.id);
+  const detailStatus = await wiService.getWorkItem(actor, d1.id);
+  ok("工作台返回与详情一致的状态名称、键和分类", !!assignedItem
+    && assignedItem.statusName === detailStatus.statusName && assignedItem.statusKey === detailStatus.statusKey
+    && assignedItem.statusCategory === detailStatus.statusCategory);
   const overdue = wb.groups.find((g) => g.key === "overdue");
   ok("「已逾期」分组存在", overdue !== undefined);
 

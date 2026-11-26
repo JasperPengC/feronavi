@@ -23,6 +23,7 @@ import { WorkItemDrawer } from "../components/work-item/DeferredWorkItemDrawer.t
 import { ProjectMembersDrawer } from "../components/ProjectMembersDrawer.tsx";
 import { firstGrapheme } from "../lib/first-grapheme.ts";
 import { ProjectSettingsDrawer } from "../components/project/ProjectSettingsDrawer.tsx";
+import { ProductsPanel } from "../components/project/ProductsPanel.tsx";
 import { useCan } from "../lib/actor.ts";
 
 interface ProjectItem {
@@ -87,6 +88,7 @@ export function ProjectOverviewPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [productsOpen, setProductsOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
   const loading = projects.isLoading;
   return (
@@ -95,6 +97,8 @@ export function ProjectOverviewPage() {
         sub={project ? <span className="po-header-meta"><span>{project.key}</span>{project.status && <span>{project.status.name}</span>}</span> : undefined}
         actions={
           <div className="project-overview-actions">
+            <LinkButton variant="ghost" to="/projects/$projectId/testing" params={{ projectId }}>{t("nav.testing")}</LinkButton>
+            <Button variant="ghost" onClick={() => setProductsOpen(true)}>{t("product.title")}</Button>
             {canManage && <Button variant="ghost" onClick={() => setSettingsOpen(true)}>{t("po.settings")}</Button>}
             {canCreate && <Button variant="primary" onClick={() => setCreateOpen(true)}>{t("wie.create")}</Button>}
           </div>
@@ -117,8 +121,7 @@ export function ProjectOverviewPage() {
 
           <div className="dashboard-grid">
             <div>
-              <Panel>
-                <strong style={{ fontSize: "var(--text-sm)" }}>{t("po.info")}</strong>
+              <Panel title={t("po.info")}>
                 <dl className="po-info-grid">
                   <dt>{t("po.status")}</dt><dd>{project.status?.name ?? "—"}</dd>
                   <dt>{t("po.lead")}</dt><dd>{project.lead?.name ?? "—"}</dd>
@@ -134,12 +137,9 @@ export function ProjectOverviewPage() {
                 </details>}
               </Panel>
 
-              <Panel style={{ marginTop: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <strong style={{ fontSize: "var(--text-sm)" }}>{t("po.activity")}</strong>
-                  <span style={{ flex: 1 }} />
-                  <ArrowLink to="/projects/$projectId/activity" params={{ projectId }}>{t("po.viewAll")}</ArrowLink>
-                </div>
+              <Panel title={t("po.activity")} actions={
+                <ArrowLink to="/projects/$projectId/activity" params={{ projectId }}>{t("po.viewAll")}</ArrowLink>
+              }>
                 {activity.isLoading && <StateBlock kind="loading" title={t("common.loading")} />}
                 {activity.isError && <StateBlock kind="error" title={t("common.loadFailedShort")} action={() => void activity.refetch()} actionLabel={t("common.reload")} />}
                 {activity.isSuccess && (activity.data ?? []).length === 0 && <p className="muted" style={{ fontSize: "var(--text-sm)" }}>{t("po.noActivity")}</p>}
@@ -155,8 +155,9 @@ export function ProjectOverviewPage() {
             </div>
 
             <div>
-              <Panel>
-                <strong style={{ fontSize: "var(--text-sm)" }}>{t("po.upcoming")}</strong>
+              <Panel title={t("po.upcoming")} actions={
+                <ArrowLink to="/projects/$projectId/milestones" params={{ projectId }}>{t("po.viewAll")}</ArrowLink>
+              }>
                 {milestones.isLoading && <StateBlock kind="loading" title={t("common.loading")} />}
                 {milestones.isError && <StateBlock kind="error" title={t("common.loadFailedShort")} action={() => void milestones.refetch()} actionLabel={t("common.reload")} />}
                 {milestones.isSuccess && upcoming.length === 0 && <p className="muted" style={{ fontSize: "var(--text-sm)" }}>{t("po.noMilestones")}</p>}
@@ -168,14 +169,11 @@ export function ProjectOverviewPage() {
                     </li>
                   ))}
                 </ul>
-                <ArrowLink to="/projects/$projectId/milestones" params={{ projectId }}>{t("po.viewAll")}</ArrowLink>
               </Panel>
 
-              <Panel style={{ marginTop: 12 }}>
-                <div className="po-members-head">
-                  <strong style={{ fontSize: "var(--text-sm)" }}>{t("po.membersTitle")}</strong>
-                  {canManageMembers && <Button size="sm" variant="ghost" onClick={() => setMembersOpen(true)}>{t("pm.title")}</Button>}
-                </div>
+              <Panel title={t("po.membersTitle")} actions={
+                canManageMembers && <Button size="sm" variant="ghost" onClick={() => setMembersOpen(true)}>{t("pm.title")}</Button>
+              }>
                 {members.isLoading && <StateBlock kind="loading" title={t("common.loading")} />}
                 {members.isError && <StateBlock kind="error" title={t("common.loadFailedShort")} action={() => void members.refetch()} actionLabel={t("common.reload")} />}
                 {members.isSuccess && (members.data ?? []).length === 0 && <p className="muted" style={{ fontSize: "var(--text-sm)" }}>{t("pm.empty")}</p>}
@@ -198,6 +196,7 @@ export function ProjectOverviewPage() {
       <WorkItemDrawer workItemId={createdId} onClose={() => setCreatedId(null)} />
       <ProjectMembersDrawer project={project && membersOpen ? project : null} onClose={() => setMembersOpen(false)} />
       {project && <ProjectSettingsDrawer open={settingsOpen} project={project} onClose={() => setSettingsOpen(false)} onSaved={() => void projects.refetch()} />}
+      {project && <ProductsPanel open={productsOpen} projectId={projectId} canCreate={canManage} onClose={() => setProductsOpen(false)} />}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { RagChatResult } from "./rag.ts";
+import type { AgentExecutionSummary } from "./agent-execution.ts";
 import {ragReferencesShape,type RagReferences} from "./rag.ts";
 
 export const ragConversationCreateSchema = z.object({ projectId: z.string().uuid().optional(), title: z.string().trim().min(1).max(120).optional() }).strict();
@@ -9,6 +10,13 @@ export const ragConversationDetailSchema = z.object({ before: z.string().uuid().
 export const ragMessageCreateSchema = z.object({ requestId: z.string().uuid(), question: z.string().trim().min(1).max(1000),...ragReferencesShape }).strict();
 export const ragConversationIdSchema = z.object({ conversationId: z.string().uuid() }).strict();
 export const ragRequestIdSchema = ragConversationIdSchema.extend({ requestId: z.string().uuid() });
+export const ragExecutionProposeSchema = z.object({
+  requestId: z.string().uuid(), title: z.string().trim().min(1).max(1000),
+  steps: z.array(z.object({ toolName: z.string().min(1).max(120), parameters: z.record(z.string(), z.json()) }).strict()).min(1).max(10),
+}).strict();
+export const ragExecutionReviseSchema = z.object({ replacementId: z.string().uuid(), parameters: z.record(z.string(), z.json()) }).strict();
+export type RagExecutionPropose = z.infer<typeof ragExecutionProposeSchema>;
+export type RagExecutionRevise = z.infer<typeof ragExecutionReviseSchema>;
 export type RagConversationCreate = z.infer<typeof ragConversationCreateSchema>;
 export type RagConversationUpdate = z.infer<typeof ragConversationUpdateSchema>;
 export type RagConversationListInput = z.infer<typeof ragConversationListSchema>;
@@ -26,6 +34,7 @@ export interface RagMessage {
 export interface RagConversationList { items: RagConversation[]; total: number; page: number; pageSize: number }
 export interface RagConversationDetail { conversation: RagConversation; messages: RagMessage[]; hasMore: boolean }
 export interface RagMessageResult { conversation: RagConversation; message: RagMessage }
+export interface RagExecutionResult extends RagMessageResult { execution: AgentExecutionSummary }
 
 export const ragActionDecisionSchema = z.object({ decision: z.enum(["confirm", "reject"]) }).strict();
 export const ragActionIdSchema = ragRequestIdSchema.extend({ actionId: z.string().uuid() });

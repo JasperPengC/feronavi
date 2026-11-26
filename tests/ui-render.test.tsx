@@ -234,7 +234,8 @@ describe("看板", () => {
     expect(screen.getByText("待办")).toBeTruthy();
     expect(screen.getByText("DEMO-1")).toBeTruthy();
     expect(screen.getByText("第一个工作项")).toBeTruthy();
-    expect(screen.getByText(/优先级 高/)).toBeTruthy();
+    expect(screen.getByText('高').getAttribute('data-kind')).toBe('priority');
+    expect(screen.getByText('高').getAttribute('data-tone')).toBe('warning');
     // 空列必须出现（用户要看到「这一列现在是空的」，而不是那一列消失）
     expect(screen.getByText("已完成")).toBeTruthy();
     expect(screen.getByText("暂无工作项")).toBeTruthy();

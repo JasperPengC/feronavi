@@ -18,6 +18,7 @@ export interface Actor {
   locale: string;
   /** 账号主题偏好：外壳启动时应用（服务端 /auth/me 返回） */
   theme: string | null;
+  density?: string | null;
   timezone: string | null;
 }
 

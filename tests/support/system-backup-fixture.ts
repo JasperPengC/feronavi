@@ -27,6 +27,7 @@ export async function backupFixture(
     datasetRows?: Record<string, Record<string, unknown>[]>;
     blobContents?: Buffer[];
     sourceMasterKey?: Buffer;
+    omitDatasets?: string[];
   } = {},
 ) {
   const suffix = randomUUID();
@@ -43,7 +44,7 @@ export async function backupFixture(
       ),
     ]),
   );
-  const datasets = orderedDatasets(options.mode ?? "safe").map((dataset) => ({
+  const datasets = orderedDatasets(options.mode ?? "safe").filter(dataset => !options.omitDatasets?.includes(dataset.name)).map((dataset) => ({
     name: dataset.name,
     schemaVersion: 1,
     path: `data/${dataset.name}.jsonl`,
@@ -52,7 +53,7 @@ export async function backupFixture(
     sha256: createHash("sha256")
       .update(contents.get(dataset.name)!)
       .digest("hex"),
-    dependsOn: [...dataset.dependsOn],
+    dependsOn: dataset.dependsOn.filter(name => !options.omitDatasets?.includes(name)),
   }));
   if (options.datasetContent)
     Object.assign(datasets[0]!, {
@@ -138,7 +139,7 @@ export async function backupFixture(
       Buffer.from(JSON.stringify(header)),
       encrypted,
     );
-    return { path: outer, manifest, header };
+    return { path: outer, innerPath: inner, manifest, header };
   } finally {
     dataKey.fill(0);
   }

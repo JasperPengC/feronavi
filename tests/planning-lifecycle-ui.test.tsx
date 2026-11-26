@@ -2,8 +2,10 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PlanningEntitiesPanel } from "../src/client/components/project/PlanningEntitiesPanel.tsx";
+import { ActorContext, type Actor } from "../src/client/lib/actor.ts";
 import { DialogHost } from "../src/client/components/Dialog.tsx";
 import { setLocale } from "../src/client/i18n/index.ts";
+import { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } from "@tanstack/react-router";
 
 const clients: QueryClient[] = [];
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
@@ -15,7 +17,8 @@ function mount(handler: Handler, kind: "iteration" | "release" = "iteration") {
   vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => handler(new URL(String(input), "http://localhost"), init)));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   clients.push(client);
-  render(<QueryClientProvider client={client}><PlanningEntitiesPanel projectId="p1" initialKind={kind} showTabs={false} /><DialogHost /></QueryClientProvider>);
+  const router = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory({ initialEntries: ["/"] }) });
+  render(<RouterContextProvider router={router}><QueryClientProvider client={client}><ActorContext.Provider value={{ permissions: ["iteration:manage", "release:manage", "module:manage"] } as Actor}><PlanningEntitiesPanel projectId="p1" initialKind={kind} showTabs={false} /><DialogHost /></ActorContext.Provider></QueryClientProvider></RouterContextProvider>);
   return client;
 }
 const row = (name: string) => within(screen.getByText(name, { selector: ".row-name" }).closest("li")!);
@@ -97,6 +100,7 @@ it("版本完成期间阻止关闭和重复提交，服务端拒绝后可重试�
   let finish: ((response: Response) => void) | undefined;
   let writes = 0, completed = false;
   mount((url) => {
+    if (url.pathname.includes("/delivery/releases/")) return json({releaseId:"release",completedAt:null,candidate:null,passed:true,checks:[],verification:null,feedback:[]});
     if (url.pathname.endsWith("/complete")) {
       writes++;
       if (writes === 1) return new Promise(resolve => { finish = resolve; });
@@ -108,6 +112,7 @@ it("版本完成期间阻止关闭和重复提交，服务端拒绝后可重试�
   await screen.findByText("首个版本");
   fireEvent.click(row("首个版本").getByRole("button", { name: "完成版本", exact: true }));
   const dialog = await screen.findByRole("dialog", { name: "完成版本 · 首个版本" });
+  await waitFor(() => expect((within(dialog).getByRole("button", { name: "完成版本", exact: true }) as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(within(dialog).getByRole("button", { name: "完成版本", exact: true }));
   await waitFor(() => expect(writes).toBe(1));
   fireEvent.keyDown(dialog, { key: "Escape" });

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 assert.match(new URL(process.env.DATABASE_URL ?? "postgres://invalid/").pathname.slice(1), /^feronavi_test_[a-f0-9]{32}$/u);
 await (await import("../../src/server/application/bootstrap-business-effects.ts")).bootstrapBusinessEffects();
 const { db, sql } = await import("../../src/db/index.ts");
-const { member, role, roleAssignment, workItem } = await import("../../src/db/schema.ts");
+const { member, role, roleAssignment, workItem, workflowState } = await import("../../src/db/schema.ts");
 const { eq } = await import("drizzle-orm");
 const { loadActor } = await import("../../src/server/auth/actor-loader.ts");
 const { createProject } = await import("../../src/server/services/project.service.ts");
@@ -31,7 +31,6 @@ try {
 
   const overview = await service.workbench(actor);
   const { validatedToolOutput } = await import("../../src/server/application/tool-contracts.ts");
-  validatedToolOutput({ name: "workbench.get" }, overview);
   assert.equal(overview.groups[0]?.count, 65);
   assert.equal(overview.groups[1]?.count, 65);
   assert.equal(overview.groups[2]?.count, 33);
@@ -52,5 +51,26 @@ try {
   assert.equal(soon.count, 32);
   assert.deepEqual(soon.items.map((item) => item.id).sort(), ids.slice(33).sort());
   assert.equal((await service.workbenchGroup(actor, "createdByMe", { page: 3, pageSize: 50 })).items.length, 0);
+  const [firstItem] = await db.select().from(workItem).where(eq(workItem.id, ids[0]!));
+  assert.ok(firstItem);
+  const [closed] = await db.insert(workflowState).values({ workflowId: firstItem.workflowId, key: "CUSTOM_ARCHIVED", name: "自定义终态", category: "TERMINAL", color: "gray" }).returning();
+  assert.ok(closed);
+  await db.update(workItem).set({ statusId: closed.id }).where(eq(workItem.projectId, project.id));
+  for (const category of ["TERMINAL", "DONE", "CANCELLED"]) {
+    await db.update(workflowState).set({ category }).where(eq(workflowState.id, closed.id));
+    assert.equal((await service.workbenchGroup(actor, "overdue")).count, 0, `${category}不能成为逾期工作`);
+    assert.equal((await service.workbenchGroup(actor, "dueSoon")).count, 0, `${category}不能成为临期工作`);
+  }
+  assert.equal((await service.workbenchGroup(actor, "assignedToMe")).count, 65, "历史指派项仍保留");
+  await db.update(workItem).set({ statusId: firstItem.statusId, dueDate: null }).where(eq(workItem.id, firstItem.id));
+  const reopened = await service.workbench(actor);
+  const attention = (reopened as unknown as { attentionItems: { id: string }[] }).attentionItems;
+  assert.deepEqual(attention.map(x => x.id), [firstItem.id], "最早的未完成任务不能被八条新终态预览挤掉");
+  assert.equal((await service.workbench(outsider) as unknown as { attentionItems: unknown[] }).attentionItems.length, 0, "关注列表遵守项目范围");
+  await db.update(workItem).set({ dueDate: dates.soon }).where(eq(workItem.id, firstItem.id));
+  const reopenedSoon = await service.workbenchGroup(actor, "dueSoon", { pageSize: 1 });
+  assert.equal(reopenedSoon.count, 1);
+  assert.equal(reopenedSoon.items[0]?.id, firstItem.id);
+  validatedToolOutput({ name: "workbench.get" }, reopened);
   console.log("workbench group contracts passed");
 } finally { await sql.end({ timeout: 5 }); }

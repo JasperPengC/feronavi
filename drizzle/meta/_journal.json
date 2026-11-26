@@ -533,6 +533,76 @@
       "when": 1795140900000,
       "tag": "0075_rag_request_references",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1795560000000,
+      "tag": "0076_requirement_revisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1795594800000,
+      "tag": "0077_document_folders",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1795600800000,
+      "tag": "0078_products",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1795603200000,
+      "tag": "0079_requirement_changes",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1795606800000,
+      "tag": "0080_test_case_library",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1795608000000,
+      "tag": "0081_test_execution",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1795608000001,
+      "tag": "0082_test_run_build_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1795608000002,
+      "tag": "0083_delivery_evidence",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1795608000003,
+      "tag": "0084_release_gate",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1795665600000,
+      "tag": "0085_requirement_verified_terminal",
+      "breakpoints": true
     }
   ]
 }

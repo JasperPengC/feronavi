@@ -6,6 +6,7 @@ import { Select } from "../Select.tsx";
 import { timeZoneOptions } from "../timezones.ts";
 import { Button } from "../ui/Button.tsx";
 import { setTheme } from "../../lib/theme.ts";
+import { applyDensity } from "../../lib/density.ts";
 import { useSettingsDraft } from "./SettingsDraft.tsx";
 import { SettingsListState, SettingsSection } from "./SettingsSection.tsx";
 import type { FeedbackHandlers, Prefs } from "./types.ts";
@@ -29,6 +30,7 @@ export function AppearanceSettings({ onSuccess, onError }: FeedbackHandlers) {
       // 设置页保存后**立刻应用**主题（服务端值 system 由 setTheme 归一化为 auto），
       // 否则要刷新/重新登录才生效。
       setTheme(form.theme);
+      applyDensity(form.density);
       setLocale(form.locale === "en-US" ? "en-US" : "zh-CN");
       draft.markSaved();
       await qc.invalidateQueries({ queryKey: ["actor"] });

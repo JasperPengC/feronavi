@@ -89,7 +89,7 @@ export function validateUpload(input: {
 }
 
 /** 目标可见性：附件跟着 target，target 必须看得见 */
-async function assertTargetVisible(actor: Actor, targetType: string, targetId: string): Promise<string | null> {
+async function assertTargetVisible(actor: Actor, targetType: string, targetId: string, mutating = false): Promise<string | null> {
   let pid: string | null;
   if (targetType === "WORK_ITEM") {
     const rows = await db.execute(sql`
@@ -102,6 +102,10 @@ async function assertTargetVisible(actor: Actor, targetType: string, targetId: s
     `) as unknown as { project_id: string | null }[];
     pid = rows[0]?.project_id ?? null;
   } else if (targetType === "PAGE") {
+    if (mutating) {
+      const [mutable] = await db.execute<{ id: string }>(sql`select id from page where id = ${targetId} and kind = 'DOCUMENT' and not exists(select 1 from archived_page a where a.id = page.id)`);
+      if (!mutable) throw forbidden();
+    }
     const rows = await db.execute(sql`
       select project_id::text as project_id, visibility from page where id = ${targetId} and deleted_at is null
     `) as unknown as { project_id: string | null; visibility: string }[];
@@ -121,7 +125,7 @@ async function assertTargetVisible(actor: Actor, targetType: string, targetId: s
     `) as unknown as { target_type: string; target_id: string }[];
     const c = rows[0];
     if (!c) throw forbidden();
-    return assertTargetVisible(actor, c.target_type, c.target_id);
+    return assertTargetVisible(actor, c.target_type, c.target_id, mutating);
   } else {
     throw new DomainError("VALIDATION", "不支持的附件目标", null);
   }
@@ -196,7 +200,7 @@ const load = readStoredAttachment;
 
 /** 幂等重放前也检查当前目标可见性（含页面 ACL）与上传权限。 */
 export async function assertUploadable(actor: Actor, targetType: string, targetId: string) {
-  const projectId = await assertTargetVisible(actor, targetType, targetId);
+  const projectId = await assertTargetVisible(actor, targetType, targetId, true);
   const ctx: PermissionContext = { memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId };
   if (!can(actor, "attachment:upload", { projectId, teamId: null, createdBy: null }, ctx)) throw forbidden();
   return projectId;
@@ -302,7 +306,7 @@ export async function remove(actor: Actor, id: string): Promise<void> {
   await assertTargetVisible(actor, row.targetType, row.targetId);
   // 只有上传者能删
   if (row.uploaderId !== actor.memberId) throw forbidden();
-  const projectId = await assertTargetVisible(actor, row.targetType, row.targetId);
+  const projectId = await assertTargetVisible(actor, row.targetType, row.targetId, true);
   // 秒传会让多条附件共享同一 storagePath：只有最后一条引用才删物理对象
   const refs = await db.select({ id: attachment.id }).from(attachment)
     .where(eq(attachment.storagePath, row.storagePath));

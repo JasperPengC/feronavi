@@ -1,6 +1,6 @@
 {
   "name": "feronavi",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "自托管、中文优先、AI 原生的开源项目管理平台",
@@ -77,6 +77,8 @@
     "check:i18n": "node scripts/check-i18n.mjs",
     "test:import-sources": "node scripts/run-isolated-test.ts scripts/e2e-import-sources.ts",
     "test:upgrade": "node scripts/run-isolated-test.ts scripts/e2e-upgrade.ts",
+    "test:upgrade-restore": "node scripts/run-isolated-test.ts scripts/e2e-upgrade-restore-rehearsal.ts",
+    "test:team-handoff": "node scripts/run-isolated-test.ts scripts/e2e-release-team-handoff.ts",
     "backup": "node --experimental-strip-types scripts/backup.ts",
     "backup:schedule": "node scripts/backup-scheduler.mjs",
     "health:check": "node scripts/health-alert.mjs",

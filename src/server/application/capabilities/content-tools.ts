@@ -5,6 +5,8 @@ import { DomainError } from "../../../shared/errors.ts";
 import { requireUserConfirmation } from "../../services/collab-room.service.ts";
 import { projectForMcpResource } from "../../services/mcp-resource.service.ts";
 import * as wiki from "../../services/wiki.service.ts";
+import { organizePage } from "../../services/page-structure.service.ts";
+import { organizePageSchema } from "../../../shared/schemas/page-structure.ts";
 import * as imports from "../../services/import.service.ts";
 import { exportWorkItemsCsv } from "../../services/export.service.ts";
 import { projectReport } from "../../services/report.service.ts";
@@ -42,6 +44,11 @@ function inlineFile(buffer: Buffer, filename: string, mimeType: string, download
 const importResult = z.object({ created: z.number(), skipped: z.number(), failed: z.number(), status: z.string(), errorReport: z.array(record) });
 
 export const CONTENT_TOOLS: ToolDef[] = [
+  tool("page.organize", "write", "整理文件夹或文档：重命名、移动、归档或恢复。先 page.get 读取 structureVersion，传 expectedStructureVersion 防止覆盖并发整理。归档/恢复须单独操作并检查整个子树权限；归档内容立即退出RAG。目录不授予子文档访问权。操作不改正文版本，完成后 page.get/list 核验。", organizePageSchema.safeExtend({ ...pageRef, ...confirmed }), entity, write(async (ctx, args) => {
+    await pageFor(ctx, args);
+    const { projectId: _project, pageId, userConfirmed: _confirmed, ...patch } = args;
+    return organizePage(ctx.actor, String(pageId), patch as Parameters<typeof organizePage>[2]);
+  })),
   tool("page.revisions", "read", "读取文档历史版本列表，用 page.getRevision 查看正文，恢复会追加新版本。", z.object(pageRef).strict(), z.object({ revisions: z.array(entity) }), async (ctx, args) => {
     await pageFor(ctx, args); return { revisions: await wiki.listRevisions(ctx.actor, String(args.pageId)) };
   }),
@@ -51,7 +58,7 @@ export const CONTENT_TOOLS: ToolDef[] = [
   tool("page.restoreRevision", "write", "恢复历史正文为一个新版本。必须先读 currentRevisionId，传 expectedRevisionId 防止覆盖并发修改，且用户已确认。", z.object({ ...pageRef, revisionId: uuid, expectedRevisionId: uuid, ...confirmed }).strict(), entity, write(async (ctx, args) => {
     await pageFor(ctx, args); return wiki.restoreRevision(ctx.actor, String(args.pageId), String(args.revisionId), String(args.expectedRevisionId));
   })),
-  tool("page.updateMetadata", "write", "修改文档标题、树位置、顺序或可见性；使用当前 revision 比较并要求确认。正文编辑使用 page.update。", z.object({ ...pageRef, ...confirmed, expectedRevisionId: uuid, title: z.string().min(1).max(300).optional(), parentId: uuid.nullable().optional(), sortOrder: z.number().int().optional(), visibility: z.enum(["PROJECT", "RESTRICTED"]).optional() }).strict(), entity, write(async (ctx, args) => {
+  tool("page.updateMetadata", "write", "修改文档标题、树位置、顺序或可见性；使用当前 revision 比较并要求确认。正文编辑使用 page.update。", z.object({ ...pageRef, ...confirmed, expectedRevisionId: uuid, expectedStructureVersion: z.number().int().positive().optional(), title: z.string().min(1).max(300).optional(), parentId: uuid.nullable().optional(), sortOrder: z.number().int().optional(), visibility: z.enum(["PROJECT", "RESTRICTED"]).optional() }).strict(), entity, write(async (ctx, args) => {
     await pageFor(ctx, args); const { projectId: _project, pageId, userConfirmed: _confirmed, ...patch } = args;
     return wiki.updatePage(ctx.actor, String(pageId), patch as Parameters<typeof wiki.updatePage>[2]);
   })),

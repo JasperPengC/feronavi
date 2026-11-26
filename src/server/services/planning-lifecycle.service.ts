@@ -10,6 +10,7 @@ import { recordBusinessEvent } from "./event-log.ts";
 import { publish } from "./events.service.ts";
 import { lockProjectTree } from "./project-tree.ts";
 import { businessEffects } from "./business-effects.ts";
+import {recordReleaseVerification} from './release-gate.service.ts';
 
 type Kind = "iteration" | "release";
 function assertManage(actor: Actor, kind: Kind, projectId: string) {
@@ -48,6 +49,7 @@ export async function complete(actor: Actor, id: string, kind: Kind, options: { 
     let movedCount = 0;
     const movedWorkItemIds: string[] = [];
     if (kind === "release" && outstanding.length) throw new DomainError("BLOCKED_BY_PREREQUISITE", "版本仍有未完成工作项", { pending: outstanding.length });
+    if(kind==='release')await recordReleaseVerification(actor,row.projectId,id);
     if (kind === "iteration") {
       const source = await plans.get(actor, id, "iteration");
       if (options.targetIterationId !== undefined && !source.carryOver) throw new DomainError("VALIDATION", "当前迭代已关闭结转，请先启用结转", null);

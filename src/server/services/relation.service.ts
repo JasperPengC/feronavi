@@ -10,6 +10,7 @@ import { workItem, workItemRelation } from "../../db/schema.ts";
 import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import * as projectRepo from "../repos/project.repo.ts";
+import { lockProjectTree } from "./project-tree.ts";
 
 const TYPES = ["BLOCKS", "RELATES_TO", "DUPLICATES"] as const;
 export type RelationType = (typeof TYPES)[number];
@@ -37,6 +38,16 @@ async function wouldCycle(sourceId: string, targetId: string): Promise<boolean> 
 }
 
 export async function addRelation(actor: Actor, sourceId: string, input: {
+  targetId: string; type: string;
+}) {
+  return withRelationProjects([sourceId,input.targetId],()=>addRelationLocked(actor,sourceId,input));
+}
+
+async function withRelationProjects<T>(ids:string[],fn:()=>Promise<T>){
+  const rows=await db.select({projectId:workItem.projectId}).from(workItem).where(or(...ids.map(id=>eq(workItem.id,id))));
+  return db.transaction(async()=>{for(const id of [...new Set(rows.map(r=>r.projectId))].sort())await lockProjectTree(id);return fn();});
+}
+async function addRelationLocked(actor: Actor, sourceId: string, input: {
   targetId: string; type: string;
 }) {
   const src = await db.select().from(workItem).where(eq(workItem.id, sourceId)).limit(1);
@@ -118,6 +129,11 @@ export async function listRelations(actor: Actor, workItemId: string, allowedPro
 }
 
 export async function removeRelation(actor: Actor, workItemId: string, relId: string): Promise<void> {
+  const [row]=await db.select().from(workItemRelation).where(eq(workItemRelation.id,relId)).limit(1);
+  if(!row||![row.sourceId,row.targetId].includes(workItemId))throw forbidden();
+  return withRelationProjects([row.sourceId,row.targetId],()=>removeRelationLocked(actor,workItemId,relId));
+}
+async function removeRelationLocked(actor: Actor, workItemId: string, relId: string): Promise<void> {
   const src = await db.select().from(workItem).where(eq(workItem.id, workItemId)).limit(1);
   if (!src[0] || src[0].deletedAt) throw forbidden();
   await assertVisible(actor, src[0].projectId);

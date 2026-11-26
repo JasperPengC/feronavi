@@ -25,7 +25,7 @@ export async function loadActor(memberId: string): Promise<Actor | null> {
    * 此前这里只读 `member.locale`，导致**用户在设置页切了语言、界面却永远不变**（实测：
    * `/me/preferences` 已是 en-US，而 `/auth/me` 仍报 zh-CN）。偏好优先，member 列作兜底。
    */
-  const prefRow = (await db.select({ locale: memberPreferenceT.locale, theme: memberPreferenceT.theme })
+  const prefRow = (await db.select({ locale: memberPreferenceT.locale, theme: memberPreferenceT.theme, density: memberPreferenceT.density })
     .from(memberPreferenceT).where(eq(memberPreferenceT.memberId, memberId)).limit(1))[0];
   if (prefRow?.locale) m.locale = prefRow.locale;
 
@@ -126,6 +126,7 @@ export async function loadActor(memberId: string): Promise<Actor | null> {
     /** 主题同样"偏好优先"：设置页写的是 member_preference.theme，此前**从未被读取** ——
      *  症状与当年 locale 那次一模一样：切了浅色，界面永远不变。 */
     theme: prefRow?.theme ?? null,
+    density: prefRow?.density ?? "comfortable",
   };
 }
 

@@ -151,7 +151,8 @@ for (const category of ['NOT_STARTED', 'IN_PROGRESS', 'TERMINAL']) {
 }
 const workbench = resolve(results['workbench.get']);
 const group = resolve(workbench.properties.groups.items);
-group.properties.items = {type:'array',items:object({id:{type:'string'},key:{type:'string'},title:{type:'string'},type:{type:'string'},priority:nullable({type:'string'}),dueDate:nullable({type:'string',pattern:'^\\d{4}-\\d{2}-\\d{2}$'}),version:{type:'integer',minimum:1},projectKey:{type:'string'}})};
+group.properties.items = {type:'array',items:object({id:{type:'string'},key:{type:'string'},title:{type:'string'},type:{type:'string'},priority:nullable({type:'string'}),dueDate:nullable({type:'string',pattern:'^\\d{4}-\\d{2}-\\d{2}$'}),version:{type:'integer',minimum:1},projectKey:{type:'string'},statusName:{type:'string'},statusKey:{type:'string'},statusCategory:{type:'string'}})};
+workbench.properties.attentionItems = group.properties.items;
 const unavailable = object({ unavailable:{type:'boolean',const:true},code:{type:'string'},tool:{type:'string'} });
 const context = { projectId:{type:'string'},project:results['project.get'] };
 for (const [section, tool] of Object.entries({members:'project.members',workflows:'meta.workflow',fields:'meta.fields',customFields:'customField.definitions',iterations:'plan.listIterations',milestones:'plan.listMilestones',releases:'plan.listReleases',modules:'plan.listModules',workItems:'workitem.list'})) context[section] = {anyOf:[results[tool],unavailable]};

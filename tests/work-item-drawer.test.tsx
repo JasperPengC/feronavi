@@ -47,7 +47,7 @@ describe("工作项详情抽屉", () => {
     expect(screen.getByText("这是描述")).toBeTruthy();
     expect(screen.getByText("关联的想法")).toBeTruthy();
     expect(screen.getByText("评论")).toBeTruthy();
-    fireEvent.click(screen.getByText("关联与子项"));
+    fireEvent.click(screen.getByText("关联与依赖"));
     fireEvent.click(screen.getByRole("button", { name: "移除" }));
     await waitFor(() => expect(calls.some((c) => c.startsWith("DELETE") && c.includes("/work-item-links/l1"))).toBe(true));
     await waitFor(() => expect(screen.queryByText("关联的想法")).toBeNull());

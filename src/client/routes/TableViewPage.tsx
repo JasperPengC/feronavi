@@ -2,8 +2,10 @@ import { TableScroll } from "../components/ui/TableScroll.tsx";
 /** 表格视图（T6）：与看板同源、按列排平，支持排序与分页 */
 import { invalidateWorkItemQueries, queryKeys } from "../lib/query-keys.ts";
 import { t, useLocale } from "../i18n/index.ts";
-import { useState } from "react";
-import { useParams, useSearch } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import { parseTableSearch, tableFilterState, tablePlans, type TableSearch } from "../lib/work-item-table-search.ts";
+import { useTablePlans, WorkItemPlanFilters } from "../components/work-item/WorkItemPlanFilters.tsx";
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { tableView } from "../lib/planning-api.ts";
@@ -20,6 +22,7 @@ import { PagePagination } from "../components/ui/PagePagination.tsx";
 import { Checkbox } from "../components/Checkbox.tsx";
 import { WorkItemDrawer } from "../components/work-item/DeferredWorkItemDrawer.tsx";
 import { WorkItemEditor } from "../components/work-item/WorkItemEditor.tsx";
+import { WorkItemTag } from "../components/work-item/WorkItemTag.tsx";
 
 const TYPE_LABEL: Record<string, string> = {
   REQUIREMENT: "type.REQUIREMENT", TASK: "type.TASK", DEFECT: "type.DEFECT", SUBTASK: "type.SUBTASK",
@@ -28,35 +31,44 @@ const PRIORITY_LABEL: Record<string, string> = {
   LOWEST: "prio.LOWEST", LOW: "prio.LOW", MEDIUM: "prio.MEDIUM", HIGH: "prio.HIGH", URGENT: "prio.URGENT",
 };
 
-/**
- * 列定义与**行结构一致**（外壳重做第 21 轮）：
- * 编号/标题/类型已合并进第一列（字母头像 + 标题 + 编号·类型两行），因此这里只剩三列。
- * ⚠️ 行与表头必须同步改，否则表头与内容会错位 —— 这类错位 tsc 不会报，只能靠肉眼或几何断言发现。
- */
-const COLUMNS: { key: "number" | "title" | "type" | "priority" | "dueDate"; label: string; sortable: boolean }[] = [
-  { key: "number", label: "table.colKey", sortable: true },
+/** 非排序列只展示服务端投影，不向查询发送不支持的排序字段。 */
+const COLUMNS: { key: "number" | "status" | "assignee" | "priority" | "dueDate"; label: string; sortable: boolean }[] = [
+  { key: "number", label: "table.colWorkItem", sortable: true },
+  { key: "status", label: "common.status", sortable: false },
   { key: "priority", label: "table.colPriority", sortable: true },
+  { key: "assignee", label: "common.assignee", sortable: false },
   { key: "dueDate", label: "common.dueShort", sortable: true },
 ];
 
 interface SavedViewRow { id: string; name: string; scope: "PERSONAL" | "PROJECT_SHARED"; filters: unknown; sortOrder: number }
 
 export function TableViewPage() {
-  const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [batchPriority, setBatchPriority] = useState("");
   const [batchAssignee, setBatchAssignee] = useState("");
   const [batchStatus, setBatchStatus] = useState("");
-  const searchParams = useSearch({ strict: false }) as { item?: string };
-  useEffect(() => { if (searchParams.item) setOpenItemId(searchParams.item); }, [searchParams.item]);
+  const searchParams = parseTableSearch(useSearch({ strict: false }));
+  const navigate = useNavigate({ from: "/projects/$projectId/table" });
+  const updateSearch = (patch: Partial<TableSearch>, replace = false, ignoreBlocker = false) => void navigate({
+    search: previous => parseTableSearch({ ...previous, ...patch }), replace, resetScroll: false, ignoreBlocker,
+  });
+  const openItemId = searchParams.item ?? null;
+  const setOpenItemId = (item: string | null) => updateSearch({ item: item ?? undefined }, true);
   useLocale();   // 订阅语言
   const { projectId } = useParams({ from: "/_app/projects/$projectId/table" });
-  const [page, setPage] = useState(1);
-  const [sortBy, setSortBy] = useState("number");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [typeF, setTypeF] = useState<string | null>(null);
-  const [prioF, setPrioF] = useState<string | null>(null);
+  const page = searchParams.page ?? 1, sortBy = searchParams.sortBy ?? "number", sortDir = searchParams.sortDir ?? "asc";
+  const typeF = searchParams.type, prioF = searchParams.priority;
+  const setPage = (value: number) => updateSearch({ page: value });
+  const filters = tableFilterState(searchParams);
+  const filterKey = JSON.stringify(filters);
+  const planQueries = useTablePlans(projectId);
+  const initialPlanning = Object.fromEntries(tablePlans.flatMap((plan, index) => {
+    const rows = planQueries[index]?.data;
+    const row = Array.isArray(rows) ? rows.find(row => row.id === searchParams[plan.field]) : undefined;
+    return row && !row.archivedAt && !row.completedAt ? [[plan.field, row.id]] : [];
+  }));
+  const hasFilters = !!(typeF || prioF || searchParams.unscheduled || tablePlans.some(plan => searchParams[plan.field]));
 
   const qc = useQueryClient();
   const boardStates = useQuery({
@@ -70,8 +82,8 @@ export function TableViewPage() {
     staleTime: 60_000,
   });
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: queryKeys.table(projectId, page, sortBy, sortDir, typeF, prioF),
-    queryFn: () => tableView(projectId!, { page, pageSize: 20, sortBy, sortDir, type: typeF ?? undefined, priority: prioF ?? undefined }),
+    queryKey: queryKeys.table(projectId, filters),
+    queryFn: () => tableView(projectId!, { ...filters, page, pageSize: 20, sortBy, sortDir }),
   });
   const batchPriorityUpdate = useMutation({
     mutationFn: () => apiPost<{ succeeded?: number }>("/api/v1/work-items/batch", { op: "update", itemIds: [...selected], patch: { priority: batchPriority } }),
@@ -125,12 +137,8 @@ export function TableViewPage() {
     setSelectedViewId(id);
     const view = views.find((v) => v.id === id);
     if (!view) return;
-    setPage(1); setSelected(new Set());
     const f = (view.filters ?? {}) as Record<string, unknown>;
-    setTypeF(typeof f.typeF === "string" ? f.typeF : null);
-    setPrioF(typeof f.prioF === "string" ? f.prioF : null);
-    if (typeof f.sortBy === "string") setSortBy(f.sortBy);
-    if (f.sortDir === "asc" || f.sortDir === "desc") setSortDir(f.sortDir);
+    void navigate({ search: parseTableSearch({ ...f, page: 1, item: undefined, fromPlan: undefined, fromArchived: undefined }), resetScroll: false });
   };
   const saveView = async () => {
     if (savingView || !saveName.trim()) return;
@@ -139,7 +147,7 @@ export function TableViewPage() {
       await apiPost("/api/v1/saved-views", {
         name: saveName.trim(), viewType: "TABLE", scope: saveScope,
         projectId: saveScope === "PROJECT_SHARED" ? projectId : null,
-        filters: { typeF: typeF ?? undefined, prioF: prioF ?? undefined, sortBy, sortDir },
+        filters: { ...filters, page: undefined },
       });
       setSaveOpen(false); setSaveName(""); setViewMessage(t("sv.saved"));
       await Promise.all([sharedViews.refetch(), personalViews.refetch()]);
@@ -170,8 +178,14 @@ export function TableViewPage() {
       await Promise.all([sharedViews.refetch(), personalViews.refetch()]);
     } catch (e) { setViewMessage(e instanceof ApiError ? e.message : t("sv.failed")); }
   };
-  const shownRows = data?.rows ?? [];
-  useEffect(() => { setSelected(new Set()); }, [projectId, page, sortBy, sortDir, typeF, prioF]);
+  const shownRows = useMemo(() => data?.rows ?? [], [data?.rows]);
+  useEffect(() => { setSelected(new Set()); }, [projectId, filterKey]);
+  // SSE或批量更新可能使记录离开当前页，不允许继续操作不可见的旧选择。
+  useEffect(() => { setSelected(previous => {
+    const visible = new Set(shownRows.map(row => row.id));
+    const next = new Set([...previous].filter(id => visible.has(id)));
+    return next.size === previous.size ? previous : next;
+  }); }, [shownRows]);
 
 
   const today = new Date().toISOString().slice(0, 10);
@@ -179,9 +193,7 @@ export function TableViewPage() {
   const pages = Math.max(1, Math.ceil(total / (data?.pageSize ?? 20)));
 
   function clickSort(col: string) {
-    setPage(1);
-    if (sortBy === col) setSortDir(sortDir === "asc" ? "desc" : "asc");
-    else { setSortBy(col); setSortDir("asc"); }
+    updateSearch({ page: undefined, sortBy: col as TableSearch["sortBy"], sortDir: sortBy === col && sortDir === "asc" ? "desc" : "asc" });
   }
 
   return (
@@ -189,36 +201,44 @@ export function TableViewPage() {
       <WorkItemViewHeader projectId={projectId!} active="table"
         onCreate={() => setCreateOpen(true)}
         onRefresh={() => { void qc.invalidateQueries({ queryKey: queryKeys.table(projectId) }); void qc.invalidateQueries({ queryKey: queryKeys.board(projectId) }); }} />
-      <p className="muted work-items-help">{t("wiv.tableHelp")}</p>
+      <p className="muted work-items-help table-plan-context">{searchParams.fromPlan ? <>
+        <Link to="/projects/$projectId/milestones" params={{ projectId }} search={{ section: searchParams.fromPlan, archived: searchParams.fromArchived }}>{t("tableScope.back")}</Link>
+        <span>{t("tableScope.hint")}</span>
+      </> : t("wiv.tableHelp")}</p>
       <div className="table-view-toolbar">
+        <WorkItemPlanFilters search={searchParams} queries={planQueries}
+          onChange={(field, value) => { setSelectedViewId(""); updateSearch({ [field]: value || undefined, page: undefined }); }} />
         {/* 筛选先于服务端分页；选择项不依赖当前页恰好有什么。 */}
         <div className="toolbar table-view-filters" style={{ gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
           <span className="toolbar-label">{t("table.filterLabel")}</span>
           <Select size="sm" ariaLabel={t("wiDetail.type")} value={typeF ?? ""}
-            onChange={(next) => { setTypeF(next || null); setPage(1); }}
+            onChange={next => { setSelectedViewId(""); updateSearch({ type: next || undefined, page: undefined }); }}
             options={[{ value: "", label: t("wiDetail.type") }, ...Object.keys(TYPE_LABEL).map((type) => ({ value: type, label: t(TYPE_LABEL[type]!) }))]} />
           <Select size="sm" ariaLabel={t("common.priority")} value={prioF ?? ""}
-            onChange={(next) => { setPrioF(next || null); setPage(1); }}
+            onChange={next => { setSelectedViewId(""); updateSearch({ priority: next || undefined, page: undefined }); }}
             options={[{ value: "", label: t("common.priority") }, ...Object.keys(PRIORITY_LABEL).map((priority) => ({ value: priority, label: t(PRIORITY_LABEL[priority]!) }))]} />
-          {(typeF || prioF) && <Button size="sm" variant="ghost"
-            onClick={() => { setTypeF(null); setPrioF(null); setPage(1); }}>{t("common.all")}</Button>}
+          <Checkbox ariaLabel={t("tableScope.unscheduled")} label={t("tableScope.unscheduled")} checked={!!searchParams.unscheduled}
+            onChange={checked => { setSelectedViewId(""); updateSearch({ unscheduled: checked || undefined, page: undefined }); }} />
+          {hasFilters && <Button size="sm" variant="ghost" onClick={() => {
+            setSelectedViewId(""); void navigate({ search: parseTableSearch({ sortBy, sortDir, fromPlan: searchParams.fromPlan, fromArchived: searchParams.fromArchived }), resetScroll: false });
+          }}>{t("tableScope.clear")}</Button>}
         </div>
 
         {/* 保存视图（Spec V8 / REST 7b）：后端早就有，此前前端零消费 */}
-        <div className="toolbar" style={{ gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="toolbar table-saved-views" style={{ gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
           <span className="toolbar-label">{t("sv.savedViews")}</span>
           <Select size="sm" ariaLabel={t("sv.savedViews")} value={selectedViewId}
             onChange={(v) => (v ? applyView(v) : setSelectedViewId(""))}
             options={[{ value: "", label: views.length ? t("sv.pick") : t("sv.empty") },
               ...views.map((v) => ({ value: v.id, label: `${v.name}（${v.scope === "PROJECT_SHARED" ? t("sv.shared") : t("sv.personal")}）` }))]} />
           <Button size="sm" onClick={() => { setSaveOpen(true); setViewMessage(null); }}>{t("sv.saveCurrent")}</Button>
-          {selectedViewId && <>
+          {selectedViewId && <div className="table-saved-actions">
             <Button size="sm" variant="ghost" disabled={selectedView?.scope !== "PERSONAL"}
               onClick={() => void moveView(-1)}>{t("sv.moveUp")}</Button>
             <Button size="sm" variant="ghost" disabled={selectedView?.scope !== "PERSONAL"}
               onClick={() => void moveView(1)}>{t("sv.moveDown")}</Button>
             <Button size="sm" variant="ghost" onClick={() => void deleteView()}>{t("sv.delete")}</Button>
-          </>}
+          </div>}
           {viewMessage && <span className="muted" style={{ fontSize: "var(--text-xs)" }} role="status">{viewMessage}</span>}
         </div>
       </div>
@@ -266,7 +286,7 @@ export function TableViewPage() {
 
       {!isLoading && !isError && (
         <div className="table-view-surface data-fill">
-          <TableScroll className="table-view-scroll" label={t("table.title")} resetKey={JSON.stringify([projectId, page, sortBy, sortDir, typeF, prioF])}>
+          <TableScroll className="table-view-scroll" label={t("table.title")} resetKey={JSON.stringify([projectId, filterKey])}>
         <table className="card table-view-table" aria-label={t("table.title")} style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
@@ -278,10 +298,10 @@ export function TableViewPage() {
               {COLUMNS.map((c) => (
                 <th key={c.key} scope="col" aria-sort={c.sortable ? (sortBy === c.key ? (sortDir === "asc" ? "ascending" : "descending") : "none") : undefined}>
                   {c.sortable ? (
-                    <button type="button" className="sort-button" data-active={sortBy === c.key ? "true" : "false"} onClick={() => clickSort(c.key)} aria-label={`按${t(c.label)}排序`}>
+                    <button type="button" className="sort-button" data-active={sortBy === c.key ? "true" : "false"} onClick={() => clickSort(c.key)} aria-label={`按${t(c.key === "number" ? "table.colKey" : c.label)}排序`}>
                       {t(c.label)}{sortBy === c.key ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
                     </button>
-                  ) : c.label}
+                  ) : t(c.label)}
                 </th>
               ))}
             </tr>
@@ -303,18 +323,18 @@ export function TableViewPage() {
                   </div>
                   <div className="row-sub"><span className="mono">{r.key}</span> · {TYPE_LABEL[r.type] ? t(TYPE_LABEL[r.type]!) : r.type}</div>
                 </td>
-                <td data-label={t("table.colPriority")}><span className={`status-pill ${r.priority === "HIGH" || r.priority === "URGENT" ? "dot-red" : r.priority === "MEDIUM" ? "dot-blue" : r.priority === "LOW" || r.priority === "LOWEST" ? "dot-green" : ""}`}>
-                  {r.priority ? (PRIORITY_LABEL[r.priority] ? t(PRIORITY_LABEL[r.priority]!) : r.priority) : "—"}
-                </span></td>
+                <td data-label={t("common.status")}><WorkItemTag kind="status" value={r.statusCategory} stateKey={r.statusKey} label={r.statusName} /></td>
+                <td data-label={t("table.colPriority")}><WorkItemTag kind="priority" value={r.priority} /></td>
+                <td data-label={t("common.assignee")}><span className="table-assignee">{r.assigneeName || t("wie.unassigned")}</span></td>
                 <td data-label={t("common.dueShort")}>
-                  {r.dueDate && r.dueDate < today
+                  {r.dueDate && r.dueDate < today && !["DONE", "TERMINAL", "CANCELLED"].includes(r.statusCategory ?? "")
                     ? <span className="status-pill dot-red" title={t("common.overdue")}>{r.dueDate}</span>
                     : (r.dueDate ?? "—")}
                 </td>
               </tr>
             ))}
             {(data?.rows ?? []).length === 0 && (
-              <tr><td colSpan={4}><StateBlock kind="empty" title={t("table.empty")} /></td></tr>
+              <tr><td colSpan={COLUMNS.length + 1}><StateBlock kind="empty" title={t("table.empty")} /></td></tr>
             )}
           </tbody>
         </table>
@@ -325,9 +345,10 @@ export function TableViewPage() {
       {isError && <StateBlock kind="error" title={t("common.loadFailedShort")} action={() => { void refetch(); }} actionLabel={t("common.reload")} />}
       {!isError && <PagePagination page={page} pages={pages} total={total} onPage={setPage} showSingle />}
 
-      <WorkItemDrawer workItemId={openItemId} onClose={() => setOpenItemId(null)} />
-      <WorkItemEditor open={createOpen} projectId={projectId!} onClose={() => setCreateOpen(false)}
-        onSaved={(item) => { setCreateOpen(false); setSortBy("number"); setSortDir("desc"); setPage(1); setOpenItemId(item.id); }} />
+      {/* Drawer已完成草稿/保存保护，此处只移除详情参数，避免对同一次关闭再次确认。 */}
+      <WorkItemDrawer workItemId={openItemId} onClose={() => updateSearch({ item: undefined }, true, true)} />
+      <WorkItemEditor open={createOpen} projectId={projectId!} initialPlanning={initialPlanning} onClose={() => setCreateOpen(false)}
+        onSaved={(item) => { setCreateOpen(false); updateSearch({ sortBy: "number", sortDir: "desc", page: undefined, item: item.id }, true); }} />
     </div>
   );
 }

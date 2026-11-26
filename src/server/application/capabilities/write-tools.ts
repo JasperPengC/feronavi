@@ -20,6 +20,7 @@
  */
 import { assertTokenScope, guardTools } from "./guard.ts";
 import { z } from "zod";
+import { DOCUMENT_LINK_GUIDANCE } from "../../../shared/markdown-links.ts";
 import { mcpAutomationRuleSchema } from "../../../shared/schemas/automation.ts";
 import { DomainError } from "../../../shared/errors.ts";
 import { inTransaction } from "../../../db/index.ts";
@@ -134,11 +135,11 @@ const WRITE_TOOLS_BASE: ToolDef[] = [
   },
   {
     name: "collab.publishPage",
-    description: "发布页面协作草稿。必须先取得用户明确确认并传 userConfirmed=true；同时提供当前已发布 revision 作为 CAS 基线。冲突时不会覆盖他人修改。支持幂等键。",
+    description: `发布页面协作草稿。必须先取得用户明确确认并传 userConfirmed=true；同时提供当前已发布 revision 作为 CAS 基线。冲突时不会覆盖他人修改。支持幂等键。${DOCUMENT_LINK_GUIDANCE} 无效链接返回 VALIDATION 与行号，修正草稿后再发布。`,
     kind: "write",
     inputSchema: {
       type: "object",
-      properties: { pageId: UUID, title: str("可选的新标题"), expectedRevisionId: UUID, changeSummary: str("变更说明"), userConfirmed: { type: "boolean", description: "用户已明确确认本次发布" }, ...IDEM_PROP },
+      properties: { pageId: UUID, expectedStructureVersion: { type: "integer", minimum: 1, description: "更改标题时传page.get的结构版本；只发布正文不要传旧标题" }, title: str("可选的新标题"), expectedRevisionId: UUID, changeSummary: str("变更说明"), userConfirmed: { type: "boolean", description: "用户已明确确认本次发布" }, ...IDEM_PROP },
       required: ["pageId", "expectedRevisionId", "userConfirmed"], additionalProperties: false,
     },
     handler: async (ctx, args) => {
@@ -149,7 +150,7 @@ const WRITE_TOOLS_BASE: ToolDef[] = [
       requireUserConfirmation(args.userConfirmed === true);
       const { pageId: _page, idempotencyKey: _key, ...input } = args;
       const { userConfirmed: _confirmed, ...publishInput } = input;
-      return idem(ctx, "collab.publishPage", args, () => collabDocuments.publishPage(ctx.actor, room.id, publishInput as { expectedRevisionId: string; title?: string; changeSummary?: string }));
+      return idem(ctx, "collab.publishPage", args, () => collabDocuments.publishPage(ctx.actor, room.id, publishInput as Parameters<typeof collabDocuments.publishPage>[2]));
     },
   },
   {
@@ -164,7 +165,7 @@ const WRITE_TOOLS_BASE: ToolDef[] = [
         priority: { type: "string", enum: ["LOWEST", "LOW", "MEDIUM", "HIGH", "URGENT"] },
         assigneeId: UUID, startDate: str("YYYY-MM-DD"), dueDate: str("YYYY-MM-DD"), estimatePoints: { type: "number" },
         estimateHours: { type: "number" }, parentId: UUID,
-        iterationId: UUID, milestoneId: UUID, releaseId: UUID, moduleId: UUID, ...IDEM_PROP,
+        iterationId: UUID, milestoneId: UUID, releaseId: UUID, moduleId: UUID, productId: UUID, ...IDEM_PROP,
       },
       required: ["projectId", "type", "title"],
       additionalProperties: false,
@@ -187,7 +188,7 @@ const WRITE_TOOLS_BASE: ToolDef[] = [
         priority: { type: "string", enum: ["LOWEST", "LOW", "MEDIUM", "HIGH", "URGENT"] },
         startDate: str("YYYY-MM-DD"), dueDate: str("YYYY-MM-DD"),
         estimatePoints: { type: ["number", "null"] }, estimateHours: { type: ["number", "null"] },
-        iterationId: UUID_OR_NULL, milestoneId: UUID_OR_NULL, releaseId: UUID_OR_NULL, moduleId: UUID_OR_NULL, parentId: UUID_OR_NULL,
+        iterationId: UUID_OR_NULL, milestoneId: UUID_OR_NULL, releaseId: UUID_OR_NULL, moduleId: UUID_OR_NULL, productId: UUID_OR_NULL, parentId: UUID_OR_NULL,
         expectedVersion: { type: "integer", minimum: 1, description: "乐观锁版本号" },
       },
       required: ["workItemId", "expectedVersion"],
@@ -348,12 +349,13 @@ const WRITE_TOOLS_BASE: ToolDef[] = [
   },
   {
     name: "page.create",
-    description: "建文档（幂等键；slug 由标题派生，冲突会自动追加序号）。",
+    description: `建文档（幂等键；slug 由标题派生，冲突会自动追加序号）。${DOCUMENT_LINK_GUIDANCE}`,
     kind: "write",
     inputSchema: {
       type: "object",
       properties: {
-        projectId: UUID, title: str("标题"), content: str("Markdown 正文"),
+        projectId: UUID, title: str("标题"), content: str(`Markdown 正文。${DOCUMENT_LINK_GUIDANCE}`),
+        kind: { type: "string", enum: ["DOCUMENT", "FOLDER"], description: "默认DOCUMENT；FOLDER仅用于分类，不提供正文、协作或RAG索引。移动归档使用page.organize" },
         visibility: { type: "string", enum: ["PROJECT", "RESTRICTED"], description: "受限页需 page:manage_visibility" },
         parentId: UUID, ...IDEM_PROP,
       },
@@ -369,11 +371,11 @@ const WRITE_TOOLS_BASE: ToolDef[] = [
   },
   {
     name: "page.update",
-    description: "改文档（先确认本次发布；正文通过 Yjs 协作日志写入，再按 expectedRevisionId CAS 发布；生成新版本，历史永不删除）。",
+    description: `改文档（先确认本次发布；正文通过 Yjs 协作日志写入，再按 expectedRevisionId CAS 发布；生成新版本，历史永不删除）。${DOCUMENT_LINK_GUIDANCE} 无效链接返回 VALIDATION 与行号，原已发布正文保持不变。`,
     kind: "write",
     inputSchema: {
       type: "object",
-      properties: { pageId: UUID, title: str("标题"), content: str("正文"), expectedRevisionId: UUID_OR_NULL, changeSummary: str("变更说明"), userConfirmed: { type: "boolean", description: "用户明确确认本次页面发布" }, ...IDEM_PROP },
+      properties: { pageId: UUID, expectedStructureVersion: { type: "integer", minimum: 1, description: "更改标题时传入page.get的structureVersion；仅改正文时不要携带未更改标题" }, title: str("标题"), content: str(`正文。${DOCUMENT_LINK_GUIDANCE}`), expectedRevisionId: UUID_OR_NULL, changeSummary: str("变更说明"), userConfirmed: { type: "boolean", description: "用户明确确认本次页面发布" }, ...IDEM_PROP },
       required: ["pageId", "expectedRevisionId", "userConfirmed"],
       additionalProperties: false,
     },
@@ -395,7 +397,7 @@ const WRITE_TOOLS_BASE: ToolDef[] = [
         if (delta) {
           await collabDocuments.applyUpdate({ roomId: room.id, actorId: ctx.actor.memberId, clientId, operationId, updateBase64: Buffer.from(delta).toString("base64") });
         }
-        return collabDocuments.publishPage(ctx.actor, room.id, { expectedRevisionId, title, changeSummary: typeof args.changeSummary === "string" ? args.changeSummary : "MCP 文档更新" });
+        return collabDocuments.publishPage(ctx.actor, room.id, { expectedRevisionId, title, expectedStructureVersion: typeof args.expectedStructureVersion === "number" ? args.expectedStructureVersion : undefined, changeSummary: typeof args.changeSummary === "string" ? args.changeSummary : "MCP 文档更新" });
       }));
       return result;
     },

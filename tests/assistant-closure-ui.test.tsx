@@ -54,7 +54,7 @@ it("确认期间锁住两个决策并阻止重复提交", async () => {
   fireEvent.click(confirm); fireEvent.click(confirm);
   expect(onDecide).toHaveBeenCalledExactlyOnceWith("proposal-id", "confirm");
   expect((screen.getByRole("button", { name: "拒绝建议" }) as HTMLButtonElement).disabled).toBe(true);
-  expect(screen.getByText("正在执行…")).toBeTruthy();
+  expect(screen.getByText("执行中")).toBeTruthy();
   await act(async () => finish());
 });
 
@@ -87,7 +87,7 @@ it("建议在当前页面过期后自动移除确认入口", async () => {
   mount(proposal({ expiresAt: "2026-11-16T10:00:01Z" }));
   expect(screen.getByRole("button", { name: "确认执行" })).toBeTruthy();
   await act(async () => vi.advanceTimersByTime(1001));
-  expect(screen.getByText("已过期，请重新提问生成建议。")).toBeTruthy();
+  expect(screen.getByText("已过期")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "确认执行" })).toBeNull();
 });
 

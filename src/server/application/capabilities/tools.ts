@@ -18,6 +18,12 @@ import { WORKSPACE_TOOLS } from "./workspace-tools.ts";
 import { CONFIGURATION_TOOLS } from "./configuration-tools.ts";
 import { ORGANIZATION_TOOLS } from "./organization-tools.ts";
 import { CONTENT_TOOLS } from "./content-tools.ts";
+import { PRODUCT_TOOLS } from "./product-tools.ts";
+import { DELIVERY_TOOLS } from './delivery-tools.ts';
+import { RELEASE_GATE_TOOLS } from './release-gate-tools.ts';
+import { TEST_EXECUTION_TOOLS } from "./test-execution-tools.ts";
+import { TEST_MANAGEMENT_TOOLS } from "./test-management-tools.ts";
+import { REQUIREMENT_CHANGE_TOOLS } from "./requirement-change-tools.ts";
 import { PROJECT_MANAGEMENT_TOOLS } from "./project-management-tools.ts";
 import { installAssistantCapabilities } from "../../services/assistant-capabilities.ts";
 import { compatibilityTools, withCompatibilityOutput } from "./compatibility-tools.ts";
@@ -368,13 +374,13 @@ export const TOOLS: ToolDef[] = guardTools([
   },
   {
     name: "page.list",
-    description: "项目文档列表（标题/可见性/更新时间）。读文档正文用 page.get。",
+    description: "项目文档与文件夹列表，含kind、parentId和structureVersion。默认排除归档子树，archived=true读取归档内容。目录不扩大文档权限；读正文用page.get。",
     kind: "read",
-    inputSchema: { type: "object", properties: { projectId: UUID }, required: ["projectId"], additionalProperties: false },
+    inputSchema: { type: "object", properties: { projectId: UUID, archived: { type: "boolean" } }, required: ["projectId"], additionalProperties: false },
     handler: async (ctx, args) => {
       const projectId = String(args.projectId);
       assertProject(ctx, projectId);
-      return { pages: await wikiService.listPages(ctx.actor, projectId) };
+      return { pages: await wikiService.listPages(ctx.actor, projectId, { archived: args.archived === true }) };
     },
   },
   {
@@ -479,7 +485,7 @@ export function assertToolAllowed(ctx: ToolCtx, tool: ToolDef): void {
   }
 }
 
-export const BUSINESS_TOOLS = guardTools([...WORK_ITEM_TOOLS, ...OPERATIONS_TOOLS, ...CONTENT_TOOLS, ...PROJECT_MANAGEMENT_TOOLS, ...COLLABORATION_TOOLS, ...WORKSPACE_TOOLS, ...CONFIGURATION_TOOLS, ...ORGANIZATION_TOOLS]);
+export const BUSINESS_TOOLS = guardTools([...WORK_ITEM_TOOLS, ...OPERATIONS_TOOLS, ...CONTENT_TOOLS, ...PRODUCT_TOOLS, ...REQUIREMENT_CHANGE_TOOLS.map(withCompatibilityOutput), ...TEST_MANAGEMENT_TOOLS.map(withCompatibilityOutput), ...TEST_EXECUTION_TOOLS.map(withCompatibilityOutput), ...DELIVERY_TOOLS.map(withCompatibilityOutput), ...RELEASE_GATE_TOOLS.map(withCompatibilityOutput), ...PROJECT_MANAGEMENT_TOOLS, ...COLLABORATION_TOOLS, ...WORKSPACE_TOOLS, ...CONFIGURATION_TOOLS, ...ORGANIZATION_TOOLS]);
 const currentAgentTools = [...createAgentTools(() => ALL_TOOLS), ...BUSINESS_TOOLS];
 export const AGENT_TOOLS: ToolDef[] = [...currentAgentTools, ...guardTools(compatibilityTools([...TOOLS, ...WRITE_TOOLS, ...currentAgentTools])), ...guardTools(RAG_TOOLS.map(withCompatibilityOutput))];
 export const ALL_TOOLS = [...TOOLS, ...WRITE_TOOLS, ...AGENT_TOOLS];

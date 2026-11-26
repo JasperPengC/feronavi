@@ -29,6 +29,7 @@ import { setLocale, t, useLocale } from "../i18n/index.ts";
 import { BrandMark } from "../components/BrandMark.tsx";
 import { Icon, type IconName } from "../components/Icon.tsx";
 import { setTheme } from "../lib/theme.ts";
+import { applyDensity } from "../lib/density.ts";
 import { ToastHost, toast } from "../components/ui/Toast.tsx";
 import { WorkspaceSwitcher, type ShellProject } from "./WorkspaceSwitcher.tsx";
 import { ChangePasswordDialog } from "../components/ChangePasswordDialog.tsx";
@@ -200,6 +201,7 @@ export function AppShell() {
     // 否则旧实现会直接把 "system" 当 auto 判定失败、强制浅色（真实 bug：跟随系统永远日间）。
     // setTheme 会同步写 cookie，因此下次加载时防 FOUC 的内联脚本也能读到同一取值。
     if (actor.theme) setTheme(actor.theme);
+    applyDensity(actor.density);
   }, [actor]);
 
   /** 与项目列表共用缓存，新建、改名或归档后的失效更新也同步到切换器。 */
@@ -315,16 +317,16 @@ export function AppShell() {
   const overflowTabs = workspaceTabs.filter((t) => !visibleTabs.includes(t));
   useEffect(() => {
     setWorkspaceTabs((prev) => {
-      const next = openTab(prev, pathname);
+      const next = openTab(prev, location.href);
       saveTabs(next);
       return next;
     });
-  }, [pathname]);
+  }, [location.href]);
   const closeWorkspaceTab = (path: string) => {
     const { tabs: rest, nextPath } = closeTab(workspaceTabs, path);
     setWorkspaceTabs(rest);
     saveTabs(rest);
-    if (path === pathname && nextPath) void navigate({ to: nextPath as never });
+    if (path === pathname && nextPath) void navigate({ to: nextPath as never, search: rest.find(tab => tab.path === nextPath)?.search as never });
   };
   // 侧栏一级菜单（Round 109）：行业常见「一级 + 可展开子菜单」，去掉重复的分组标题
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
@@ -470,8 +472,8 @@ export function AppShell() {
               pathname.startsWith(`/projects/${projectId}`) && !["/fields", "/workflow", "/intake", "/import", "/automation"].some((suffix) => pathname.endsWith(suffix)),
               <>
                 {navItem("/projects/$projectId", t("nav.projectOverview"), pathname === `/projects/${projectId}`, { params: { projectId }, icon: "folder" })}
-                {navItem("/projects/$projectId/board", t("nav.workItems"), ["/board", "/table", "/timeline", "/calendar"].some((suffix) => pathname === `/projects/${projectId}${suffix}`), { params: { projectId }, icon: "grid" })}
-                {navItem("/projects/$projectId/milestones", t("nav.milestones"), pathname === `/projects/${projectId}/milestones`, { params: { projectId }, icon: "flag" })}
+                {navItem("/projects/$projectId/board", t("nav.workItems"), ["/board", "/table", "/timeline", "/calendar", "/testing"].some((suffix) => pathname === `/projects/${projectId}${suffix}`), { params: { projectId }, icon: "grid" })}
+                {navItem("/projects/$projectId/milestones", t("nav.planning"), pathname === `/projects/${projectId}/milestones`, { params: { projectId }, icon: "flag" })}
                 {navItem("/projects/$projectId/wiki", t("nav.knowledge"), pathname === `/projects/${projectId}/wiki`, { params: { projectId }, icon: "book" })}
                 {navItem(`/projects/${projectId}/insights` as "/projects/$projectId/insights", t("nav.insights"), pathname === `/projects/${projectId}/insights`, { params: { projectId }, icon: "chart" })}
                 {navItem("/projects/$projectId/activity", t("nav.activity"), pathname === `/projects/${projectId}/activity`, { params: { projectId }, icon: "activity" })}
@@ -578,7 +580,7 @@ export function AppShell() {
                 return (
                 <div key={tab.path} className="shell-tab" data-active={pathname === tab.path ? "true" : "false"}>
                   <Link aria-current={pathname === tab.path ? "page" : undefined} className="shell-tab-link"
-                    to={tab.path as "/workbench"} title={title} aria-label={accessibleLabel}>
+                    to={tab.path as "/workbench"} search={tab.search as never} title={title} aria-label={accessibleLabel}>
                     {label}
                   </Link>
                   {workspaceTabs.length > 1 && (
@@ -607,7 +609,7 @@ export function AppShell() {
                         return (
                         <div key={tab.path} className="shell-tab-overflow-row" role="none">
                           <button type="button" role="menuitem" className="shell-tab-overflow-link" title={title}
-                            onClick={() => { setTabOverflowOpen(false); navigate({ to: tab.path as "/workbench" }); }}>
+                            onClick={() => { setTabOverflowOpen(false); navigate({ to: tab.path as "/workbench", search: tab.search as never }); }}>
                             {label}
                           </button>
                           {workspaceTabs.length > 1 && (

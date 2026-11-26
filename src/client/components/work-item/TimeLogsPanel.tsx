@@ -6,6 +6,7 @@ import { t } from "../../i18n/index.ts";
 import { Button } from "../ui/Button.tsx";
 import { TextInput } from "../ui/TextInput.tsx";
 import { DatePicker } from "../DatePicker.tsx";
+import { useLocalDraft } from "../ui/LocalDraftScope.tsx";
 
 interface TimeLog { id: string; minutes: number; loggedDate: string; note: string | null; memberId: string }
 export function TimeLogsPanel({ workItemId }: { workItemId: string }) {
@@ -28,6 +29,7 @@ export function TimeLogsPanel({ workItemId }: { workItemId: string }) {
     onSuccess: async () => { await qc.invalidateQueries({ queryKey: ["work-item-time-logs", workItemId] }); },
     onError: (e) => setError(e instanceof ApiError ? e.message : t("wiTime.saveFailed")),
   });
+  useLocalDraft(!!minutes || !!note, add.isPending || remove.isPending);
   const rows = Array.isArray(logs.data) ? logs.data : [];
   const total = rows.reduce((n, r) => n + r.minutes, 0);
   const valid = Number.isInteger(Number(minutes)) && Number(minutes) > 0 && /^\d{4}-\d{2}-\d{2}$/.test(date);

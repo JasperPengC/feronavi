@@ -114,8 +114,9 @@ From today's tasks to the next release, each step has a view that fits the work.
 
 | Part of the work | Platform capabilities |
 | --- | --- |
-| **Capture and break down** | Ideas, requirements, tasks, defects and subtasks, with discussions and attachments |
+| **Capture and break down** | Product attribution, requirement revisions and change impact; tasks and subtasks with discussions and attachments |
 | **Plan and deliver** | Milestones, iterations and releases; boards, tables, calendars and timelines |
+| **Test and release** | Versioned test cases, test plans, failed runs linked to defects and retests; PR/CI/build evidence, release gates and feedback |
 | **Document and hand over** | Collaborative document editing, offline recovery, navigation, revision history, permissions and rollback |
 | **Coordinate and automate** | Custom workflows, approvals, automation, SLAs and in-app notifications |
 | **Review and oversee** | Personal workbench, burndown, cumulative flow, portfolios and audit records |
@@ -155,7 +156,7 @@ With Docker Compose installed, download the Compose file and start a new instanc
 
 ```bash
 mkdir feronavi && cd feronavi
-curl -fL https://raw.githubusercontent.com/JasperPengC/feronavi/v0.2.1/compose.yaml -o compose.yaml
+curl -fL https://raw.githubusercontent.com/JasperPengC/feronavi/v0.3.0/compose.yaml -o compose.yaml
 
 # First installation: create a local database password
 (umask 077; test -e .env || echo "DB_PASSWORD=$(openssl rand -hex 24)" > .env)
@@ -167,7 +168,7 @@ docker compose ps
 
 Once the services are ready, open [http://127.0.0.1:3000/setup](http://127.0.0.1:3000/setup) to create your organization and administrator.
 
-The defaults pull `ghcr.io/feronavi/feronavi-app:0.2.1` and `ghcr.io/feronavi/feronavi-db:16-0.2.0`. This release's prebuilt images support and have been validated on **Linux x86-64 (amd64)**. Other architectures have not completed validation.
+The defaults pull `ghcr.io/feronavi/feronavi-app:0.3.0` and `ghcr.io/feronavi/feronavi-db:16-0.2.0`; the companion MCP bridge is `feronavi-mcp@0.1.1`. This release's prebuilt images support and have been validated on **Linux x86-64 (amd64)**. Other architectures have not completed validation. See the versioned [upgrade and recovery notes](UPGRADING.md) before upgrading an existing instance.
 
 Before opening access to your team, follow the [production deployment guide](https://feronavi.com/en/docs/deployment/) to configure an HTTPS reverse proxy. Before upgrading an existing instance, follow the [backup and upgrade guide](https://feronavi.com/en/docs/operations/) to back up the database and data volume and review the database image's migration requirements. See [quick start](https://feronavi.com/en/docs/quick-start/) for first access to a remote server and startup troubleshooting.
 
@@ -177,7 +178,7 @@ Before opening access to your team, follow the [production deployment guide](htt
 To modify the source, clone this release into a separate directory and build it:
 
 ```bash
-git clone --branch v0.2.1 --depth 1 https://github.com/JasperPengC/feronavi.git feronavi-source
+git clone --branch v0.3.0 --depth 1 https://github.com/JasperPengC/feronavi.git feronavi-source
 cd feronavi-source
 (umask 077; test -e .env || echo "DB_PASSWORD=$(openssl rand -hex 24)" > .env)
 docker compose -f compose.yaml -f compose.source.yaml up -d --build --wait

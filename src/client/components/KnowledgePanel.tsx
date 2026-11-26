@@ -9,7 +9,7 @@ import { Button } from "./ui/Button.tsx";
 import { TextInput } from "./ui/TextInput.tsx";
 import { Link } from "@tanstack/react-router";
 
-interface Hit { pageId: string; title: string; headingPath: string | null; snippet: string; score?: number }
+interface Hit { directoryPath?: string; pageId: string; title: string; headingPath: string | null; snippet: string; score?: number }
 interface SearchResult { hits: Hit[]; mode: string; note?: string }
 interface AskResult {
   ok: boolean; answer: string | null; mode: string; note?: string;
@@ -214,6 +214,7 @@ export function KnowledgePanel({ projectId, pageId, revisionId, canReindex, onOp
                   <li key={`${hit.pageId}-${i}`}>
                     <div className="hit-head">
                       <button type="button" className="hit-title" disabled={!onOpenPage} onClick={() => openSource(hit.pageId)}>{hit.title}</button>
+                      {hit.directoryPath && <span className="muted">{hit.directoryPath}</span>}
                       {hit.headingPath && <span className="tag">{hit.headingPath}</span>}
                     </div>
                     <p className="hit-snippet">{hit.snippet}</p>

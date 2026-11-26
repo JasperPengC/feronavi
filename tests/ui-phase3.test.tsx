@@ -56,7 +56,7 @@ describe("表格视图", () => {
       "/api/v1/auth/me": ACTOR,
       "view=table": {
         rows: [
-          { id: "w1", number: 1, key: "DEMO-1", title: "登录页", type: "TASK", priority: "HIGH", dueDate: null, version: 1 },
+          { id: "w1", number: 1, key: "DEMO-1", title: "登录页", type: "TASK", priority: "HIGH", dueDate: null, version: 1, statusCategory: "IN_PROGRESS", statusName: "进行中", assigneeName: "张三" },
           { id: "w2", number: 2, key: "DEMO-2", title: "过期任务", type: "DEFECT", priority: null, dueDate: "2020-01-01", version: 1 },
         ],
         total: 2, page: 1, pageSize: 20,
@@ -69,7 +69,11 @@ describe("表格视图", () => {
     expect(screen.getByTitle("已逾期")).toBeTruthy();
     // 窄屏以字段卡片呈现，每个值保留可读的列名。
     expect(container.querySelector(".table-view-surface")).not.toBeNull();
-    expect(container.querySelectorAll(".table-view-table tbody td[data-label]")).toHaveLength(4);
+    expect(screen.getByRole("columnheader", { name: "状态" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "负责人" })).toBeTruthy();
+    expect(screen.getByText("进行中")).toBeTruthy();
+    expect(screen.getByText("张三")).toBeTruthy();
+    expect(container.querySelectorAll(".table-view-table tbody td[data-label]")).toHaveLength(8);
     // 分页信息
     expect(screen.getByText(/共 2 条/)).toBeTruthy();
   });

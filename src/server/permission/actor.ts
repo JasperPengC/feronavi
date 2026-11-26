@@ -40,6 +40,7 @@ export interface Actor {
   timezone: string | null;
   /** 账号主题偏好（member_preference.theme）—— 客户端启动时据此应用，避免"设置里改了界面不变" */
   theme: string | null;
+  density?: string | null;
 }
 
 /** Actor 的可序列化形态（`GET /auth/me` 的响应体） */
@@ -53,6 +54,7 @@ export interface ActorDTO {
   locale: string;
   timezone: string | null;
   theme: string | null;
+  density: string;
 }
 
 export function toDTO(actor: Actor): ActorDTO {
@@ -67,5 +69,6 @@ export function toDTO(actor: Actor): ActorDTO {
     locale: actor.locale,
     timezone: actor.timezone,
     theme: actor.theme,
+    density: actor.density ?? "comfortable",
   };
 }

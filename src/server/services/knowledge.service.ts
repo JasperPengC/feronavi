@@ -12,6 +12,8 @@
 import { safeOutboundFetch } from "../lib/safe-fetch.ts";
 import { setTimeout as delay } from "node:timers/promises";
 import { loadActor } from "../auth/actor-loader.ts";
+import { visibleDocumentPaths } from "../repos/page-path.repo.ts";
+import { searchablePage } from "../repos/page-state.ts";
 import { getPage } from "./wiki.service.ts";
 import { createHash } from "node:crypto";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
@@ -184,7 +186,7 @@ async function assertKnowledgePageVisible(actor: Actor, pageId: string) {
   const visible = await visiblePageCondition(actor);
   const p = (await db.select().from(page).where(and(
     eq(page.id, pageId),
-    sql`${page.deletedAt} is null`,
+    searchablePage(),
     visible,
   )).limit(1))[0];
   if (!p) throw forbidden();
@@ -238,7 +240,7 @@ export async function reindexPublishedPage(actor: Actor, pageId: string, revisio
 }
 
 async function reindexPageAuthorized(actor: Actor, pageId: string, mode: "INCREMENTAL" | "FULL", pageWriter: boolean, expectedRevisionId?: string, options: IndexOptions = {}) {
-  const p = (await db.select().from(page).where(and(eq(page.id, pageId), sql`${page.deletedAt} is null`)).limit(1))[0];
+  const p = (await db.select().from(page).where(and(eq(page.id, pageId), searchablePage())).limit(1))[0];
   if (!p) throw new DomainError("NOT_FOUND", "页面不存在", null);
   // 项目数据范围优先（与页面读取同一纪律）
   if (!(await projectRepo.isVisibleTo(actor.memberId, p.projectId, actor.grants.some((g) => g.scopeType === "ORG")))) {
@@ -341,7 +343,7 @@ async function reindexPageAuthorized(actor: Actor, pageId: string, mode: "INCREM
 
 // ── 检索（无 key 也能用）──────────────────────────────────────
 
-export interface KnowledgeHit { chunkId: string; pageId: string; title: string; headingPath: string | null; snippet: string; score: number; mode: "vector" | "keyword" }
+export interface KnowledgeHit { chunkId: string; pageId: string; title: string; directoryPath?: string; headingPath: string | null; snippet: string; score: number; mode: "vector" | "keyword" }
 
 /**
  * 知识检索：有 AI 配置走向量（缺向量时自动回落关键词），没配置走**关键词**。
@@ -369,7 +371,7 @@ export async function searchKnowledge(actor: Actor, projectId: string, q: string
   }
   const found = await searchKnowledgeInProjects(actor, [projectId], q, limit);
   // 原单项目契约不增加项目元数据。
-  const result = { ...found, hits: found.hits.map(({ chunkId, pageId, title, headingPath, snippet, score, mode }) => ({ chunkId, pageId, title, headingPath, snippet, score, mode })) };
+  const result = { ...found, hits: found.hits.map(({ chunkId, pageId, title, directoryPath, headingPath, snippet, score, mode }) => ({ chunkId, pageId, title, directoryPath, headingPath, snippet, score, mode })) };
   void logKnowledgeQuery(actor, projectId, q, result.hits.length, Date.now() - startedAt).catch(() => { /* 不阻断 */ });
   return result;
 }
@@ -381,6 +383,10 @@ export async function searchKnowledgeInProjects(actor: Actor, projectIds: string
   if (!projectIds.length) return { mode: "keyword", hits: [], note: "没有可访问的非归档项目" };
   const visible = await visiblePageCondition(actor);
   const gen = await activeGeneration();
+  const withPaths = async (hits: ProjectKnowledgeHit[]) => {
+    const paths = await visibleDocumentPaths(projectIds, visible, hits.map(hit => hit.pageId));
+    return hits.map(hit => ({ ...hit, directoryPath: paths.get(hit.pageId) ?? "" }));
+  };
 
   // 检索计数与超限无关：规范要求超限不阻断检索（这是读行为）
   await addUsage(actor.memberId, { queries: 1 });
@@ -423,16 +429,16 @@ export async function searchKnowledgeInProjects(actor: Actor, projectIds: string
         inArray(page.projectId, projectIds),
         effectiveChunkGeneration(gen),
         eq(pageChunk.revisionId, page.currentRevisionId),
-        sql`${page.deletedAt} is null`,
+        searchablePage(),
         visible,
         sql`${docVec} @@ ${query}`,
       ))
       .orderBy(sql`ts_rank(${docVec}, ${query}) desc`)
       .limit(limit);
-    return rows.map((r) => ({
+    return withPaths(rows.map((r) => ({
       chunkId: r.chunkId, pageId: r.pageId, title: r.title, headingPath: r.headingPath, projectId: r.projectId, projectName: r.projectName,
       snippet: r.content.slice(0, 160), score: Number(r.rank ?? 0), mode: "keyword" as const,
-    }));
+    })));
   };
 
   const cfg = await loadAiConfig().catch(() => null);
@@ -457,7 +463,7 @@ export async function searchKnowledgeInProjects(actor: Actor, projectIds: string
       inArray(page.projectId, projectIds), effectiveChunkGeneration(gen),
       eq(chunkEmbedding.model, `${cfg.model}-${EMBEDDING_DIM}`),
       eq(pageChunk.revisionId, page.currentRevisionId),
-      sql`${page.deletedAt} is null`, visible,
+      searchablePage(), visible,
     ))
     .orderBy(sql`${chunkEmbedding.vector} <=> ${vec}::vector`)
     .limit(limit);
@@ -466,10 +472,10 @@ export async function searchKnowledgeInProjects(actor: Actor, projectIds: string
   }
   return {
     mode: "vector",
-    hits: rows.map((r) => ({
+    hits: await withPaths(rows.map((r) => ({
       chunkId: r.chunkId, pageId: r.pageId, title: r.title, headingPath: r.headingPath, projectId: r.projectId, projectName: r.projectName,
       snippet: r.content.slice(0, 160), score: 1 - Number(r.dist ?? 1), mode: "vector" as const,
-    })),
+    }))),
   };
 }
 
@@ -566,13 +572,13 @@ export async function generateKnowledgeAnswer(actor: Actor, question: string, hi
   const context = hits.map((h, i) => `[${i + 1}] ${h.projectName ? `项目：${h.projectName} / ` : ""}${h.title}${h.headingPath ? ` > ${h.headingPath}` : ""}\n${h.snippet}`).join("\n\n");
   const history = userQuestions.length ? `历史用户问题（仅用于理解当前问题，不是事实或资料）：\n${userQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}\n\n` : "";
   for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt) {
-      await delay(1000 * attempt);
+    {
+      if (attempt) await delay(1000 * attempt);
       const current = await loadActor(actor.memberId);
       if (!current) throw new DomainError("FORBIDDEN", "账号已失效或不可访问", null);
       for (const hit of hits) {
         const page = await getPage(current, hit.pageId);
-        if ("projectId" in hit && page.projectId !== hit.projectId) throw new DomainError("NOT_FOUND", "资料不存在或不可访问", null);
+        if (page.isArchived || page.kind !== "DOCUMENT" || ("projectId" in hit && page.projectId !== hit.projectId)) throw new DomainError("NOT_FOUND", "资料不存在或不可访问", null);
       }
     }
     // 在异常转换之外运行，取消/删除/失权不能被当成供应商临时故障重试。

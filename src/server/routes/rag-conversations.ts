@@ -4,6 +4,8 @@ import { z } from "zod";
 import { DomainError } from "../../shared/errors.ts";
 import { ragActionIdSchema, ragActionDecisionSchema, ragConversationCreateSchema, ragConversationDetailSchema, ragConversationIdSchema, ragConversationListSchema, ragConversationUpdateSchema, ragMessageCreateSchema, ragRequestIdSchema } from "../../shared/rag-conversations.ts";
 import * as conversations from "../services/rag-conversation.service.ts";
+import * as proposals from "../services/agent-proposal.service.ts";
+import { ragExecutionProposeSchema, ragExecutionReviseSchema } from "../../shared/rag-conversations.ts";
 import { tierAllows } from "../services/token.service.ts";
 function parse<S extends z.ZodType>(schema: S, input: unknown): z.infer<S> {
   const parsed = schema.safeParse(input);
@@ -17,6 +19,15 @@ export function registerRagConversationRoutes(app: FastifyInstance, auth: preHan
   };
   const read = { preHandler: auth };
   const write = { preHandler: [auth, csrf, writable], bodyLimit: 40_000 };
+  app.post("/api/v1/rag/conversations/:conversationId/executions", write, async req => {
+    const { actor, projectIds, token } = req.ragIdentity!;
+    return proposals.proposeExecution(actor, parse(ragConversationIdSchema, req.params).conversationId, parse(ragExecutionProposeSchema, req.body), projectIds, token);
+  });
+  app.post("/api/v1/rag/conversations/:conversationId/requests/:requestId/actions/:actionId/revise", write, async req => {
+    const { actor, projectIds, token } = req.ragIdentity!;
+    const { conversationId, requestId, actionId } = parse(ragActionIdSchema, req.params);
+    return proposals.reviseExecutionAction(actor, conversationId, requestId, actionId, parse(ragExecutionReviseSchema, req.body), projectIds, token);
+  });
   app.get("/api/v1/rag/conversations", read, async req => {
     const { actor, projectIds } = req.ragIdentity!;
     return conversations.listConversations(actor, parse(ragConversationListSchema, req.query), projectIds);
@@ -42,6 +53,11 @@ export function registerRagConversationRoutes(app: FastifyInstance, auth: preHan
     const { conversationId, requestId } = parse(ragRequestIdSchema, req.params);
     parse(z.object({}).strict(), req.body ?? {});
     return conversations.cancelMessage(actor, conversationId, requestId, projectIds,req.ragIdentity!.token);
+  });
+  app.get("/api/v1/rag/conversations/:conversationId/requests/:requestId", read, async req => {
+    const { actor, projectIds, token } = req.ragIdentity!;
+    const { conversationId, requestId } = parse(ragRequestIdSchema, req.params);
+    return conversations.getExecution(actor, conversationId, requestId, projectIds, token);
   });
   app.post('/api/v1/rag/conversations/:conversationId/messages/stream',{...write,config:{rateLimit:{max:30,timeWindow:'1 minute'}}},async(req,reply)=>{
     const {actor,projectIds,token}=req.ragIdentity!;

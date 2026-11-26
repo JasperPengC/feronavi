@@ -1,8 +1,10 @@
+import { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } from "@tanstack/react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PlanningEntitiesPanel } from "../src/client/components/project/PlanningEntitiesPanel.tsx";
 import { setLocale } from "../src/client/i18n/index.ts";
+vi.mock("../src/client/lib/actor.ts", () => ({ useCan: () => true }));
 
 let client: QueryClient;
 const rows = [{ id: "source", name: "本轮迭代", carryOver: true, completedAt: null }, { id: "next", name: "下一轮", completedAt: null }, { id: "closed", name: "已结束的迭代", completedAt: "2026-11-15T00:00:00Z" }];
@@ -20,7 +22,7 @@ it("结束迭代选择同项目未结束目标，失败保留选择，成功后�
     }
     return new Response(JSON.stringify(rows.map((row) => row.id === "source" && completed ? { ...row, completedAt: "2026-11-15T00:00:00Z" } : row)));
   }));
-  render(<QueryClientProvider client={client}><PlanningEntitiesPanel projectId="p1" showTabs={false} /></QueryClientProvider>);
+  render(<RouterContextProvider router={createRouter({ routeTree: createRootRoute(), history: createMemoryHistory({ initialEntries: ["/"] }) })}><QueryClientProvider client={client}><PlanningEntitiesPanel projectId="p1" showTabs={false} /></QueryClientProvider></RouterContextProvider>);
   const source = (await screen.findByText("本轮迭代")).closest("li")!;
   fireEvent.click(within(source).getByRole("button", { name: "结束迭代", exact: true }));
   const dialog = await screen.findByRole("dialog", { name: "结束迭代 · 本轮迭代" });
@@ -38,7 +40,7 @@ it("结束迭代选择同项目未结束目标，失败保留选择，成功后�
 
 it("版本提供完成与归档入口，未结束项不伪装已完成", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify([{ id: "release", name: "版本一", completedAt: null }]))));
-  render(<QueryClientProvider client={client}><PlanningEntitiesPanel projectId="p1" initialKind="release" showTabs={false} /></QueryClientProvider>);
+  render(<RouterContextProvider router={createRouter({ routeTree: createRootRoute(), history: createMemoryHistory({ initialEntries: ["/"] }) })}><QueryClientProvider client={client}><PlanningEntitiesPanel projectId="p1" initialKind="release" showTabs={false} /></QueryClientProvider></RouterContextProvider>);
   const row = (await screen.findByText("版本一")).closest("li")!;
   expect(within(row).getByRole("button", { name: "完成版本", exact: true })).toBeTruthy();
   expect(within(row).getByRole("button", { name: "归档", exact: true })).toBeTruthy();
@@ -55,7 +57,7 @@ it("归档列表可恢复，错误可见且成功后记录回到当前列表", a
     }
     return new Response(JSON.stringify(url.includes("archived=true") || !archived ? [{ id: "old", name: "旧迭代", archivedAt: archived ? "2026-11-15T00:00:00Z" : null }] : []));
   }));
-  render(<QueryClientProvider client={client}><PlanningEntitiesPanel projectId="p1" showTabs={false} /></QueryClientProvider>);
+  render(<RouterContextProvider router={createRouter({ routeTree: createRootRoute(), history: createMemoryHistory({ initialEntries: ["/"] }) })}><QueryClientProvider client={client}><PlanningEntitiesPanel projectId="p1" showTabs={false} /></QueryClientProvider></RouterContextProvider>);
   fireEvent.click(await screen.findByRole("button", { name: "已归档", exact: true }));
   const row = (await screen.findByText("旧迭代")).closest("li")!;
   fireEvent.click(within(row).getByRole("button", { name: "恢复", exact: true }));

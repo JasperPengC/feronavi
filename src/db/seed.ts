@@ -5,7 +5,7 @@
  * 实际写入逻辑在 `seed-builtin.ts`（安装向导也会调用它做「缺失自愈」，因此必须幂等）。
  *
  * 用法：`npm run db:seed`（需要 DATABASE_URL）
- * 判据：permission 47 / 内置角色 4 / 平台工作流状态 22 三个计数必须精确相等，否则退出码 1。
+ * 判据：permission 50 / 内置角色 4 / 平台工作流状态 22 三个计数必须精确相等，否则退出码 1。
  */
 import { sql as raw } from "./index.ts";
 import { seedBuiltin } from "./seed-builtin.ts";
@@ -30,7 +30,7 @@ async function main() {
   if (!c) throw new Error("计数查询没有返回行");
   console.log("计数:", JSON.stringify(c));
   const expect = [
-    ["permission", 47],
+    ["permission", 50],
     ["role_system", 4],
     ["workflow_state", 22],
   ] as const;

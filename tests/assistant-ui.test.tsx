@@ -118,11 +118,11 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); client.clear(); vi.unstubAllGlobals(); });
 
-async function show(path = "/assistant", waitForScope = true) {
+async function show(path = "/assistant", waitForScope = true, permissions: string[] = []) {
   const root = createRootRoute();
   const route = createRoute({ getParentRoute: () => root, path: "/assistant", validateSearch: (search: Record<string, unknown>) => ({ project: typeof search.project === "string" ? search.project : undefined, conversation: typeof search.conversation === "string" ? search.conversation : undefined }), component: AssistantPage });
   const router = createRouter({ routeTree: root.addChildren([route]), history: createMemoryHistory({ initialEntries: [path] }) });
-  const actor: Actor = { memberId, username: memberId, name: memberId, permissions: [], dataScopes: [], mustChangePassword: false, locale: "zh-CN", theme: null, timezone: null };
+  const actor: Actor = { memberId, username: memberId, name: memberId, permissions, dataScopes: [], mustChangePassword: false, locale: "zh-CN", theme: null, timezone: null };
   render(<QueryClientProvider client={client}><ActorContext.Provider value={actor}><RouterProvider router={router as never} /></ActorContext.Provider></QueryClientProvider>);
   await screen.findByRole("textbox", { name: "你的问题" });
   if (waitForScope) await waitFor(() => expect((screen.getByRole("button", { name: "资料范围" }) as HTMLButtonElement).disabled).toBe(false));
@@ -268,6 +268,20 @@ it("保留引用编号、安全Markdown、超时本地化与折叠技术详情",
   expect((summary.closest("details") as HTMLDetailsElement).open).toBe(false); fireEvent.click(summary);
   expect(screen.getByRole("link", { name: /\[1\].*研发项目.*发布手册/ }).getAttribute("href")).toBe(`/projects/${A}/wiki?page=page-a`);
   reply = result; fireEvent.click(screen.getByRole("button", { name: "重试问题" })); await completed();
+});
+
+it.each([false, true])("缺少对话模型时保留问题并按权限提供恢复指引（可配置=%s）", async canConfigure => {
+  reply = { ...result, ok: false, answer: null, note: "未配置对话模型（ai.chatModel）" };
+  await show("/assistant", true, canConfigure ? ["ai:configure"] : []);
+  send("首次使用验收的操作顺序是什么？");
+  await screen.findByText(canConfigure
+    ? "还没有配置对话模型。请先配置模型，再重试这条问题。"
+    : "还没有配置对话模型。请联系管理员配置后，再重试这条问题。");
+  expect(textbox().value).toBe("首次使用验收的操作顺序是什么？");
+  const configure = screen.queryByRole("link", { name: "配置对话模型" });
+  if (canConfigure) expect(configure?.getAttribute("href")).toBe("/settings/integrations");
+  else expect(configure).toBeNull();
+  expect((screen.getByText("技术详情", { selector: "summary" }).closest("details") as HTMLDetailsElement).open).toBe(false);
 });
 
 it("unavailable历史不伪造回答，未知会话提供已删除恢复入口", async () => {
@@ -490,8 +504,8 @@ it("业务建议显示项目编号标题及新旧值，证据集中折叠，确�
   expect(within(evidence).getByRole("button", { name: /工作项/, hidden: true })).toBeTruthy();
   expect(evidence.querySelector('a[href*="issue=target"]')).toBeNull();
   const button = screen.getByRole("button", { name: "确认执行" }); fireEvent.click(button); fireEvent.click(button);
-  await screen.findByText("正在执行…"); expect(decisions).toEqual([{ decision: "confirm" }]);
-  await act(async () => resolve()); await screen.findByText("已执行");
+  await screen.findByText("执行中"); expect(decisions).toEqual([{ decision: "confirm" }]);
+  await act(async () => resolve()); await screen.findAllByText("已执行 · 待核验");
   await waitFor(() => expect(screen.getByText("新的业务标题", { selector: ".assistant-action-target span" })).toBeTruthy());
   expect(screen.queryByText("原始标题")).toBeNull();
   expect(screen.queryByRole("button", { name: "确认执行" })).toBeNull();
@@ -499,7 +513,7 @@ it("业务建议显示项目编号标题及新旧值，证据集中折叠，确�
 it("拒绝建议不提交参数，版本已变化的建议不能确认", async () => {
   const one = seed("操作拒绝", A, "旧问题"); records.get(one.id)!.messages[0]!.reply = proposalReply();
   await show(`/assistant?conversation=${one.id}`); await screen.findByText("DEV-12");
-  fireEvent.click(screen.getByRole("button", { name: "拒绝建议" })); await screen.findByText("已拒绝");
+  fireEvent.click(screen.getByRole("button", { name: "拒绝建议" })); await screen.findAllByText("已拒绝");
   expect(decisions).toEqual([{ decision: "reject" }]);
   cleanup(); client.clear(); targetVersion = 4; records.get(one.id)!.messages[0]!.reply = proposalReply();
   await show(`/assistant?conversation=${one.id}`); await screen.findByText("目标已变化，请重新提问生成建议。");
@@ -551,7 +565,7 @@ it("指派建议解析新旧成员名字，网络失败允许用原建议重试"
   fireEvent.click(screen.getByRole("button", { name: "确认执行" }));
   await screen.findByText("网络暂时不可用");
   decide = async () => json({}); fireEvent.click(screen.getByRole("button", { name: "重试确认" }));
-  await screen.findByText("已执行"); expect(decisions).toEqual([{ decision: "confirm" }, { decision: "confirm" }]);
+  await screen.findAllByText("已执行 · 待核验"); expect(decisions).toEqual([{ decision: "confirm" }, { decision: "confirm" }]);
 });
 
 it("I1普通成员无管理状态权限时仍可确认allowedTransitions允许的流转", async () => {
@@ -559,14 +573,14 @@ it("I1普通成员无管理状态权限时仍可确认allowedTransitions允许�
   await show(); send("成员完成任务"); await completed();
   await screen.findByText("已完成");
   await waitFor(() => expect((screen.getByRole("button", { name: "确认执行" }) as HTMLButtonElement).disabled).toBe(false));
-  fireEvent.click(screen.getByRole("button", { name: "确认执行" })); await screen.findByText("已执行");
+  fireEvent.click(screen.getByRole("button", { name: "确认执行" })); await screen.findAllByText("已执行 · 待核验");
   expect(decisions).toEqual([{ decision: "confirm" }]); expect(managedStatesReads).toBe(0);
 });
 it("I2省略assigneeId的解除指派显示当前负责人到未指派且不改参数", async () => {
   reply = proposalReply(); reply.actions![0] = { ...reply.actions![0]!, toolName: "workitem.assign", parameters: { workItemId: "target", idempotencyKey: "server-key" } };
   await show(); send("解除任务指派"); await completed();
   await screen.findByText("陈华"); expect(screen.getByText("未指派")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "确认执行" })); await screen.findByText("已执行");
+  fireEvent.click(screen.getByRole("button", { name: "确认执行" })); await screen.findAllByText("已执行 · 待核验");
   expect(decisions).toEqual([{ decision: "confirm" }]);
   expect(records.get(calls[0]!.id)!.messages[0]!.reply!.actions![0]!.parameters).toEqual({ workItemId: "target", idempotencyKey: "server-key" });
 });
@@ -580,7 +594,7 @@ it.each(["parentId", "milestoneId", "iterationId", "releaseId", "moduleId"])("I3
   const changes = document.querySelector(".assistant-action-changes")!;
   expect(changes.textContent).not.toContain(`old-${field}`); expect(changes.textContent).not.toContain(`new-${field}`);
   expect(within(changes as HTMLElement).getAllByRole("button", { name: /查看|新业务计划|原业务计划|父项/ }).length).toBeGreaterThan(0);
-  fireEvent.click(screen.getByRole("button", { name: "确认执行" })); await screen.findByText("已执行");
+  fireEvent.click(screen.getByRole("button", { name: "确认执行" })); await screen.findAllByText("已执行 · 待核验");
   expect(decisions).toEqual([{ decision: "confirm" }]);
   expect(records.get(calls[0]!.id)!.messages[0]!.reply!.actions![0]!.parameters[field]).toBe(`new-${field}`);
 });
@@ -632,7 +646,7 @@ it("审批提交快照显示申请状态与当前状态，不声称已执行", a
   saved.actions![0] = { ...saved.actions![0]!, status: "confirmed", toolName: "workitem.transition", parameters: { workItemId: "target", toStateKey: "DONE" }, result: { outcome: "approval_pending", approval: { status: "PENDING" }, observedAt: stamp, resources: [{ kind: "workItem", id: "target" }], value: { id: "target", projectId: A, key: "DEV-12", title: "原始标题", version: 3 } } };
   records.get(one.id)!.messages[0]!.reply = saved;
   await show(`/assistant?conversation=${one.id}`);
-  await screen.findByText("审批已提交");
+  await screen.findAllByText("审批已提交");
   await screen.findByText(/当前状态：待处理/);
   expect(screen.getByText("申请状态")).toBeTruthy(); expect(screen.queryByText("已执行")).toBeNull();
   expect(screen.queryByRole("button", { name: "确认执行" })).toBeNull();

@@ -59,6 +59,7 @@ export const timeline = (projectId: string, from: string, to: string) =>
 export interface WorkbenchItem {
   id: string; key: string; title: string; type: string;
   priority: string | null; dueDate: string | null; version: number; projectKey: string;
+  statusName?: string; statusKey?: string; statusCategory?: string;
 }
 
 export interface WorkbenchCrossDomain {
@@ -67,7 +68,7 @@ export interface WorkbenchCrossDomain {
   milestones: { overdue: number; dueSoon: number; items: { id: string; name: string; dueDate: string; projectId: string; projectKey: string }[] };
 }
 export const workbench = () =>
-  apiGet<{ groups: { key: WorkbenchGroupKey; name: string; items: WorkbenchItem[]; count: number }[]; total: number; crossDomain: WorkbenchCrossDomain }>(
+  apiGet<{ groups: { key: WorkbenchGroupKey; name: string; items: WorkbenchItem[]; count: number }[]; attentionItems?: WorkbenchItem[]; total: number; crossDomain: WorkbenchCrossDomain }>(
     "/api/v1/workbench");
 
 export const workbenchGroup = (key: WorkbenchGroupKey, page = 1) =>
@@ -126,9 +127,10 @@ export const notifications = {
 export interface TableRow {
   id: string; number: number; key: string; title: string; type: string;
   priority: string | null; dueDate: string | null; version: number; assigneeId?: string | null; statusId?: string | null;
+  statusName?: string | null; statusKey?: string | null; statusCategory?: string | null; assigneeName?: string | null;
 }
 
-export const tableView = (projectId: string, opts: { page?: number; pageSize?: number; sortBy?: string; sortDir?: string; type?: string; priority?: string; unscheduled?: boolean } = {}) => {
+export const tableView = (projectId: string, opts: { page?: number; pageSize?: number; sortBy?: string; sortDir?: string; type?: string; priority?: string; unscheduled?: boolean; milestoneId?: string; iterationId?: string; releaseId?: string; moduleId?: string } = {}) => {
   const q = new URLSearchParams();
   if (opts.page) q.set("page", String(opts.page));
   if (opts.pageSize) q.set("pageSize", String(opts.pageSize));
@@ -137,6 +139,7 @@ export const tableView = (projectId: string, opts: { page?: number; pageSize?: n
   if (opts.type) q.set("type", opts.type);
   if (opts.priority) q.set("priority", opts.priority);
   if (opts.unscheduled !== undefined) q.set("unscheduled", String(opts.unscheduled));
+  for (const field of ["milestoneId", "iterationId", "releaseId", "moduleId"] as const) if (opts[field]) q.set(field, opts[field]);
   q.set("view", "table");
   return apiGet<{ rows: TableRow[]; total: number; page: number; pageSize: number }>(
     `/api/v1/projects/${projectId}/work-items?${q.toString()}`);

@@ -9,14 +9,14 @@ import { Button } from "../ui/Button.tsx";
 import { Icon } from "../Icon.tsx";
 import { Link } from "@tanstack/react-router";
 
-export type WorkItemView = "board" | "table" | "timeline" | "calendar";
+export type WorkItemView = "board" | "table" | "timeline" | "calendar" | "testing";
 
 export function WorkItemViewHeader({
   projectId, active, onCreate, onRefresh, extra,
 }: {
   projectId: string;
   active: WorkItemView;
-  onCreate: () => void;
+  onCreate?: () => void;
   onRefresh?: () => void;
   extra?: ReactNode;
 }) {
@@ -34,13 +34,14 @@ export function WorkItemViewHeader({
         <span className="mono muted work-view-key">{project.data?.key}</span></span>}
       actions={<>
         {extra}
-        <Button size="sm" variant="primary" onClick={onCreate}><Icon name="plus" size={14} />{t("wie.create")}</Button>
+        {onCreate && <Button size="sm" variant="primary" onClick={onCreate}><Icon name="plus" size={14} />{t("wie.create")}</Button>}
         {onRefresh && <Button size="sm" onClick={onRefresh}><Icon name="refresh" size={14} />{t("board.refresh")}</Button>}
         <div className="page-view-switcher ui-segmented" role="group" aria-label={t("nav.workItems")}>
           {view("board", "/projects/$projectId/board", t("nav.board"))}
           {view("table", "/projects/$projectId/table", t("nav.table"))}
           {view("timeline", "/projects/$projectId/timeline", t("nav.timeline"))}
           {view("calendar", "/projects/$projectId/calendar", t("nav.calendar"))}
+          {view("testing", "/projects/$projectId/testing", t("nav.testing"))}
         </div>
       </>}
     />

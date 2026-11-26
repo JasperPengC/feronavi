@@ -34,7 +34,43 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
+it("登录加载紧凑密度偏好，并在切换账号时恢复舒适布局", async () => {
+  stub({ "/api/v1/auth/me": [200, { ...ACTOR, density: "compact" }],
+    "/api/v1/me/preferences": [200, { theme: "system", locale: "zh-CN", timezone: null, density: "compact" }] });
+  const view = renderAt("/settings/personal");
+  await waitFor(() => expect(document.documentElement.dataset.density).toBe("compact"));
+  view.unmount();
+  stub({ "/api/v1/auth/me": [200, { ...ACTOR, density: "comfortable" }],
+    "/api/v1/me/preferences": [200, { theme: "system", locale: "zh-CN", timezone: null, density: "comfortable" }] });
+  renderAt("/settings/personal");
+  await waitFor(() => expect(document.documentElement.dataset.density).toBe("comfortable"));
+});
+
 const P = "11111111-1111-1111-1111-111111111111";
+
+it("保存紧凑偏好立即应用，重新读取账号仍保持所选密度", async () => {
+  let density = "comfortable";
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = new URL(String(input), "http://localhost").pathname;
+    let body: unknown = {};
+    if (path.endsWith("/auth/me")) body = { ...ACTOR, density };
+    if (path.endsWith("/me/preferences")) {
+      if (init?.method === "PUT") density = JSON.parse(String(init.body)).density;
+      body = { theme: "system", locale: "zh-CN", timezone: null, density };
+    }
+    return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+  });
+  renderAt("/settings/personal");
+  await waitFor(() => {
+    expect(screen.getByLabelText("信息密度").textContent).toContain("舒适");
+    expect((screen.getByRole("button", { name: "保存偏好" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+  fireEvent.click(screen.getByLabelText("信息密度"));
+  fireEvent.click(await screen.findByRole("option", { name: "紧凑" }));
+  fireEvent.click(screen.getByRole("button", { name: "保存偏好" }));
+  await waitFor(() => expect(density).toBe("compact"));
+  await waitFor(() => expect(document.documentElement.dataset.density).toBe("compact"));
+});
 
 describe("个人设置页", () => {
   it("密码留空说明只在字段标签展示一次", async () => {

@@ -358,3 +358,58 @@
   .data-page .issues-list-section { margin-top: 12px; }
   .data-page :is(.members-metric-grid, .metric-grid-3) { margin-bottom: 10px; }
 }
+
+/* 研发日常列表：标题优先，状态/负责人无需打开详情即可读取。 */
+@media (min-width: 901px) {
+ .page .data-scroll > .table-view-table { table-layout: fixed; }
+ .page .table-view-table th:first-child { width: 48px; }
+ .page .table-view-table th:nth-child(2) { width: auto; }
+ .page .table-view-table th:nth-child(3) { width: 112px; }
+ .page .table-view-table th:nth-child(4) { width: 96px; }
+ .page .table-view-table th:nth-child(5) { width: 120px; }
+ .page .table-view-table th:nth-child(6) { width: 116px; }
+ .page .data-scroll > :is(.table-view-table, .issues-table) > tbody > tr > td { padding-block: 7px; height: 48px; }
+ .page .data-scroll :is(.row-name, .issues-item-open strong) { font-size: var(--text-sm); font-weight: 500; line-height: 1.4; }
+ .page .data-scroll .row-sub, .page .data-scroll .issues-item-meta { margin-top: 2px; font-size: var(--text-xs); }
+ .page .data-scroll .issues-item-open { gap: 2px; }
+ .issues-col-subject { width: auto; }
+ .issues-col-status { width: 100px; }
+ .issues-col-severity { width: 76px; }
+ .issues-col-priority { width: 86px; }
+ .issues-col-person { width: 110px; }
+ .issues-col-date { width: 116px; }
+ .issues-page .issues-overview-bar { padding-block: 12px; }
+ .issues-page .issues-list-section { margin-top: 12px; }
+ .issues-page .issues-list-head { padding-block: 10px 8px; }
+ .issues-page .issues-filterbar { padding-bottom: 10px; }
+}
+
+@media (min-width: 901px) {
+ html[data-density="compact"] .page .data-scroll > table > tbody > tr > td { height: 40px; padding-block: 4px; }
+ html[data-density="compact"] .page .data-scroll > table > thead > tr > th { height: 36px; padding-block: 7px; }
+ .issues-page .issue-assignee > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+html[data-density="compact"] .board-card { padding-block: 8px; }
+/* 计划筛选延用表格工具栏，在窄屏逐项换行，不撑开主骨架。 */
+.table-plan-filters { min-width: 0; width: 100%; }
+.table-plan-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.table-plan-fields > * { min-width: 0; }
+.table-plan-toggle { display: none; }
+.table-plan-filters .select-trigger { width: 100%; }
+.table-saved-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.table-plan-context { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; font-size: var(--text-xs); }
+@media (max-width: 600px) {
+  .table-plan-toggle { display: flex; width: 100%; gap: 8px; }
+  .table-plan-toggle > :first-child { flex-shrink: 0; }
+  .table-plan-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; text-align: start; }
+  .table-plan-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 8px; }
+  .table-plan-fields[data-expanded="false"] { display: none; }
+  .page .table-view-toolbar > .table-view-filters,
+  .page .table-view-toolbar > .table-saved-views { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .table-view-toolbar .table-saved-actions,
+  .table-view-toolbar .table-saved-views > [role="status"] { grid-column: 1 / -1; }
+  .table-view-toolbar .select-trigger { width: 100%; }
+  .data-page.table-page .work-items-help.table-plan-context:has(a) { display: flex; }
+  .table-plan-context > span { display: none; }
+  .page.table-page .table-view-toolbar { max-height: 34dvh; overflow: auto; }
+}

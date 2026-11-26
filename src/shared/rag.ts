@@ -58,6 +58,8 @@ export interface RagCitation {
 }
 export interface RagHit extends RagCitation {
   chunkId: string;
+  /** 仅包含当前身份可见的文档目录；根目录为 ""，兼容旧检索记录。 */
+  directoryPath?: string;
   score: number;
   mode: "vector" | "keyword";
 }
@@ -68,6 +70,8 @@ export interface RagSearchResult {
   scope: RagScope;
 }
 export interface RagChatResult {
+  /** 服务端登记摘要，用于运行请求幂等；不从调用者接收。 */
+  executionRequest?: { origin: "agent"; requestHash: string };
   evidence?: RagBusinessEvidence[];
   actions?: RagActionProposal[];
   ok: boolean;
@@ -109,6 +113,10 @@ export type RagBusinessScope =
 export interface RagVerificationRead {toolName: string; parameters: Record<string, unknown>}
 export interface RagActionProposal {
   id: string;
+  supersedesId?: string;
+  supersededById?: string;
+  revisionRequest?: { id: string; hash: string };
+  lastFailure?: { code: string; recordedAt: string };
   toolName: string;
   projectId: string | null;
   scope?: RagBusinessScope;

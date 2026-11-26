@@ -1,4 +1,5 @@
 import { TableScroll } from "../components/ui/TableScroll.tsx";
+import { WorkItemTag } from "../components/work-item/WorkItemTag.tsx";
 /**
  * 问题追踪（Round 64 · 对标 YouQu P1）
  *
@@ -38,7 +39,7 @@ interface Stats {
 }
 interface IssueRow {
   id: string; key: string; title: string; type?: string; severity: string | null; priority: string | null;
-  statusName: string | null; statusCategory: string | null; assigneeName: string | null; reporterName: string | null;
+  statusName: string | null; statusCategory: string | null; statusKey?: string | null; assigneeName: string | null; reporterName: string | null;
   dueDate: string | null; createdAt: string;
   projectId?: string; projectKey?: string; projectName?: string;
 }
@@ -295,9 +296,9 @@ export function IssuesPage() {
                     <span className="issues-item-meta"><span>{r.key}</span>{isGlobal && r.projectName && <span>{r.projectName}</span>}<span>{t(`type.${r.type ?? "DEFECT"}`)}</span></span>
                   </button>
                 </td>
-                <td data-label={t("common.status")}><span className="issue-status" data-status={r.statusCategory}>{r.statusName ?? "—"}</span></td>
-                <td data-label={t("common.severity")}><span className="issue-severity" data-severity={r.severity}>{r.severity ?? "—"}</span></td>
-                <td data-label={t("common.priority")}><span className="issue-priority" data-priority={r.priority}>{r.priority && <Icon name="flag" size={14} />}{r.priority ? t(`prio.${r.priority}`) : "—"}</span></td>
+                <td data-label={t("common.status")}><WorkItemTag kind="status" value={r.statusCategory} stateKey={r.statusKey} label={r.statusName} /></td>
+                <td data-label={t("common.severity")}><WorkItemTag kind="severity" value={r.severity} /></td>
+                <td data-label={t("common.priority")}><WorkItemTag kind="priority" value={r.priority} /></td>
                 <td data-label={t("issues.assignee")}><span className="issue-assignee">{r.assigneeName && <span className="issue-avatar" aria-hidden="true">{Array.from(r.assigneeName)[0]}</span>}<span>{r.assigneeName ?? t("wie.unassigned")}</span></span></td>
                 <td data-label={t("issues.reporter")} className="muted">{r.reporterName ?? "—"}</td>
                 <td data-label={t("common.dueDate")}><span className="issue-due" data-overdue={overdue}>{r.dueDate ? <time dateTime={r.dueDate}>{r.dueDate}</time> : "—"}{overdue && <small>{t("common.overdue")}</small>}</span></td>

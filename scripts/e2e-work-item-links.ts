@@ -93,6 +93,7 @@ try {
     JSON.stringify(listed.body.links?.map((l) => l.target.type)));
 
   ok("重复链接 → 400", (await post(wi1!.id, "IDEA", ideaRow!.id)).status === 400);
+  ok("反向重复工作项链接 → 400", (await post(wi2!.id, "WORK_ITEM", wi1!.id)).status === 400);
   ok("链接到自身 → 400", (await post(wi1!.id, "WORK_ITEM", wi1!.id)).status === 400);
   ok("非法链接类型 → 400", (await post(wi1!.id, "COMMENT", ideaRow!.id)).status === 400);
   ok("跨项目目标 → 400", (await post(wi1!.id, "WORK_ITEM", wiOther!.id)).status === 400);
@@ -122,11 +123,26 @@ try {
   const promotedLinks = await list(promoted.workItem!.id);
   ok("转工作项后工作项侧可见想法链接", promotedLinks.body.links?.some((l) => l.target.type === "IDEA" && l.target.title === "待转想法-链接"),
     JSON.stringify(promotedLinks.body.links?.map((l) => l.target.type)));
+  ok("双向来源只展示一次且优先稳定的出向ID", promotedLinks.body.links?.length === 1
+    && promotedLinks.body.links[0]?.direction === "outgoing");
   const both = await db.select().from(workItemLink).where(eq(workItemLink.sourceType, "IDEA"));
   ok("库内确有双向两行（IDEA→WORK_ITEM 与 WORK_ITEM→IDEA）",
     both.some((l) => l.sourceId === idea2!.id && l.targetType === "WORK_ITEM")
     && (await db.select().from(workItemLink).where(eq(workItemLink.targetType, "IDEA"))).some((l) => l.targetId === idea2!.id),
     JSON.stringify(both.length));
+  const sourceLink = promotedLinks.body.links!.find((l) => l.direction === "outgoing")!;
+  const removeSource = await fetch(`${BASE}/api/v1/work-item-links/${sourceLink.id}`, {
+    method: "DELETE", headers: { cookie: H.cookie, "x-csrf-token": H["x-csrf-token"] },
+  });
+  ok("一次移除完整双向引用且不残留隐藏项", removeSource.status === 200
+    && (await list(promoted.workItem!.id)).body.links?.length === 0
+    && !(await db.select().from(workItemLink)).some((l) => l.sourceId === idea2!.id || l.targetId === idea2!.id));
+  const [incoming] = await db.insert(workItemLink).values({ sourceType: "IDEA", sourceId: idea2!.id,
+    targetType: "WORK_ITEM", targetId: promoted.workItem!.id }).returning();
+  const incomingList = (await list(promoted.workItem!.id)).body.links;
+  ok("旧单向入向引用保持可见且禁止新建反向重复", incomingList?.length === 1
+    && incomingList[0]?.id === incoming!.id && incomingList[0]?.direction === "incoming"
+    && (await post(promoted.workItem!.id, "IDEA", idea2!.id)).status === 400);
 } finally {
   await app.close();
   await db.delete(workItemLink);

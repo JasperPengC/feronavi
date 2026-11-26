@@ -43,13 +43,15 @@ export async function workbenchGroup(actor: Actor, key: WorkbenchGroupKey, optio
     : key === "createdByMe" ? sql`w.reporter_id = ${actor.memberId}`
     : key === "overdue" ? sql`w.due_date < (now() at time zone ${tz})::date`
     : sql`w.due_date >= (now() at time zone ${tz})::date and w.due_date <= ((now() at time zone ${tz})::date + 7)`;
-  const where = sql`w.deleted_at is null and ${scopeCond(actor)} and ${filter}`;
+  const actionable = key === "overdue" || key === "dueSoon" ? sql`s.category not in ('DONE','CANCELLED','TERMINAL')` : sql`true`;
+  const where = sql`w.deleted_at is null and ${scopeCond(actor)} and ${filter} and ${actionable}`;
   const order = key === "overdue" || key === "dueSoon" ? sql`w.due_date asc, w.id asc` : sql`w.created_at desc, w.id desc`;
   const [items, counts] = await Promise.all([
-    sql`select w.id, w.key, w.title, w.type, w.priority, w.due_date::text as "dueDate", w.version, p.key as "projectKey"
-        from work_item w join project p on p.id = w.project_id where ${where}
+    sql`select w.id, w.key, w.title, w.type, w.priority, w.due_date::text as "dueDate", w.version, p.key as "projectKey",
+        s.name as "statusName", s.key as "statusKey", s.category as "statusCategory"
+        from work_item w join project p on p.id = w.project_id join workflow_state s on s.id = w.status_id where ${where}
         order by ${order} limit ${pageSize} offset ${(page - 1) * pageSize}`,
-    sql`select count(*)::int as n from work_item w join project p on p.id = w.project_id where ${where}`,
+    sql`select count(*)::int as n from work_item w join project p on p.id = w.project_id join workflow_state s on s.id = w.status_id where ${where}`,
   ]);
   const names: Record<WorkbenchGroupKey, string> = { assignedToMe: "指派给我的", createdByMe: "我创建的", overdue: "已逾期", dueSoon: "7 天内到期" };
   return { key, name: names[key], items: items as Record<string, unknown>[], count: Number(counts[0]?.n ?? 0), page, pageSize };
@@ -66,7 +68,16 @@ export async function workbench(actor: Actor) {
   // ── 跨域聚合（Round 68 对标 YouQu 工作台：缺陷/里程碑）────────────────
   // 口径全部来自真实数据；关闭态同时覆盖通用流 DONE/CANCELLED 与缺陷流 TERMINAL。
   const closedSql = sql`s.category in ('DONE','CANCELLED','TERMINAL')`;
-  const [defectRows, myDefectRows, milestoneRows] = await Promise.all([
+  const [attentionItems, defectRows, myDefectRows, milestoneRows] = await Promise.all([
+    // 从完整待处理集合取关注项；历史分组的前八条不能遮住较早的未完成任务。
+    sql`select w.id, w.key, w.title, w.type, w.priority, w.due_date::text as "dueDate", w.version, p.key as "projectKey",
+        s.name as "statusName", s.key as "statusKey", s.category as "statusCategory"
+      from work_item w join project p on p.id = w.project_id join workflow_state s on s.id = w.status_id
+      where w.deleted_at is null and ${scope} and not (${closedSql})
+        and (w.assignee_id = ${actor.memberId} or w.due_date <= ((now() at time zone ${tz})::date + 7))
+      order by case when w.due_date < (now() at time zone ${tz})::date then 0
+                    when w.due_date <= ((now() at time zone ${tz})::date + 7) then 1 else 2 end,
+        w.due_date asc nulls last, w.created_at desc, w.id desc limit 4`,
     sql`
       select
         count(*)::int as total,
@@ -113,7 +124,7 @@ export async function workbench(actor: Actor) {
     },
   };
 
-  return { groups, total: groups.reduce((n, g) => n + g.count, 0), crossDomain };
+  return { groups, attentionItems: attentionItems ?? [], total: groups.reduce((n, g) => n + g.count, 0), crossDomain };
 }
 
 // ── 个人待办 ────────────────────────────────────────────────

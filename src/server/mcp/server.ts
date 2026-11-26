@@ -22,6 +22,7 @@ import {
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { DomainError } from "../../shared/errors.ts";
+import { DOCUMENT_LINK_GUIDANCE } from "../../shared/markdown-links.ts";
 import { TOOLS, ALL_TOOLS, assertToolAllowed, type ToolCtx } from "./tools.ts";
 import { WRITE_TOOLS } from "./write-tools.ts";
 import { describeTool } from "./contracts.ts";
@@ -83,7 +84,7 @@ const PROMPTS = [
   },
 ] as const;
 
-const BUSINESS_WORKFLOW_GUIDE = `# Feronavi Agent 业务闭环\n\n- 先用只读工具查询当前账号可见的数据、项目白名单与业务前置条件。\n- 任何业务写入都必须先向用户展示目标、字段、影响范围和调用的工具，获得明确确认后再执行。\n- 写入成功后必须用对应的读取工具或 REST 回读结果，核对 ID、版本、状态和关键字段；遇到超时先查询确认，不盲目重试。\n- 令牌档位、项目白名单、工具级 DENY 和业务权限会在每次调用时重新检查，不能用提示词或缓存绕过。\n- 涉及页面协作、附件、导入和 MCP 命令时，完成后要检查对应的业务事件、版本或审计记录。\n`;
+const BUSINESS_WORKFLOW_GUIDE = `# Feronavi Agent 业务闭环\n\n- 先用只读工具查询当前账号可见的数据、项目白名单与业务前置条件。\n- 任何业务写入都必须先向用户展示目标、字段、影响范围和调用的工具，获得明确确认后再执行。\n- 写入成功后必须用对应的读取工具或 REST 回读结果，核对 ID、版本、状态和关键字段；遇到超时先查询确认，不盲目重试。\n- 令牌档位、项目白名单、工具级 DENY 和业务权限会在每次调用时重新检查，不能用提示词或缓存绕过。\n- 涉及页面协作、附件、导入和 MCP 命令时，完成后要检查对应的业务事件、版本或审计记录。\n- ${DOCUMENT_LINK_GUIDANCE} 链接校验失败时按错误中的行号修正文档；不绕过检查或伪造可访问 URL。\n- 文档目录：page.create(kind=FOLDER) 建文件夹；page.organize 用 expectedStructureVersion 整理/归档/恢复，正文发布仍用 expectedRevisionId。移动保留稳定 page ID，不重写正文。归档子树立即退出 RAG，恢复不覆盖独立子项归档。目录不继承或扩大 ACL；文件夹不能协作编辑或索引。操作后回读 page.get/list；出现版本冲突先重新读取。\n- 产品归属：product.list/get 返回当前项目产品、version、canManage 和 canUnlink。product.create 可用 idempotencyKey；update/linkProject/unlinkProject 必须 expectedVersion，账号与令牌须覆盖所有关联项目。仅 REQUIREMENT 可通过 workitem.create/update 的 productId 设置归属；归属变动不新增正文 revision。归档保留已有需求，解除关联须无引用并保留一个项目。写后回读产品和需求。\n- 需求变更：requirementChange.context 读取 baseRevision.id、workItemVersion、impactFingerprint；create 携带基线和原因，可用 idempotencyKey。decide 用 expectedVersion 评审或撤回；apply 还需当前工作项版本，并重验基线、影响和评审人权限。批准不等于应用，过期不能强制覆盖。应用后 acknowledge 逐项确认影响，不自动完成任务；get 回读参与人、状态和确认。当前覆盖同项目子项、直接关联工作项、计划和关联测试用例。确认不会修改用例原需求基线。\n- 正式用例库：testSuite.list/get/create/update 管理分类套件；testCase.list/get/revisions/getRevision/create/update 管理独立用例。创建支持 idempotencyKey，更新携带 expectedVersion。steps 每步有 action/expected；READY 至少一步；requirements 固定同项目 workItemId+revisionId。正文或关联变化新增不可变 revision，元数据只增加 version。归档保留历史，恢复到有效套件；写后回读。\n`;
 
 /** 把领域错误转成稳定的信封（与 REST 同一形状：code / message / details） */
 function toEnvelope(e: unknown): { code: string; message: string; details: unknown } {

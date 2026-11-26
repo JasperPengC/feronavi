@@ -20,6 +20,71 @@ const INTEGRATION = {
 };
 
 describe("外部集成设置", () => {
+  function stubIntegrations(integrations: unknown[] = []) {
+    const writes: { method: string; body: Record<string, unknown> }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (i: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(i);
+      if (u.includes("/api/v1/integrations") && ["POST", "PATCH"].includes(init?.method ?? "")) {
+        writes.push({ method: init!.method!, body: JSON.parse(String(init!.body)) });
+        return Response.json({ id: "saved" });
+      }
+      if (u.includes("/api/v1/integrations")) return Response.json({ integrations });
+      if (u.includes("/api/v1/projects")) return Response.json({ items: [] });
+      return new Response("{}", { status: 404 });
+    }));
+    return writes;
+  }
+
+  function chooseKind(kind: string) {
+    fireEvent.click(screen.getByRole("button", { name: "类型", exact: true }));
+    fireEvent.click(screen.getByRole("option", { name: kind, exact: true }));
+  }
+
+  it.each([
+    ["GITHUB", "https://api.github.com"],
+    ["GITEE", "https://gitee.com/api/v5"],
+  ])("新建%s时提交该提供方的API地址", async (kind, baseUrl) => {
+    const writes = stubIntegrations();
+    renderSection();
+    fireEvent.click(screen.getByRole("button", { name: "添加集成" }));
+    chooseKind(kind);
+    expect((screen.getByLabelText("服务地址（https）") as HTMLInputElement).value).toBe(baseUrl);
+    expect(screen.getByLabelText("服务地址（https）").getAttribute("placeholder")).toBe(baseUrl);
+    fireEvent.change(screen.getByLabelText("名称"), { target: { value: "仓库集成" } });
+    fireEvent.change(screen.getByLabelText("访问令牌"), { target: { value: "test-only-token" } });
+    fireEvent.click(screen.getByRole("button", { name: "新建集成" }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]).toMatchObject({ method: "POST", body: { kind, baseUrl } });
+  });
+
+  it("连续切换只替换默认或空地址，保留用户输入的自建地址", () => {
+    stubIntegrations();
+    renderSection();
+    fireEvent.click(screen.getByRole("button", { name: "添加集成" }));
+    chooseKind("GITHUB");
+    chooseKind("GITEE");
+    expect((screen.getByLabelText("服务地址（https）") as HTMLInputElement).value).toBe("https://gitee.com/api/v5");
+    fireEvent.change(screen.getByLabelText("服务地址（https）"), { target: { value: "https://git.example.com/api/v3" } });
+    chooseKind("GITHUB");
+    expect((screen.getByLabelText("服务地址（https）") as HTMLInputElement).value).toBe("https://git.example.com/api/v3");
+    fireEvent.change(screen.getByLabelText("服务地址（https）"), { target: { value: "" } });
+    chooseKind("GITLAB");
+    expect((screen.getByLabelText("服务地址（https）") as HTMLInputElement).value).toBe("https://gitlab.com");
+  });
+
+  it("编辑集成时类型不可改，保存保留原地址且不提交kind", async () => {
+    const writes = stubIntegrations([INTEGRATION]);
+    renderSection();
+    fireEvent.click(await screen.findByRole("button", { name: "编辑", exact: true }));
+    expect((screen.getByRole("button", { name: "类型", exact: true }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText("服务地址（https）") as HTMLInputElement).value).toBe("https://gitlab.com");
+    fireEvent.change(screen.getByLabelText("名称"), { target: { value: "更新名称" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存修改", exact: true }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]).toMatchObject({ method: "PATCH", body: { name: "更新名称", baseUrl: "https://gitlab.com" } });
+    expect(writes[0]!.body).not.toHaveProperty("kind");
+  });
+
   it("列表显示类型/地址/令牌已配置，且不出现令牌明文", async () => {
     vi.stubGlobal("fetch", vi.fn(async (i: RequestInfo | URL) => {
       const u = String(i);

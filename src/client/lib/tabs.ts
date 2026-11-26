@@ -5,10 +5,13 @@
  * 会话级持久化用 sessionStorage：刷新保留、关标签页清空，不跨登录共享。
  */
 import { WORKBENCH_GROUP_KEYS, WORKBENCH_GROUP_LABELS, type WorkbenchGroupKey } from "../../shared/workbench.ts";
+import { parsePlanningSearch, parseTableSearch } from "./work-item-table-search.ts";
 export interface WorkspaceTab {
   path: string;
   /** i18n 键（如 nav.projects / po.overview） */
   labelKey: string;
+  /** 同一页面只保留一枚页签，记录其最后的列表上下文。 */
+  search?: Record<string, unknown>;
 }
 
 export const HOME_TAB: WorkspaceTab = { path: "/workbench", labelKey: "nav.overview" };
@@ -16,10 +19,10 @@ export const MAX_TABS = 10;
 const STORAGE_KEY = "feronavi-workspace-tabs-v1";
 
 const PROJECT_SUFFIX: Record<string, string> = {
-  board: "nav.board", table: "nav.table", milestones: "nav.milestones", calendar: "nav.calendar",
+  board: "nav.board", table: "nav.table", milestones: "nav.planning", calendar: "nav.calendar",
   timeline: "nav.timeline", workflow: "nav.workflow", fields: "nav.fields", wiki: "nav.knowledge",
   ideas: "nav.ideas", insights: "nav.insights", activity: "nav.activity", import: "nav.import",
-  issues: "issues.projectTitle", intake: "nav.intake", automation: "nav.automation",
+  issues: "issues.projectTitle", intake: "nav.intake", automation: "nav.automation", testing: "nav.testing",
 };
 const PLAIN: Record<string, string> = {
   workbench: "nav.overview", projects: "nav.projects", focus: "nav.focus", members: "nav.members",
@@ -29,13 +32,17 @@ const PLAIN: Record<string, string> = {
 };
 
 /** 路径 → i18n 键（导入导出也稳定；未知路径退化为工作区） */
-export function tabLabelKey(pathname: string): string {
+export function tabLabelKey(pathname: string, search: Record<string, unknown> = {}): string {
   const seg = pathname.split("/").filter(Boolean);
   if (seg.length === 0) return "nav.overview";
   if (seg[0] === "workbench" && WORKBENCH_GROUP_KEYS.includes(seg[1] as WorkbenchGroupKey)) return WORKBENCH_GROUP_LABELS[seg[1] as WorkbenchGroupKey];
   if (seg[0] === "projects") {
     if (seg.length === 1) return "nav.projects";
     if (seg.length >= 3 && seg[2] === "milestones" && seg[3]) return "md.title";
+    if (seg.length === 3 && seg[2] === "milestones") {
+      const section = parsePlanningSearch(search).section;
+      return section === "iteration" ? "ms.kindIteration" : section === "release" ? "ms.kindRelease" : section === "module" ? "ms.kindModule" : "nav.planning";
+    }
     if (seg.length >= 3) return PROJECT_SUFFIX[seg[2]!] ?? "nav.workspace";
     return "po.overview";
   }
@@ -56,6 +63,12 @@ function isTab(v: unknown): v is WorkspaceTab {
   return !!v && typeof v === "object" && typeof (v as WorkspaceTab).path === "string" && typeof (v as WorkspaceTab).labelKey === "string";
 }
 
+function tabSearch(path: string, raw: Record<string, unknown>): Record<string, unknown> | undefined {
+  const parsed = /^\/projects\/[^/]+\/table$/.test(path) ? parseTableSearch({ ...raw, item: undefined })
+    : /^\/projects\/[^/]+\/milestones$/.test(path) ? parsePlanningSearch(raw) : {};
+  return Object.keys(parsed).length ? { ...parsed } : undefined;
+}
+
 export function loadTabs(): WorkspaceTab[] {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
@@ -63,7 +76,10 @@ export function loadTabs(): WorkspaceTab[] {
     const parsed = JSON.parse(raw) as unknown;
     const tabs = (Array.isArray(parsed) ? parsed : []).filter(isTab)
       // 旧会话里存过时 labelKey（如 /focus 曾错映射成 nav.workItems）：以当前路由表为准重算
-      .map((t) => ({ path: t.path, labelKey: tabLabelKey(t.path) }))
+      .map((t) => {
+        const search = tabSearch(t.path, t.search && typeof t.search === "object" ? t.search : {});
+        return { path: t.path, labelKey: tabLabelKey(t.path, search), ...(search ? { search } : {}) };
+      })
       .slice(0, MAX_TABS);
     return tabs.length > 0 ? tabs : [{ ...HOME_TAB }];
   } catch {
@@ -78,7 +94,10 @@ export function saveTabs(tabs: WorkspaceTab[]): void {
 /** 打开/激活页签；返回新数组（不再强制首页，只保留当前页） */
 export function openTab(tabs: WorkspaceTab[], pathname: string): WorkspaceTab[] {
   const path = pathname.split("?")[0] || "/workbench";
-  const next = tabs.some((t) => t.path === path) ? tabs : [...tabs, { path, labelKey: tabLabelKey(path) }];
+  const search = tabSearch(path, Object.fromEntries(new URLSearchParams(pathname.split("?")[1]?.split("#")[0])));
+  const existing = tabs.find(tab => tab.path === path);
+  const entry = { path, labelKey: tabLabelKey(path, search), ...(search ? { search } : {}) };
+  const next = existing ? JSON.stringify(existing.search) === JSON.stringify(search) ? tabs : tabs.map(tab => tab.path === path ? entry : tab) : [...tabs, entry];
   // 超出上限时丢最久未用的，但绝不丢当前页
   while (next.length > MAX_TABS) {
     const dropIdx = next.findIndex((t) => t.path !== path);

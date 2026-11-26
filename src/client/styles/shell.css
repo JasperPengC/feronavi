@@ -955,7 +955,8 @@
 .shell.app-frame .shell-footer {
   height: 40px !important; min-height: 40px !important;
   margin: 0 16px 0 0;
-  padding: 0 var(--page-inset) !important; gap: 0 !important;
+  /* 底栏两端对齐主体外框，正文内边距只属于主内容。 */
+  padding: 0 !important; gap: 0 !important;
   display: flex !important; align-items: center !important; justify-content: space-between !important;
   border-top: 0 !important;
 }

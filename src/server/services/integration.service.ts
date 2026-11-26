@@ -9,7 +9,7 @@
  */
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "../../db/index.ts";
-import { integration } from "../../db/schema.ts";
+import { integration, deliverySource } from "../../db/schema.ts";
 import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
@@ -123,7 +123,13 @@ export async function updateIntegration(actor: Actor, id: string, patch: {
       String((patch.config ?? row.config as Record<string, unknown>)?.repo ?? ""), id);
   }
 
-  const [updated] = await db.update(integration).set({
+  const [updated] = await db.transaction(async()=>{
+    await db.select({id:integration.id}).from(integration).where(eq(integration.id,id)).for('update');
+    if(projectId!==row.projectId){
+      const [source]=await db.select({id:deliverySource.id}).from(deliverySource).where(eq(deliverySource.integrationId,id));
+      if(source)throw new DomainError('BLOCKED_BY_PREREQUISITE','集成已绑定交付来源，不能调整项目范围；请为目标项目创建新集成',null);
+    }
+    return db.update(integration).set({
     ...(patch.name !== undefined ? { name: patch.name } : {}),
     ...(patch.baseUrl !== undefined ? { baseUrl: patch.baseUrl } : {}),
     ...(patch.token !== undefined ? { tokenEncrypted: encryptSecret(patch.token) } : {}),
@@ -131,7 +137,8 @@ export async function updateIntegration(actor: Actor, id: string, patch: {
     ...(patch.config !== undefined ? { config: patch.config as object } : {}),
     ...(patch.isActive !== undefined ? { isActive: patch.isActive } : {}),
     updatedAt: new Date(),
-  }).where(eq(integration.id, id)).returning();
+    }).where(eq(integration.id, id)).returning();
+  });
   {
     const { writeSecurityAudit } = await import("./audit.service.ts");
     await writeSecurityAudit({
@@ -147,7 +154,12 @@ export async function deleteIntegration(actor: Actor, id: string): Promise<void>
   if (!row) throw forbidden();
   await assertProjectVisible(actor, row.projectId);
   assertManage(actor, row.projectId);
-  await db.delete(integration).where(eq(integration.id, id));
+  await db.transaction(async()=>{
+    await db.select({id:integration.id}).from(integration).where(eq(integration.id,id)).for('update');
+    const [source]=await db.select({id:deliverySource.id}).from(deliverySource).where(eq(deliverySource.integrationId,id));
+    if(source)throw new DomainError('BLOCKED_BY_PREREQUISITE','集成已绑定交付来源，请停用以保留交付历史',null);
+    await db.delete(integration).where(eq(integration.id, id));
+  });
   {
     const { writeSecurityAudit } = await import("./audit.service.ts");
     await writeSecurityAudit({

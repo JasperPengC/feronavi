@@ -4,7 +4,7 @@
  * 语义：工作项 ↔ 想法 / 文档 / 里程碑 / 迭代（多态，因此**没有 FK**）。
  * 纪律（C-15 / C-21）：
  *   1 目标必须与工作项**同项目且可见**（否则工作项链接成了跨项目越权入口）；
- *   2 重复链接拒绝（同 source/target 唯一）；
+ *   2 同一对实体只展示一个逻辑引用，创建时双向查重、移除时清理双向行；
  *   3 目标是软删实体时不允许链接；
  *   4 目标删除时**应用层清理**（`cleanupLinksFor`），不做"只靠定时任务兜底"。
  */
@@ -15,6 +15,7 @@ import { DomainError, forbidden } from "../../shared/errors.ts";
 import type { Actor } from "../permission/actor.ts";
 import { can, type PermissionContext } from "../permission/engine.ts";
 import * as projectRepo from "../repos/project.repo.ts";
+import { lockProjectTree } from "./project-tree.ts";
 
 export const LINK_TYPES = ["WORK_ITEM", "IDEA", "PAGE", "MILESTONE", "ITERATION"] as const;
 export type LinkType = (typeof LINK_TYPES)[number];
@@ -70,13 +71,20 @@ export async function listLinks(actor: Actor, workItemId: string) {
     and(eq(workItemLink.targetType, "WORK_ITEM"), eq(workItemLink.targetId, workItemId)),
   ));
   const items = [];
+  const seen = new Set<string>();
+  // 保留历史双向数据，以出向行作为稳定入口；旧单向入向引用仍可展示。
+  rows.sort((a, b) => Number(b.sourceType === "WORK_ITEM" && b.sourceId === workItemId)
+    - Number(a.sourceType === "WORK_ITEM" && a.sourceId === workItemId) || a.id.localeCompare(b.id));
   for (const r of rows) {
     const otherIsSource = r.targetType === "WORK_ITEM" && r.targetId === workItemId;
     const type = (otherIsSource ? r.sourceType : r.targetType) as LinkType;
     const id = otherIsSource ? r.sourceId : r.targetId;
+    const key = `${type}:${id}`;
+    if (seen.has(key)) continue;
     try {
       const target = await resolveTarget(actor, type, id, wi.projectId);
       items.push({ id: r.id, direction: otherIsSource ? "incoming" : "outgoing", target });
+      seen.add(key);
     } catch {
       // 目标已删但清理还没跑：列表静默跳过孤儿（不把内部不一致暴露给用户）
     }
@@ -95,11 +103,17 @@ export async function authorizeContentLinkCreate(actor: Actor, workItemId: strin
 }
 
 export async function createLink(actor: Actor, workItemId: string, input: { targetType: string; targetId: string }) {
+  const item=await loadWorkItem(actor,workItemId);
+  return db.transaction(async()=>{await lockProjectTree(item.projectId);return createLinkLocked(actor,workItemId,input);});
+}
+async function createLinkLocked(actor: Actor, workItemId: string, input: { targetType: string; targetId: string }) {
   const target = await authorizeContentLinkCreate(actor, workItemId, input);
   const type = input.targetType as LinkType;
-  const dup = (await db.select({ id: workItemLink.id }).from(workItemLink).where(and(
-    eq(workItemLink.sourceType, "WORK_ITEM"), eq(workItemLink.sourceId, workItemId),
-    eq(workItemLink.targetType, type), eq(workItemLink.targetId, input.targetId),
+  const dup = (await db.select({ id: workItemLink.id }).from(workItemLink).where(or(
+    and(eq(workItemLink.sourceType, "WORK_ITEM"), eq(workItemLink.sourceId, workItemId),
+      eq(workItemLink.targetType, type), eq(workItemLink.targetId, input.targetId)),
+    and(eq(workItemLink.targetType, "WORK_ITEM"), eq(workItemLink.targetId, workItemId),
+      eq(workItemLink.sourceType, type), eq(workItemLink.sourceId, input.targetId)),
   )).limit(1))[0];
   if (dup) throw new DomainError("VALIDATION", "该链接已存在", null);
   const [row] = await db.insert(workItemLink).values({
@@ -118,8 +132,16 @@ export async function authorizeContentLinkDelete(actor: Actor, linkId: string): 
 }
 
 export async function deleteLink(actor: Actor, linkId: string): Promise<void> {
-  await authorizeContentLinkDelete(actor, linkId);
-  await db.delete(workItemLink).where(eq(workItemLink.id, linkId));
+  const [link]=await db.select().from(workItemLink).where(eq(workItemLink.id,linkId)).limit(1);
+  if(!link)throw forbidden();
+  const item=await loadWorkItem(actor,link.sourceType==="WORK_ITEM"?link.sourceId:link.targetId);
+  await db.transaction(async()=>{await lockProjectTree(item.projectId);await authorizeContentLinkDelete(actor, linkId);
+    await db.delete(workItemLink).where(or(
+      and(eq(workItemLink.sourceType, link.sourceType), eq(workItemLink.sourceId, link.sourceId),
+        eq(workItemLink.targetType, link.targetType), eq(workItemLink.targetId, link.targetId)),
+      and(eq(workItemLink.sourceType, link.targetType), eq(workItemLink.sourceId, link.targetId),
+        eq(workItemLink.targetType, link.sourceType), eq(workItemLink.targetId, link.sourceId)),
+    ));});
 }
 
 export { cleanupLinksFor } from "../repos/content-link.repo.ts";

@@ -96,6 +96,8 @@ async function getOrCreateRoomLocked(actor: Actor, resourceType: string, resourc
   const projectId = existing?.projectId ?? await resolveProjectId(resourceType, resourceId);
   if (!projectId) throw new DomainError("NOT_FOUND", "协作资源不存在", null);
   const currentPage = resourceType === "PAGE" ? await wiki.getPage(actor, resourceId) : null;
+  if (currentPage?.kind === "FOLDER") throw new DomainError("VALIDATION", "文件夹没有协同正文", null);
+  if (currentPage?.isArchived) throw new DomainError("FORBIDDEN", "已归档文档不可加入协同编辑", null);
   if (!currentPage) await assertResourceVisible(actor, resourceType, resourceId, projectId);
   const [created] = existing ? [undefined] : await db.insert(collabRoom).values({
     resourceType, resourceId, projectId, mode: modeForResource(resourceType),

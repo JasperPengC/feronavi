@@ -16,6 +16,7 @@ import * as lifecycle from "../src/server/services/planning-lifecycle.service.ts
 import * as items from "../src/server/services/work-item.service.ts";
 import { ensureInitialized } from "./_test-helpers.ts";
 import { subscribe, type SseEvent } from "../src/server/services/events.service.ts";
+import { prepareReadyRelease } from "../tests/support/release-ready-fixture.ts";
 
 const marker = randomUUID().replaceAll("-", "").slice(0, 10);
 let checks = 0;
@@ -86,6 +87,7 @@ try {
     const closing = kind === "iteration" ? (await createIteration("并发完成迭代"))! : (await plans.createPlan(admin, inside.id, kind, { name: "并发完成版本" }))!;
     const unrelated = await items.createWorkItem(admin, inside.id, { type: "TASK", title: `并发关联 ${kind}` });
     const association = kind === "iteration" ? "iterationId" : "releaseId";
+    if (kind === "release") await prepareReadyRelease(admin, inside.id, closing.id);
     let releaseCommit!: () => void;
     let ready!: (pid: number) => void;
     const readyPromise = new Promise<number>(resolve => { ready = resolve; });
@@ -126,6 +128,8 @@ try {
   const terminalRelease = (await plans.createPlan(admin, inside.id, "release", { name: "已完成任务版本" }))!;
   const releaseItem = await items.createWorkItem(admin, inside.id, { type: "TASK", title: "已完成版本任务", releaseId: terminalRelease.id });
   await db.update(workItem).set({ statusId: terminal.id, completedAt: new Date() }).where(eq(workItem.id, releaseItem.id));
+  await rejects("版本工作项已完成但缺候选仍拒绝结束", () => lifecycle.complete(admin, terminalRelease.id, "release"), "BLOCKED_BY_PREREQUISITE");
+  await prepareReadyRelease(admin, inside.id, terminalRelease.id);
   await lifecycle.complete(admin, terminalRelease.id, "release");
   check("版本允许终态工作项保留并归档", !!(await lifecycle.setArchived(admin, terminalRelease.id, "release", true)).archivedAt);
   // 兼容历史/导入工作流中的终态出边；不能用重开绕过计划关闭约束。
@@ -151,6 +155,7 @@ try {
   for (const kind of ["iteration", "release"] as const) {
     const fields = kind === "iteration" ? { startDate: "2026-12-01", endDate: "2026-12-14" } : {};
     const created = await rest(`/projects/${inside.id}/${kind}s`, "POST", { name: `REST ${kind}`, ...fields });
+    if (kind === "release") await prepareReadyRelease(admin, inside.id, created.id);
     const completed = await rest(`/${kind}s/${created.id}/complete`, "POST", {});
     const repeated = await rest(`/${kind}s/${created.id}/complete`, "POST", {});
     const archived = await rest(`/${kind}s/${created.id}/archive`, "POST", {});

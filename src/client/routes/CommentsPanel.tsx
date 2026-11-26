@@ -15,6 +15,7 @@ import { comments, type CommentRow } from "../lib/planning-api.ts";
 import { ApiError } from "../lib/api.ts";
 import { StateBlock } from "../components/ui/StateBlock.tsx";
 import { AttachmentsPanel } from "../components/work-item/AttachmentsPanel.tsx";
+import { useLocalDraft } from "../components/ui/LocalDraftScope.tsx";
 
 /** 把正文里的 @用户名 切成片段，提及部分高亮（纯文本渲染，无 HTML 注入面） */
 function renderBody(body: string) {
@@ -35,8 +36,8 @@ function renderBody(body: string) {
   );
 }
 
-function CommentItem({ c, targetType, targetId }: {
-  c: CommentRow; targetType: string; targetId: string;
+function CommentItem({ c, targetType, targetId, readOnly }: {
+  c: CommentRow; targetType: string; targetId: string; readOnly: boolean;
 }) {
   const qc = useQueryClient();
   const [replyOpen, setReplyOpen] = useState(false);
@@ -50,19 +51,20 @@ function CommentItem({ c, targetType, targetId }: {
       await invalidateCommentQueries(qc, targetType, targetId);
     },
   });
+  useLocalDraft(!!replyText, reply.isPending);
 
   return (
     <div style={{ borderBottom: "1px solid var(--border)", padding: "8px 0" }}>
       <div style={{ fontSize: "var(--text-sm)", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{renderBody(c.body)}</div>
       <div className="muted" style={{ fontSize: "var(--text-xs)", marginTop: 4, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <span>{c.editedAt ? t("cmt.edited") : ""}{new Date(c.createdAt).toLocaleString()}</span>
-        {!c.parentId && (
+        {!readOnly && !c.parentId && (
           <Button size="sm" variant="ghost" disabled={reply.isPending} aria-expanded={replyOpen} onClick={() => setReplyOpen(!replyOpen)}>{t("cmt.reply")}</Button>
         )}
         <Button size="sm" variant="ghost" aria-expanded={attachmentsOpen} onClick={() => setAttachmentsOpen((v) => !v)}>{t("att.title")}</Button>
       </div>
-      {attachmentsOpen && <AttachmentsPanel targetType="COMMENT" targetId={c.id} />}
-      {replyOpen && (
+      {attachmentsOpen && <AttachmentsPanel targetType="COMMENT" targetId={c.id} readOnly={readOnly} />}
+      {!readOnly && replyOpen && (
         <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
           <TextInput disabled={reply.isPending} placeholder={t("cmt.replyPlaceholder")} aria-label={t("cmt.replyPlaceholder")} value={replyText}
             onChange={(e) => setReplyText(e.target.value)} />
@@ -75,7 +77,7 @@ function CommentItem({ c, targetType, targetId }: {
   );
 }
 
-export function CommentsPanel({ targetType, targetId }: { targetType: string; targetId: string }) {
+export function CommentsPanel({ targetType, targetId, readOnly = false }: { targetType: string; targetId: string; readOnly?: boolean }) {
   useLocale();   // 订阅语言
   const qc = useQueryClient();
   const [text, setText] = useState("");
@@ -94,13 +96,14 @@ export function CommentsPanel({ targetType, targetId }: { targetType: string; ta
     },
     onError: (e) => setError(e instanceof ApiError ? e.message : t("cmt.failed")),
   });
+  useLocalDraft(!!text, add.isPending);
 
   const rows = Array.isArray(list.data) ? list.data : [];
   return (
     <div className="card comments-panel" style={{ padding: 16 }}>
       <strong style={{ fontSize: "var(--text-sm)" }}>{t("cmt.section")}</strong>
       {error && <div className="alert alert-error" style={{ marginTop: 8 }}>{error}</div>}
-      <div style={{ marginTop: 12 }}>
+      {!readOnly && <div style={{ marginTop: 12 }}>
         {/* textarea 而非单行 input：长评论/@提及场景需要换行；Cmd/Ctrl+Enter 发送（走查 UX 清单 P1） */}
         <TextArea aria-label={t("cmt.placeholder")} placeholder={t("cmt.placeholder")} rows={3}
           disabled={add.isPending} value={text} onChange={(e) => setText(e.target.value)}
@@ -109,12 +112,12 @@ export function CommentsPanel({ targetType, targetId }: { targetType: string; ta
           <Button variant="primary" disabled={!text.trim() || add.isPending}
             onClick={() => add.mutate()}>{t("cmt.send")}</Button>
         </div>
-      </div>
+      </div>}
       <div style={{ marginTop: 12 }}>
         {list.isLoading && <StateBlock kind="loading" title={t("common.loading")} />}
         {list.isError && <StateBlock kind="error" title={t("common.loadFailedShort")} action={() => void list.refetch()} actionLabel={t("common.reload")} />}
         {list.isSuccess && rows.length === 0 && <p className="muted" style={{ fontSize: "var(--text-sm)" }}>{t("cmt.empty")}</p>}
-        {rows.map((c) => <CommentItem key={c.id} c={c} targetType={targetType} targetId={targetId} />)}
+        {rows.map((c) => <CommentItem key={c.id} c={c} targetType={targetType} targetId={targetId} readOnly={readOnly} />)}
       </div>
     </div>
   );

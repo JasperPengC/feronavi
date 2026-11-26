@@ -39,6 +39,7 @@ export async function timeline(actor: Actor, projectId: string, from: string, to
 export async function table(actor: Actor, projectId: string, opts: {
   page?: number; pageSize?: number;
   type?: string; priority?: string; unscheduled?: boolean;
+  milestoneId?: string; iterationId?: string; releaseId?: string; moduleId?: string;
   sortBy?: "created_at" | "updated_at" | "due_date" | "priority" | "number";
   sortDir?: "asc" | "desc";
 } = {}) {

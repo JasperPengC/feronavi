@@ -1,4 +1,4 @@
-/** Docker 全新安装 + npm 已发布 npx 包 + MCP SDK 的端到端验收。 */
+/** Docker 全新安装 + npm 已发布/本地候选 npx 包 + MCP SDK 的端到端验收。 */
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -27,6 +27,9 @@ const runCodex = (args, { cwd, env, timeout }) => new Promise((resolve, reject) 
   });
 });
 const root = resolve(import.meta.dirname, "..");
+const packageSpec = process.env.MCP_PACKAGE_SPEC ?? "feronavi-mcp@0.1.0";
+const localPackage = packageSpec.endsWith(".tgz") && packageSpec.startsWith("/");
+const packageSource = localPackage ? "local-candidate" : "npm-registry";
 const out = resolve(process.env.NPX_DOCKER_OUT ?? ".cache/published-npx-docker-acceptance");
 await mkdir(out, { recursive: true });
 const temp = await mkdtemp(join(out, "compose-"));
@@ -52,7 +55,7 @@ const compose = async (...args) => {
   }
 };
 const checks = [];
-const check = (name, condition, detail = "") => { checks.push({ name, pass: Boolean(condition), detail }); assert.ok(condition, name); console.log(`✓ ${name}${detail ? `：${detail}` : ""}`); };
+const check = (name, condition, detail = "") => { if (localPackage) name = name.replaceAll("发布后的 npx", "本地候选 npx").replaceAll("发布 npx", "本地候选 npx"); checks.push({ name, pass: Boolean(condition), detail }); assert.ok(condition, name); console.log(`✓ ${name}${detail ? `：${detail}` : ""}`); };
 let base, headers;
 const request = (path, options = {}) => fetch(`${base}/api/v1${path}`, { headers, ...options, signal: AbortSignal.timeout(30000) });
 const json = async (path, options = {}) => { const response = await request(path, options); assert.ok(response.ok, `${path} HTTP ${response.status}`); return response.json(); };
@@ -86,7 +89,7 @@ try {
   check("Docker 初始化后生成 API Key", credentials.every(credential => credential.token?.startsWith("fero_")));
 
   async function connect(token) {
-    const transport = new StdioClientTransport({ command: "npx", args: ["--yes", "feronavi-mcp@0.1.0"], cwd: temp, stderr: "pipe", env: { PATH: process.env.PATH, HOME: temp, FERONAVI_URL: base, FERONAVI_TOKEN: token } });
+    const transport = new StdioClientTransport({ command: "npx", args: ["--yes", ...(localPackage ? ["--offline"] : []), "--package", packageSpec, "feronavi-mcp"], cwd: temp, stderr: "pipe", env: { PATH: process.env.PATH, HOME: temp, FERONAVI_URL: base, FERONAVI_TOKEN: token } });
     const client = new Client({ name: "published-npx-docker-acceptance", version: "1.0.0" });
     clients.push(client); await client.connect(transport, { timeout: 60000 }); return client;
   }
@@ -103,7 +106,7 @@ try {
   const client = await connect(credentials[0].token);
   check("发布后的 npx 包启动并完成 MCP 初始化", client.getServerVersion()?.name === "feronavi");
   const tools = (await client.listTools()).tools;
-  const requiredTools = ["ping", "whoami", "project.list", "workitem.get", "workitem.create", "workitem.transition", "page.update", "meta.capabilities", "meta.tool", "project.context", "idea.update", "plan.completeIteration", "plan.archiveRelease"];
+  const requiredTools = ["ping", "whoami", "project.list", "workitem.get", "workitem.create", "workitem.transition", "page.update", "meta.capabilities", "meta.tool", "project.context", "idea.update", "plan.completeIteration", "plan.archiveRelease", ...(localPackage ? ["page.organize", "workitem.listRequirementRevisions", "testPlan.create", "testRun.record", "delivery.listEvidence", "delivery.releaseGate"] : [])];
   const capabilities = (await call(client, "meta.capabilities", {})).data;
   check("发布后的 npx 包发现完整 MCP 工具契约",
     tools.length === new Set(tools.map(tool => tool.name)).size
@@ -295,7 +298,7 @@ try {
   try { await compose("down", "--volumes", "--remove-orphans", "--timeout", "15"); } catch { process.exitCode = 1; }
   const remaining = (await exec("docker", ["ps", "-aq", "--filter", `label=com.docker.compose.project=${project}`])).stdout.trim();
   check("本轮 Docker 容器已清理", !remaining);
-  await writeFile(join(out, "report.json"), JSON.stringify({ project, image, checks, failure: failure ?? null }, null, 2));
+  await writeFile(join(out, "report.json"), JSON.stringify({ project, image, packageSpec, packageSource, checks: checks.map(check => ({ ...check, name: localPackage ? check.name.replaceAll("发布后的 npx", "本地候选 npx").replaceAll("发布 npx", "本地候选 npx") : check.name })), failure: failure ?? null }, null, 2));
   await rm(temp, { recursive: true, force: true });
 }
 process.exitCode ||= checks.every(item => item.pass) ? 0 : 1;

@@ -5,6 +5,7 @@
  */
 import { invalidateWorkItemQueries, queryKeys } from "../../lib/query-keys.ts";
 import { useEffect, useId, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { planning, type PlanEntity } from "../../lib/planning-api.ts";
 import { apiGet, apiPut, ApiError } from "../../lib/api.ts";
@@ -21,6 +22,9 @@ import { Select } from "../Select.tsx";
 import { confirmDialog } from "../Dialog.tsx";
 import { Icon } from "../Icon.tsx";
 import { LoadingBlock, StateBlock } from "../ui/StateBlock.tsx";
+import {ReleaseGatePanel} from '../delivery/ReleaseGatePanel.tsx';
+import {WorkItemTag} from '../work-item/WorkItemTag.tsx';
+import { useCan } from "../../lib/actor.ts";
 
 const KINDS = ["iteration", "release", "module"] as const;
 type Kind = typeof KINDS[number];
@@ -33,17 +37,22 @@ interface Form {
 }
 const EMPTY: Form = { name: "", description: "", startDate: "", endDate: "", versionTag: "", releaseDate: "", notes: "" };
 
-export function PlanningEntitiesPanel({ projectId, initialKind = "iteration", showTabs = true }: { projectId: string; initialKind?: Kind; showTabs?: boolean }) {
+export function PlanningEntitiesPanel({ projectId, initialKind = "iteration", showTabs = true, archived: controlledArchived, onArchivedChange }: { projectId: string; initialKind?: Kind; showTabs?: boolean; archived?: boolean; onArchivedChange?: (value: boolean) => void }) {
   const qc = useQueryClient();
   const tabsId = useId();
   const [kind, setKind] = useState<Kind>(initialKind);
+  const canManage = useCan(`${kind}:manage`);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<PlanEntity | null>(null);
   const [form, setForm] = useState<Form>(EMPTY);
   const [error, setError] = useState<string | null>(null);
-  const [archived, setArchived] = useState(false);
+  const [localArchived, setLocalArchived] = useState(false);
+  const archived = controlledArchived ?? localArchived;
+  const setArchived = (value: boolean) => { setLocalArchived(value); onArchivedChange?.(value); };
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
   const [completing, setCompleting] = useState<PlanEntity | null>(null);
+  const [gateFor,setGateFor]=useState<PlanEntity|null>(null);
+  const [gateReady,setGateReady]=useState(false);
   const [targetIterationId, setTargetIterationId] = useState("");
   const [completionError, setCompletionError] = useState<string | null>(null);
   const [capacityFor, setCapacityFor] = useState<PlanEntity | null>(null);
@@ -149,9 +158,9 @@ export function PlanningEntitiesPanel({ projectId, initialKind = "iteration", sh
           <button type="button" className="ui-segmented-item" aria-pressed={!archived} onClick={() => { setArchived(false); setLifecycleError(null); }}>{t("pe.lifecycleCurrent")}</button>
           <button type="button" className="ui-segmented-item" aria-pressed={archived} onClick={() => { setArchived(true); setLifecycleError(null); }}>{t("pe.lifecycleArchived")}</button>
         </div>
-        <Button size="sm" variant="primary" onClick={() => startForm(null)}>
-          <Icon name="plus" size={14} />{t("pe.new")}
-        </Button>
+        {canManage && <Button size="sm" variant="primary" onClick={() => startForm(null)}>
+          <Icon name="plus" size={14} />{t("pe.newEntity", { kind: t(KIND_LABEL[kind]) })}
+        </Button>}
       </div>
       <div role={showTabs ? "tabpanel" : undefined} tabIndex={showTabs ? 0 : undefined}
         className={showTabs ? "page-tab-panel" : "plan-entity-body"}
@@ -161,28 +170,31 @@ export function PlanningEntitiesPanel({ projectId, initialKind = "iteration", sh
       {lifecycleError && <p className="field-error" role="alert">{lifecycleError}</p>}
       {q.isError && <StateBlock kind="error" title={t("common.loadFailedShort")} description={q.error instanceof ApiError ? q.error.message : undefined}
         action={() => void q.refetch()} actionLabel={t("common.reload")} />}
-      {q.isSuccess && rows.length === 0 && <p className="muted" style={{ fontSize: 13 }}>{t("pe.empty")}</p>}
+      {q.isSuccess && rows.length === 0 && <p className="muted" style={{ fontSize: 13 }}>{t(canManage ? "pe.empty" : "pe.readOnlyEmpty")}</p>}
       {error && !open && !capacityFor && <p className="field-error" role="alert">{error}</p>}
       <ul className="plan-entity-list">
         {rows.map((r) => (
           <li key={r.id}>
             <span className="row-avatar" aria-hidden="true"><Icon name={kind === "release" ? "file" : kind === "module" ? "package" : "timeline"} size={13} /></span>
             <span className="plan-entity-main">
-              <span className="row-name">{r.name}</span>
+              <Link className="row-name" to="/projects/$projectId/table" params={{ projectId }}
+                search={{ [`${kind}Id`]: r.id, fromPlan: kind, ...(archived ? { fromArchived: true } : {}) }}
+                title={t("tableScope.openPlan", { name: r.name })}>{r.name}</Link>
               {kind === "release" && r.versionTag && <span className="tag mono">{r.versionTag}</span>}
-              {r.completedAt && <span className="tag">{t("pe.lifecycleCompleted")}</span>}
+              {r.completedAt && <WorkItemTag kind="status" value="DONE" stateKey="DONE" label={t("pe.lifecycleCompleted")}/>}
               {r.description && <span className="row-sub">{r.description}</span>}
             </span>
             <div className="plan-entity-meta">
               <span className="muted plan-entity-date">{dateOf(r) ?? "—"}</span>
               <div className="plan-entity-actions">
-                {r.archivedAt ? <Button size="sm" variant="ghost" disabled={archiveAction.isPending}
+                {kind==='release'&&<Button size="sm" variant="ghost" onClick={()=>setGateFor(r)}>{t('delivery.gate.heading')}</Button>}
+                {canManage && (r.archivedAt ? <Button size="sm" variant="ghost" disabled={archiveAction.isPending}
                   onClick={() => archiveAction.mutate({ row: r, restore: true })}>{t("pe.lifecycleRestore")}</Button> : <>
                   {kind === "iteration" && !r.completedAt && <Button size="sm" variant="ghost" onClick={() => { setError(null); setCapacityFor(r); }}>{t("pe.capacity")}</Button>}
                   {!r.completedAt && <Button size="sm" variant="ghost" onClick={() => startForm(r)}>{t("common.edit")}</Button>}
-                  {kind !== "module" && !r.completedAt && <Button size="sm" variant="ghost" onClick={() => { setCompleting(r); setTargetIterationId(""); setCompletionError(null); }}>{completeLabel}</Button>}
+                  {kind !== "module" && !r.completedAt && <Button size="sm" variant="ghost" onClick={() => { setGateReady(false); setCompleting(r); setTargetIterationId(""); setCompletionError(null); }}>{completeLabel}</Button>}
                   <Button size="sm" variant="ghost" disabled={archiveAction.isPending} onClick={() => void archive(r)}>{t("common.archive")}</Button>
-                </>}
+                </>)}
               </div>
             </div>
           </li>
@@ -190,11 +202,13 @@ export function PlanningEntitiesPanel({ projectId, initialKind = "iteration", sh
       </ul>
       </div>
 
+      {gateFor&&<Drawer open title={`${t('delivery.gate.heading')} · ${gateFor.name}`} onClose={()=>setGateFor(null)} width="md"><ReleaseGatePanel projectId={projectId} releaseId={gateFor.id}/></Drawer>}
       <Drawer open={!!completing} title={`${completeLabel} · ${completing?.name ?? ""}`}
-        onClose={() => !complete.isPending && setCompleting(null)} width="sm">
+        onClose={() => !complete.isPending && setCompleting(null)} width={kind==='release'?'md':'sm'}>
         <div style={{ display: "grid", gap: 12 }}>
           <p className="muted" style={{ margin: 0 }}>{t(kind === "release" ? "pe.lifecycleReleaseHint" : carryOver ? "pe.lifecycleCarryHint" : "pe.lifecycleKeepHint")}</p>
           {completing?.pendingWorkItemCount !== undefined && <p style={{ margin: 0 }}>{t("pe.lifecyclePending", { n: completing.pendingWorkItemCount })}</p>}
+          {kind==='release'&&completing&&<ReleaseGatePanel projectId={projectId} releaseId={completing.id} onReady={setGateReady}/>}
           {carryOver && <Select label={t("pe.lifecycleTarget")} ariaLabel={t("pe.lifecycleTarget")} value={targetIterationId}
             disabled={complete.isPending} required={targetRequired} onChange={setTargetIterationId}
             options={[{ value: "", label: t("pe.lifecycleNoTarget") }, ...targets.map(row => ({ value: row.id, label: row.name }))]} />}
@@ -202,7 +216,7 @@ export function PlanningEntitiesPanel({ projectId, initialKind = "iteration", sh
           {completionError && <p className="field-error" role="alert">{completionError}</p>}
           <div className="drawer-actions">
             <Button variant="ghost" disabled={complete.isPending} onClick={() => setCompleting(null)}>{t("common.cancel")}</Button>
-            <Button variant="primary" loading={complete.isPending} disabled={complete.isPending || (targetRequired && !validTarget) || (!!targetIterationId && !validTarget)}
+            <Button variant="primary" loading={complete.isPending} disabled={complete.isPending || (kind==='release'&&!gateReady) || (targetRequired && !validTarget) || (!!targetIterationId && !validTarget)}
               onClick={() => complete.mutate()}>{completeLabel}</Button>
           </div>
         </div>

@@ -1,7 +1,7 @@
 /** 本机模拟：历史迁移快照升级及数据库/主密钥/附件灾备；不代表用户服务器升级。 */
 import assert from "node:assert/strict";
 import { randomBytes, createHash } from "node:crypto";
-import { copyFile, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import postgres from "postgres";
 import { assertIsolatedTestEnvironment } from "./test-environment.mjs";
@@ -101,6 +101,18 @@ if (process.argv.includes("--migrate-child")) {
     await runNode(["scripts/backup.ts", "--out", out], env);
     const folders = await readdir(out);
     assert.equal(folders.length, 1);
+    // 真实 PostgreSQL 失败注入：恢复已执行DROP后在CREATE阶段失败，必须回滚旧库。
+    await restored`create table member (marker text)`;
+    await restored`insert into member values ('target must survive failed restore')`;
+    await restored`create function reject_restore_create() returns event_trigger language plpgsql as $$ begin raise exception 'restore-rehearsal-injected-create-failure'; end $$`;
+    await restored`create event trigger reject_restore_create on ddl_command_start when tag in ('CREATE TABLE') execute function reject_restore_create()`;
+    const restoreEnv = { ...env, PG_CONTAINER: process.env.RESTORE_PG_CONTAINER ?? env.PG_CONTAINER, RESTORE_DATABASE_URL: target.url };
+    await assert.rejects(runNode(["scripts/restore.ts", "--backup", join(out, folders[0]!), "--data-dir", destination], restoreEnv), /restore-rehearsal-injected-create-failure/);
+    assert.deepEqual(Array.from(await restored`select * from member`), [{ marker: 'target must survive failed restore' }]);
+    await assert.rejects(access(destination), { code: "ENOENT" });
+    await restored`drop event trigger reject_restore_create`;
+    await restored`drop function reject_restore_create()`;
+    console.log("PASS pg_restore failure after DROP rolls back original database and does not switch data directory");
     await runNode(["scripts/restore.ts", "--backup", join(out, folders[0]!), "--data-dir", destination], {
       ...env,
       PG_CONTAINER: process.env.RESTORE_PG_CONTAINER ?? env.PG_CONTAINER,

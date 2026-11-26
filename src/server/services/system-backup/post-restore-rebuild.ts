@@ -162,7 +162,7 @@ export async function runPostRestoreRebuild(
         const generation = Math.max(await activeGeneration(), last!.n) + 1;
         const aiEnabled = !!(await loadAiConfig());
         const pages =
-          await sql`select id from page where deleted_at is null and current_revision_id is not null order by id`;
+          await sql`select id from page where deleted_at is null and kind = 'DOCUMENT' and not exists(select 1 from archived_page a where a.id = page.id) and current_revision_id is not null order by id`;
         for (const page of pages) {
           const result = await reindexPage(actor, page.id, "FULL", {
             generation,

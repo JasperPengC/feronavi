@@ -7,6 +7,7 @@ import {
   createWorkItemSchema, updateWorkItemSchema, listWorkItemsQuerySchema, boardQuerySchema,
 } from "../../shared/schemas/work-item.ts";
 import * as wiService from "../services/work-item.service.ts";
+import * as revisions from "../services/requirement-revision.service.ts";
 import type { Actor } from "../permission/actor.ts";
 
 declare module "fastify" {
@@ -18,6 +19,15 @@ export async function registerWorkItemRoutes(app: FastifyInstance): Promise<void
     if (!req.actor) throw new DomainError("FORBIDDEN", "未登录或会话已失效", null);
     return req.actor;
   };
+
+  app.get("/api/v1/work-items/:id/revisions", async req => {
+    const { id } = req.params as { id: string };
+    return revisions.listRequirementRevisions(actorOf(req), id, req.query);
+  });
+  app.get("/api/v1/work-items/:id/revisions/:revisionId", async req => {
+    const { id, revisionId } = req.params as { id: string; revisionId: string };
+    return revisions.getRequirementRevision(actorOf(req), id, revisionId);
+  });
 
   // ── 建工作项 ──────────────────────────────────────────────
   app.post("/api/v1/projects/:projectId/work-items", { onRequest: app.csrfProtection }, async (req, reply) => {
@@ -42,6 +52,7 @@ export async function registerWorkItemRoutes(app: FastifyInstance): Promise<void
       const svc = await import("../services/planning-view.service.ts");
       return svc.table(actor, projectId, {
         page: q.page, pageSize: q.pageSize, type: q.type, priority: q.priority, unscheduled: q.unscheduled,
+        milestoneId: q.milestoneId, iterationId: q.iterationId, releaseId: q.releaseId, moduleId: q.moduleId,
         sortBy: (q as { sortBy?: "created_at" | "updated_at" | "due_date" | "priority" | "number" }).sortBy,
         sortDir: (q as { sortDir?: "asc" | "desc" }).sortDir,
       });
@@ -136,8 +147,12 @@ export async function registerWorkItemRoutes(app: FastifyInstance): Promise<void
     const actor = actorOf(req);
     const { projectId } = req.params as { projectId: string };
     const q = boardQuerySchema.parse(req.query);
-    const columns = await wiService.loadBoard(actor, projectId, q.pageSizePerColumn, { q: q.q, priority: q.priority });
+    const [columns, workflows] = await Promise.all([
+      wiService.loadBoard(actor, projectId, q.pageSizePerColumn, q),
+      wiService.listBoardWorkflows(actor, projectId),
+    ]);
     return {
+      workflows,
       columns: columns.map((c) => ({
         stateKey: c.stateKey, name: c.name, category: c.category, color: c.color,
         wipLimit: c.wipLimit, items: c.items, count: c.count,
@@ -156,7 +171,7 @@ export async function registerWorkItemRoutes(app: FastifyInstance): Promise<void
       offset: z.coerce.number().int().min(0).default(0),
       limit: z.coerce.number().int().min(1).max(100).default(25),
     }).parse(req.query);
-    return wiService.loadBoardColumn(actor, projectId, stateKey, q.offset, q.limit, { q: q.q, priority: q.priority });
+    return wiService.loadBoardColumn(actor, projectId, stateKey, q.offset, q.limit, q);
   });
 
   // ── 导出（第八期 W4，REST 6 节）：CSV + schemaVersion 响应头 ──

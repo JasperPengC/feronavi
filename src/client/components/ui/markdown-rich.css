@@ -15,3 +15,5 @@
 .markdown-diagram summary:focus-visible, .markdown-diagram-viewport:focus-visible, .markdown-table-scroll:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 .markdown-diagram pre { max-height: 320px; overflow: auto; }
 @media (max-width: 760px) { .markdown-diagram summary, .markdown-diagram-tools .btn { min-height: 44px !important; } }
+/* 旧内容的失效引用保留可读文字；不伪装为可访问链接。 */
+.markdown-unavailable-link { color: var(--text-muted); text-decoration: underline dotted; text-underline-offset: 3px; overflow-wrap: anywhere; }

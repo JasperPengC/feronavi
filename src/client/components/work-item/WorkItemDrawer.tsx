@@ -16,7 +16,7 @@ import { Drawer } from "../ui/Drawer.tsx";
 import { Button } from "../ui/Button.tsx";
 import { Select } from "../Select.tsx";
 import { CommentsPanel } from "../../routes/CommentsPanel.tsx";
-import { DefectProgressPanel } from "./DefectProgressPanel.tsx";
+import { WorkItemProgressPanel } from "./WorkItemProgressPanel.tsx";
 import { WorkItemEditor, type EditableWorkItem } from "./WorkItemEditor.tsx";
 import { AttachmentsPanel } from "./AttachmentsPanel.tsx";
 import { MarkdownView } from "../ui/MarkdownView.tsx";
@@ -24,10 +24,25 @@ import { TransferWatchersPanel } from "./TransferWatchersPanel.tsx";
 import { RelationsPanel } from "./RelationsPanel.tsx";
 import { TimeLogsPanel } from "./TimeLogsPanel.tsx";
 import { CollaboratorsPanel } from "./CollaboratorsPanel.tsx";
+import { WorkItemActions, type WorkItemTransition } from "./WorkItemActions.tsx";
+import { WorkItemContext } from "./WorkItemContext.tsx";
+import { RequirementHistory } from "./RequirementHistory.tsx";
+import { RequirementChanges } from "./RequirementChanges.tsx";
+import { DeliveryPanel } from '../delivery/DeliveryPanel.tsx';
+import { WorkItemTag } from "./WorkItemTag.tsx";
+import { useCan } from "../../lib/actor.ts";
+import { WorkItemChildren } from "./WorkItemChildren.tsx";
+import type { WorkItemOption } from "./WorkItemPicker.tsx";
+import { LocalDraftContext, useLocalDraftScope } from "../ui/LocalDraftScope.tsx";
+import { DraftNavigationGuard } from "../ui/DraftNavigationGuard.tsx";
 
 interface WorkItemDetail {
   id: string; key: string; title: string; description: string | null;
   type: string; priority: string | null; dueDate: string | null; assigneeId: string | null; reporterId?: string | null; parentId?: string | null; projectId: string; version: number;
+  statusName?: string | null; statusCategory?: string | null; statusKey?: string | null; milestoneId?: string | null; iterationId?: string | null; releaseId?: string | null;
+  allowedTransitions?: WorkItemTransition[];
+  productId?: string | null;
+  moduleId?: string | null; startDate?: string | null;
 }
 interface LinkTarget { type: "WORK_ITEM" | "IDEA" | "PAGE" | "MILESTONE" | "ITERATION"; id: string; title: string; key: string | null }
 interface LinkRow { id: string; direction: string; target: LinkTarget }
@@ -70,9 +85,34 @@ function useTargetOptions(projectId: string | null, type: LinkTarget["type"] | "
 }
 
 export function WorkItemDrawer({ workItemId, onClose }: { workItemId: string | null; onClose: () => void }) {
+  return <WorkItemNavigator workItemId={workItemId} onClose={onClose} />;
+}
+
+function WorkItemNavigator({ workItemId, onClose }: { workItemId: string | null; onClose: () => void }) {
+  const [trail, setTrail] = useState<WorkItemOption[]>(workItemId ? [{ id: workItemId, key: "", title: "" }] : []);
+  const [rootId, setRootId] = useState(workItemId);
+  // 切换根工作项重置历史；关闭时保留最后内容，让同一个Drawer退场并恢复原入口焦点。
+  if (rootId !== workItemId) {
+    setRootId(workItemId);
+    if (workItemId) setTrail([{ id: workItemId, key: "", title: "" }]);
+  }
+  const current = trail.at(-1);
+  return <WorkItemDetail open={!!workItemId} workItemId={current?.id ?? null} onClose={onClose}
+    previous={trail.at(-2)} onBack={() => setTrail(items => items.slice(0, -1))}
+    onOpen={(from, next) => setTrail(items => {
+      const previous = items.findIndex(item => item.id === next.id);
+      return previous >= 0 ? items.slice(0, previous + 1) : [...items.slice(0, -1), from, next];
+    })} />;
+}
+
+function WorkItemDetail({ workItemId, open, onClose, previous, onBack, onOpen }: {
+  workItemId: string | null; open: boolean; onClose: () => void; previous?: WorkItemOption; onBack: () => void;
+  onOpen: (from: WorkItemOption, next: WorkItemOption) => void;
+}) {
   useLocale();
+  const drafts = useLocalDraftScope();
+  const canCreate = useCan("work_item:create");
   const qc = useQueryClient();
-  const open = !!workItemId;
   const detail = useQuery({
     queryKey: queryKeys.workItemDetail(workItemId),
     enabled: open,
@@ -89,8 +129,9 @@ export function WorkItemDrawer({ workItemId, onClose }: { workItemId: string | n
   const [targetId, setTargetId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [creatingChild, setCreatingChild] = useState(false);
   const [approvalComment, setApprovalComment] = useState("");
-  useEffect(() => { setEditing(false); setType(""); setTargetId(""); setError(null); setApprovalComment(""); }, [workItemId]);
+  useEffect(() => { setEditing(false); setCreatingChild(false); setType(""); setTargetId(""); setError(null); setApprovalComment(""); }, [workItemId]);
   const options = useTargetOptions(detail.data?.projectId ?? null, type);
   const parent = useQuery({
     queryKey: queryKeys.workItemParent(detail.data?.parentId),
@@ -119,12 +160,7 @@ export function WorkItemDrawer({ workItemId, onClose }: { workItemId: string | n
     },
     onError: (e) => setError(e instanceof ApiError ? e.message : "审批操作失败"),
   });
-  const children = useQuery({
-    queryKey: queryKeys.workItemChildren(workItemId),
-    enabled: open && !!workItemId,
-    retry: false,
-    queryFn: () => apiGet<{ children: { id: string; key: string; title: string; type: string }[] }>(`/api/v1/work-items/${workItemId}/children`).then((r) => r.children ?? []),
-  });
+  useEffect(() => { drafts.register("approval", { dirty: !!approvalComment, saving: decideApproval.isPending }); }, [drafts.register, approvalComment, decideApproval.isPending]);
 
   const slaClock = useMutation({
     mutationFn: (action: "pause" | "resume") => apiPost(`/api/v1/work-items/${workItemId}/sla/${action}`, {}),
@@ -150,22 +186,27 @@ export function WorkItemDrawer({ workItemId, onClose }: { workItemId: string | n
   const targetOptions = useMemo(() => (options.data ?? []).map((o) => ({ value: o.id, label: o.label })), [options.data]);
 
   const wi = detail.data;
+  const openItem = (item: WorkItemOption) => { if (wi) void drafts.leave(() => onOpen(wi, item)); };
   return (
-    <Drawer open={open} title={wi?.key ?? t("wiDetail.title")} onClose={onClose} width="lg" className="work-item-detail">
+    <LocalDraftContext.Provider value={drafts.register}>
+    <Drawer open={open} title={wi?.key ?? t("wiDetail.title")} onClose={() => void drafts.leave(onClose)} width="lg" className="work-item-detail">
+      <DraftNavigationGuard dirty={drafts.dirty} saving={drafts.saving} message={t("flows.discardDraft")} />
+      {previous && <Button size="sm" variant="ghost" className="wi-detail-back" onClick={() => void drafts.leave(onBack)}>{t("wiBreakdown.back", { key: previous.key })}</Button>}
       {detail.isLoading && <p className="muted">{t("common.loading")}</p>}
       {detail.isError && <p className="muted">{t("wiDetail.loadFailed")}</p>}
       {wi && (
-        <div className="wi-drawer">
+        <div key={`body-${wi.id}`} className="wi-drawer">
           <section>
             <div className="wi-detail-heading">
               <h3>{wi.title}</h3>
               <Button size="sm" onClick={() => setEditing(true)}>{t("wie.edit")}</Button>
             </div>
             <dl className="wi-detail-properties">
+              <WorkItemContext item={wi} />
               <div><dt>{t("wiDetail.type")}</dt><dd>{t(`type.${wi.type}`)}</dd></div>
-              <div><dt>{t("wiDetail.priority")}</dt><dd data-priority={wi.priority}>{wi.priority ? t(`prio.${wi.priority}`) : "—"}</dd></div>
+              <div><dt>{t("wiDetail.priority")}</dt><dd><WorkItemTag kind="priority" value={wi.priority} /></dd></div>
               <div><dt>{t("wiDetail.due")}</dt><dd>{wi.dueDate ?? "—"}</dd></div>
-              {parent.data && <div className="is-wide"><dt>{t("wie.parent")}</dt><dd>{parent.data.key} {parent.data.title}</dd></div>}
+              {parent.data && <div className="is-wide"><dt>{t("wie.parent")}</dt><dd><button type="button" className="wi-related-open" onClick={() => openItem(parent.data!)}>{parent.data.key} {parent.data.title}</button></dd></div>}
               {sla.data?.sla && <div className="is-wide"><dt>SLA</dt><dd>
                 {(() => {
                   const x = sla.data?.sla;
@@ -182,6 +223,7 @@ export function WorkItemDrawer({ workItemId, onClose }: { workItemId: string | n
                 })()}
               </dd></div>}
             </dl>
+            <WorkItemActions key={wi.id} item={wi} />
             <div className={`wi-drawer__desc${wi.description ? "" : " muted"}`}>{wi.description ? <MarkdownView text={wi.description} /> : t("wiDetail.noDescription")}</div>
             {(approvals.data ?? []).length > 0 && (
               <div className="wi-approval">
@@ -199,23 +241,17 @@ export function WorkItemDrawer({ workItemId, onClose }: { workItemId: string | n
             )}
           </section>
 
-          {wi.type === "DEFECT" && <DefectProgressPanel workItemId={wi.id} reporterId={wi.reporterId} assigneeId={wi.assigneeId} />}
+          <WorkItemChildren workItemId={wi.id} type={wi.type} canCreate={canCreate} onCreate={() => setCreatingChild(true)} onOpen={openItem} />
+          {wi.type === "REQUIREMENT" && <RequirementHistory key={wi.id} workItemId={wi.id} workItemVersion={wi.version} />}
+          {wi.type === "REQUIREMENT" && <RequirementChanges key={`changes-${wi.id}`} workItemId={wi.id} workItemVersion={wi.version} />}
+          <WorkItemProgressPanel key={wi.id} workItemId={wi.id} reporterId={wi.reporterId} assigneeId={wi.assigneeId} />
+          <DeliveryPanel key={`delivery-${wi.id}`} projectId={wi.projectId} workItemId={wi.id} />
           <section><CommentsPanel targetType="WORK_ITEM" targetId={wi.id} /></section>
           <details className="wi-detail-fold"><summary>{t("flows.attachments")}</summary>
             <AttachmentsPanel targetType="WORK_ITEM" targetId={wi.id} />
           </details>
           <details className="wi-detail-fold"><summary>{t("flows.relatedWork")}</summary><div className="wi-detail-fold-content">
-          <section>
-            <h3 className="wi-drawer__title">{t("wiDetail.children")}</h3>
-            {(children.data ?? []).length === 0 && <p className="muted">{t("wiDetail.noChildren")}</p>}
-            {!!(children.data ?? []).length && (
-              <ul className="wi-drawer__links">
-                {(children.data ?? []).map((c) => <li key={c.id}><span className="tag">{t(`type.${c.type}`)}</span><span>{c.key} {c.title}</span></li>)}
-              </ul>
-            )}
-          </section>
-
-          <RelationsPanel workItemId={wi.id} projectId={wi.projectId} />
+          <RelationsPanel workItemId={wi.id} projectId={wi.projectId} onOpen={openItem} />
 
           <section>
             <h3 className="wi-drawer__title">{t("wiDetail.links")}</h3>
@@ -226,7 +262,7 @@ export function WorkItemDrawer({ workItemId, onClose }: { workItemId: string | n
                 {links.data.map((l) => (
                   <li key={l.id}>
                     <span className="tag">{TYPES.find((x) => x.value === l.target.type)?.label ?? l.target.type}</span>
-                    <span>{l.target.key ? `${l.target.key} ${l.target.title}` : l.target.title}</span>
+                    {l.target.type === "WORK_ITEM" ? <button type="button" className="wi-related-open" onClick={() => openItem({ ...l.target, key: l.target.key ?? "" })}>{l.target.key} {l.target.title}</button> : <span>{l.target.key ? `${l.target.key} ${l.target.title}` : l.target.title}</span>}
                     <Button size="sm" variant="ghost" onClick={() => remove.mutate(l.id)}>{t("wiDetail.remove")}</Button>
                   </li>
                 ))}
@@ -255,6 +291,7 @@ export function WorkItemDrawer({ workItemId, onClose }: { workItemId: string | n
       )}
       {wi && (
         <WorkItemEditor
+          key={`editor-${wi.id}`}
           open={editing}
           projectId={wi.projectId}
           workItem={{ ...wi, severity: (wi as EditableWorkItem).severity ?? null, startDate: (wi as EditableWorkItem).startDate ?? null }}
@@ -262,6 +299,9 @@ export function WorkItemDrawer({ workItemId, onClose }: { workItemId: string | n
           onSaved={() => { void qc.invalidateQueries({ queryKey: queryKeys.workItemDetail(wi.id) }); }}
         />
       )}
+      {wi && creatingChild && <WorkItemEditor open projectId={wi.projectId} initialParent={wi}
+        onClose={() => setCreatingChild(false)} />}
     </Drawer>
+    </LocalDraftContext.Provider>
   );
 }

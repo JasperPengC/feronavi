@@ -18,6 +18,7 @@ import type { FeedbackHandlers } from "./types.ts";
 import { settingsCopy } from "./copy.ts";
 import { Icon } from "../Icon.tsx";
 import { useSettingsDraft } from "./SettingsDraft.tsx";
+import { WorkItemTag } from "../work-item/WorkItemTag.tsx";
 
 type Purpose = "LLM" | "EMBEDDING";
 type AiProvider = {
@@ -165,15 +166,14 @@ function ProviderPanel({
               <div className="ai-provider-row-main">
                 <div className="ai-provider-row-title">
                   <strong>{p.note || providerModel(p)}</strong>
-                  {p.isDefault && <span className="tag tag-success">{t("se.aiDefault")}</span>}
-                  {!p.isActive && <span className="tag">{t("se.aiDisabled")}</span>}
+                  {p.isDefault && <WorkItemTag kind="status" value="IN_PROGRESS" label={t("se.aiDefault")} />}
+                  {!p.isActive && <WorkItemTag kind="status" value="INITIAL" label={t("se.aiDisabled")} />}
                 </div>
                 <div className="ai-provider-row-meta">
                   <span>{p.provider}</span>
                   <span>·</span>
                   <span>{providerModel(p)}</span>
-                  <span>·</span>
-                  <span className={p.hasApiKey ? "tag tag-success" : "tag"}>{p.hasApiKey ? t("se.hasKey") : t("se.noKey")}</span>
+                  <WorkItemTag kind="status" value={p.hasApiKey ? "DONE" : "INITIAL"} label={p.hasApiKey ? t("se.hasKey") : t("se.noKey")} />
                 </div>
                 <div className="ai-provider-row-url mono" title={p.baseUrl}>{p.baseUrl}</div>
                 {p.lastTestAt && p.lastTestOk === false && <div className="ai-provider-row-error">{p.lastTestError}</div>}

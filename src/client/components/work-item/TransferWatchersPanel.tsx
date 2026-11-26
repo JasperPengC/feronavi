@@ -14,6 +14,7 @@ import { Button } from "../ui/Button.tsx";
 import { TextInput } from "../ui/TextInput.tsx";
 import { Select } from "../Select.tsx";
 import { relativeTime } from "../../lib/time.ts";
+import { useLocalDraft } from "../ui/LocalDraftScope.tsx";
 
 interface MemberRow { id: string; name: string; username: string }
 interface TransferRow {
@@ -32,6 +33,7 @@ export function TransferWatchersPanel({ workItemId, version, assigneeId, onTrans
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  useLocalDraft(!!targetId || !!reason, busy);
   const members = useQuery({
     queryKey: ["members", "options"],
     queryFn: () => apiGet<{ members: MemberRow[] }>("/api/v1/members").then((r) => r.members),

@@ -17,7 +17,7 @@ function mount(handler: Handler = () => undefined, path = "/projects/p1/mileston
     const path = new URL(String(input), "http://localhost").pathname;
     const response = handler(path, init);
     if (response) return response;
-    if (path.endsWith("/auth/me")) return json({ memberId: "m1", username: "demo", name: "测试", permissions: ["milestone:manage", "project:create"], dataScopes: [], locale: "zh-CN", mustChangePassword: false });
+    if (path.endsWith("/auth/me")) return json({ memberId: "m1", username: "demo", name: "测试", permissions: ["milestone:manage", "iteration:manage", "project:create"], dataScopes: [], locale: "zh-CN", mustChangePassword: false });
     if (path.endsWith("/projects")) return json({ items: [] });
     if (path.endsWith("/notifications")) return json({ items: [], unreadCount: 0 });
     if (path.endsWith("/system/status")) return json({ ok: true });

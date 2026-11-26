@@ -4,6 +4,16 @@ import { tableView } from "../src/client/lib/planning-api.ts";
 
 afterEach(() => vi.unstubAllGlobals());
 
+it("四个计划条件同时传到服务端，不因查询解析而退化成全部工作项", async () => {
+  const fetcher = vi.fn(async () => new Response(JSON.stringify({ rows: [], total: 0 })));
+  vi.stubGlobal("fetch", fetcher);
+  const plans = { iterationId: "11111111-1111-4111-8111-111111111111", releaseId: "22222222-2222-4222-8222-222222222222", moduleId: "33333333-3333-4333-8333-333333333333", milestoneId: "44444444-4444-4444-8444-444444444444" };
+  await tableView("p1", plans);
+  const url = new URL(String(fetcher.mock.calls[0]![0]));
+  expect(listWorkItemsQuerySchema.parse(Object.fromEntries(url.searchParams))).toMatchObject(plans);
+  expect(listWorkItemsQuerySchema.safeParse({ view: "table", iterationId: "invalid" }).success).toBe(false);
+});
+
 it("表格查询保留类型、优先级、排序与分页，不会悄悄丢掉筛选条件", async () => {
   const fetcher = vi.fn(async () => new Response(JSON.stringify({ rows: [], total: 0, page: 1, pageSize: 20 })));
   vi.stubGlobal("fetch", fetcher);

@@ -7,7 +7,7 @@
  * **任何读取路径（列表、树、详情、版本、搜索、MCP）都必须经 `visiblePageCondition`** ——
  * 否则直链或搜索就会成为越权入口。
  */
-import { and, asc, desc, eq, ilike, isNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, ilike, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "../../db/index.ts";
 import { deferAfterCommit } from "../../db/context.ts";
 import { page, pagePermission, pageRevision } from "../../db/schema.ts";
@@ -20,6 +20,8 @@ import { businessEffects } from "./business-effects.ts";
 import { recordBusinessEvent } from "./event-log.ts";
 import * as projectRepo from "../repos/project.repo.ts";
 import { assertTreeParent, lockProjectTree } from "./project-tree.ts";
+import { assertDocumentLinks } from "../../shared/document-links.ts";
+import { pageActive, pageArchived } from "../repos/page-state.ts";
 
 const SLUG_MAX_RETRY = 5;
 
@@ -41,12 +43,13 @@ async function assertProjectVisible(actor: Actor, projectId: string) {
  * 资源侧：ACL `can_write`。
  * ⚠️ 早先只判 `page:update_any`，导致"只被 ACL 授写权"的成员实际写不了 —— 资源级授权形同虚设。
  */
-async function assertCanWrite(actor: Actor, pageId: string, projectId: string): Promise<void> {
+export async function assertCanWrite(actor: Actor, pageId: string, projectId: string): Promise<void> {
   const ctx: PermissionContext = { memberProjectIds: new Set(), memberTeamIds: new Set(), memberId: actor.memberId };
   if (can(actor, "page:update_any", { projectId, teamId: null }, ctx)) return;
-  const first = (await db.select({ authorId: pageRevision.authorId }).from(pageRevision)
+  const [owner] = await db.select({ createdBy: page.createdBy }).from(page).where(eq(page.id, pageId)).limit(1);
+  const first = owner?.createdBy ? null : (await db.select({ authorId: pageRevision.authorId }).from(pageRevision)
     .where(and(eq(pageRevision.pageId, pageId), eq(pageRevision.revisionNo, 1))).limit(1))[0];
-  if (can(actor, "page:update_own", { projectId, teamId: null, createdBy: first?.authorId ?? null }, ctx)) return;
+  if (can(actor, "page:update_own", { projectId, teamId: null, createdBy: owner?.createdBy ?? first?.authorId ?? null }, ctx)) return;
   if (await hasAcl(actor, pageId, "write")) return;
   throw forbidden();
 }
@@ -63,20 +66,24 @@ function slugify(title: string): string {
 // ── 读取 ────────────────────────────────────────────────────
 
 /** 文档树/列表：**不含正文**（规范：list 不含正文，get 才含） */
-export async function listPages(actor: Actor, projectId: string) {
+export async function listPages(actor: Actor, projectId: string, options: { archived?: boolean; q?: string } = {}) {
   await assertProjectVisible(actor, projectId);
   const visible = await visiblePageCondition(actor);
-  return db.select({
+  const rows = await db.select({
     id: page.id, title: page.title, slug: page.slug, parentId: page.parentId,
     visibility: page.visibility, sortOrder: page.sortOrder,
     currentRevisionId: page.currentRevisionId, updatedAt: page.updatedAt,
+    kind: page.kind, structureVersion: page.structureVersion, archivedAt: page.archivedAt, isArchived: pageArchived(),
   }).from(page)
-    .where(and(eq(page.projectId, projectId), isNull(page.deletedAt), visible))
+    .where(and(eq(page.projectId, projectId), isNull(page.deletedAt), visible,
+      options.archived ? pageArchived() : pageActive(), options.q ? ilike(page.title, `%${options.q}%`) : undefined))
     .orderBy(asc(page.sortOrder), asc(page.title));
+  const visibleIds = new Set(rows.map(row => row.id));
+  return rows.map(row => ({ ...row, parentId: row.parentId && visibleIds.has(row.parentId) ? row.parentId : null }));
 }
 
 export async function getPage(actor: Actor, id: string) {
-  const rows = await db.select().from(page)
+  const rows = await db.select({ ...getTableColumns(page), isArchived: pageArchived() }).from(page)
     .where(and(eq(page.id, id), isNull(page.deletedAt))).limit(1);
   const p = rows[0];
   if (!p) throw forbidden();                       // 不可见与不存在同形
@@ -92,28 +99,24 @@ export async function getPage(actor: Actor, id: string) {
 
 /** 幂等响应重放也必须重新验证当前项目可见性和页面写权。 */
 export async function assertPageWritable(actor: Actor, pageId: string, projectId?: string) {
-  const [current] = await db.select().from(page).where(and(eq(page.id, pageId), isNull(page.deletedAt))).limit(1);
-  if (!current) throw forbidden();
+  const current = await getPage(actor, pageId);
   if (projectId && current.projectId !== projectId) throw forbidden();
   await assertProjectVisible(actor, current.projectId);
   await assertCanWrite(actor, pageId, current.projectId);
+  if (current.isArchived) throw forbidden();
+  if (current.kind === "FOLDER") throw new DomainError("VALIDATION", "文件夹没有正文，请使用目录整理操作", null);
   return current;
 }
 
 /** 关键字检索：**必须套可见性条件**，否则受限页会从搜索泄露 */
 export async function searchPages(actor: Actor, projectId: string, q: string) {
-  await assertProjectVisible(actor, projectId);
-  const visible = await visiblePageCondition(actor);
-  return db.select({ id: page.id, title: page.title, slug: page.slug, visibility: page.visibility })
-    .from(page)
-    .where(and(eq(page.projectId, projectId), isNull(page.deletedAt), visible, ilike(page.title, `%${q}%`)))
-    .limit(50);
+  return listPages(actor, projectId, { q });
 }
 
 // ── 写入 ────────────────────────────────────────────────────
 
 /** slug 冲突自动追加 -2 / -3…（规范：不得把唯一冲突直接抛给用户） */
-async function allocateSlug(projectId: string, title: string, excludeId?: string): Promise<string> {
+export async function allocateSlug(projectId: string, title: string, excludeId?: string): Promise<string> {
   const base = slugify(title);
   for (let i = 0; i <= SLUG_MAX_RETRY; i++) {
     const candidate = i === 0 ? base : `${base}-${i + 1}`;
@@ -131,7 +134,8 @@ export async function assertPageCreatable(actor: Actor, projectId: string, input
   if (input.visibility === "RESTRICTED") assertCan(actor, "page:manage_visibility", projectId);
   if (input.parentId) {
     await assertTreeParent("page", projectId, input.parentId);
-    await getPage(actor, input.parentId);
+    const parent = await getPage(actor, input.parentId);
+    if (parent.isArchived) throw new DomainError("VALIDATION", "不能在已归档目录内创建文档", null);
   }
 }
 
@@ -145,8 +149,11 @@ export async function createPage(actor: Actor, projectId: string, input: Paramet
 
 async function createPageLocked(actor: Actor, projectId: string, input: {
   title: string; content?: string; parentId?: string | null; visibility?: "PROJECT" | "RESTRICTED"; sortOrder?: number;
+  kind?: "DOCUMENT" | "FOLDER";
 }) {
   await assertPageCreatable(actor, projectId, input);
+  assertDocumentLinks(input.content ?? "");
+  if (input.kind === "FOLDER" && input.content) throw new DomainError("VALIDATION", "文件夹不能包含正文", null);
   const visibility = input.visibility ?? "PROJECT";
   const slug = await allocateSlug(projectId, input.title);
 
@@ -154,8 +161,9 @@ async function createPageLocked(actor: Actor, projectId: string, input: {
     const [p] = await tx.insert(page).values({
       projectId, title: input.title, slug, parentId: input.parentId ?? null,
       visibility, sortOrder: input.sortOrder ?? 0,
+      kind: input.kind ?? "DOCUMENT", createdBy: actor.memberId,
     }).returning();
-    const [rev] = await tx.insert(pageRevision).values({
+    const [rev] = input.kind === "FOLDER" ? [] : await tx.insert(pageRevision).values({
       pageId: p!.id, revisionNo: 1, content: input.content ?? "", changeSummary: "创建", authorId: actor.memberId,
     }).returning();
     /**
@@ -169,14 +177,21 @@ async function createPageLocked(actor: Actor, projectId: string, input: {
       });
     }
     // 派生列与内容同事务更新（规范明示）
-    await tx.update(page).set({ currentRevisionId: rev!.id, updatedAt: new Date() }).where(eq(page.id, p!.id));
-    await syncSearchVector(tx, p!.id, input.title, input.content ?? "");
-    return { ...p!, currentRevisionId: rev!.id, revisionNo: 1 };
+    if (rev) {
+      await tx.update(page).set({ currentRevisionId: rev.id, updatedAt: new Date() }).where(eq(page.id, p!.id));
+      await syncSearchVector(tx, p!.id, input.title, input.content ?? "");
+    }
+    return { ...p!, currentRevisionId: rev?.id ?? null, revisionNo: rev ? 1 : 0 };
   });
   await recordBusinessEvent({
     actor, action: "wiki.created", targetType: "PAGE", targetId: createdPage.id, projectId,
     summary: `${actor.name} 创建了文档「${createdPage.title}」`,
   });
+  if (createdPage.currentRevisionId && input.content?.trim()) {
+    const revisionId = createdPage.currentRevisionId;
+    const complete = () => businessEffects().finishPagePublication(actor, { pageId: createdPage.id, revisionId });
+    if (!deferAfterCommit(complete)) await complete();
+  }
   return createdPage;
 }
 
@@ -184,7 +199,7 @@ async function createPageLocked(actor: Actor, projectId: string, input: {
 /** 只依赖 execute 的最小结构类型：db 与事务句柄都能传进来（drizzle 的完整类型在事务上是不同别名） */
 type Executor = { execute: (q: SQL) => Promise<unknown> };
 
-async function syncSearchVector(tx: Executor, pageId: string, title: string, content: string): Promise<void> {
+export async function syncSearchVector(tx: Executor, pageId: string, title: string, content: string): Promise<void> {
   await tx.execute(sql`
     update page set search_vector = to_tsvector('chinese_zh', ${title + "\n" + content})
     where id = ${pageId}
@@ -202,10 +217,13 @@ export async function updatePage(actor: Actor, id: string, input: Parameters<typ
 
 async function updatePageLocked(actor: Actor, id: string, input: {
   title?: string; content?: string; parentId?: string | null; sortOrder?: number;
-  visibility?: "PROJECT" | "RESTRICTED"; changeSummary?: string | null; expectedRevisionId?: string;
+  visibility?: "PROJECT" | "RESTRICTED"; changeSummary?: string | null; expectedRevisionId?: string; expectedStructureVersion?: number;
 }, options: { collaborationPublish?: boolean }) {
   const current = await getPage(actor, id);              // 内含可见性校验
-  await assertCanWrite(actor, id, current.projectId);    // 角色权限 ∪ 资源级 ACL
+  await assertPageWritable(actor, id, current.projectId);
+  if (input.expectedStructureVersion !== undefined && current.structureVersion !== input.expectedStructureVersion) {
+    throw new DomainError("VERSION_CONFLICT", "目录或标题已被修改，请刷新后重试；正文草稿已保留", { expected: input.expectedStructureVersion, actual: current.structureVersion });
+  }
   if (input.visibility && input.visibility !== current.visibility) {
     assertCan(actor, "page:manage_visibility", current.projectId);
   }
@@ -216,10 +234,13 @@ async function updatePageLocked(actor: Actor, id: string, input: {
   }
   if (input.parentId) {
     await assertTreeParent("page", current.projectId, input.parentId, id);
-    await getPage(actor, input.parentId);
+    const parent = await getPage(actor, input.parentId);
+    if (parent.isArchived) throw new DomainError("VALIDATION", "不能移动到已归档目录", null);
   }
   const title = input.title ?? current.title;
   const content = input.content ?? current.content;
+  // 元数据调整不改旧正文；新正文及协同发布必须通过同一检查。
+  if (input.content !== undefined) assertDocumentLinks(content);
 
   const updatedPage = await db.transaction(async (tx) => {
     const slug = input.title && input.title !== current.title
@@ -235,6 +256,7 @@ async function updatePageLocked(actor: Actor, id: string, input: {
       ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
       ...(input.visibility ? { visibility: input.visibility } : {}),
       currentRevisionId: rev!.id, updatedAt: new Date(),
+      ...((input.title !== undefined || input.parentId !== undefined || input.sortOrder !== undefined) ? { structureVersion: sql`${page.structureVersion} + 1` } : {}),
     }).where(eq(page.id, id)).returning();
     await syncSearchVector(tx, id, title, content);
     return { ...updated!, revisionNo: rev!.revisionNo };
@@ -262,6 +284,8 @@ export async function deletePage(actor: Actor, id: string): Promise<void> {
 async function deletePageLocked(actor: Actor, id: string): Promise<void> {
   const current = await getPage(actor, id);
   await assertCanWrite(actor, id, current.projectId);
+  const [child] = await db.select({ id: page.id }).from(page).where(and(eq(page.parentId, id), isNull(page.deletedAt))).limit(1);
+  if (child) throw new DomainError("VALIDATION", "目录中仍有内容，请先移动内容或归档整个目录", null);
   await db.update(page).set({
     deletedAt: new Date(),
     slug: `${current.slug}--deleted-${Date.now()}`,
@@ -305,7 +329,7 @@ export async function restoreRevision(actor: Actor, pageId: string, revisionId: 
 
 async function restoreRevisionLocked(actor: Actor, pageId: string, revisionId: string, expectedRevisionId?: string) {
   const current = await getPage(actor, pageId);
-  await assertCanWrite(actor, pageId, current.projectId);
+  await assertPageWritable(actor, pageId, current.projectId);
   if (expectedRevisionId && current.currentRevisionId !== expectedRevisionId) throw new DomainError("VERSION_CONFLICT", "该文档已被他人修改，请刷新后重试", { expected: expectedRevisionId, actual: current.currentRevisionId });
   const target = (await db.select().from(pageRevision)
     .where(and(eq(pageRevision.id, revisionId), eq(pageRevision.pageId, pageId))).limit(1))[0];

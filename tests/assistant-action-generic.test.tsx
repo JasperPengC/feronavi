@@ -71,7 +71,7 @@ it("工作项评论显示所属业务标题，过期文档不再提供决策", a
   await screen.findByRole("button", { name: "DEV-1 · 发布回归" }); expect(screen.getByText("回归已通过")).toBeTruthy();
   expect(document.querySelector(".assistant-action-old")).toBeNull();
   cleanup(); mount(proposal("page.create", { title: "新文档", content: "正文" }, { expiresAt: "2000-01-01T00:00:00Z" }));
-  expect(screen.getByText("已过期，请重新提问生成建议。")).toBeTruthy(); expect(screen.queryByRole("button", { name: "确认执行" })).toBeNull();
+  expect(screen.getByText("已过期")).toBeTruthy(); expect(screen.queryByRole("button", { name: "确认执行" })).toBeNull();
 });
 it("长正文默认提供可读节选，展开后能核对完整内容且无执行权限时禁用确认", () => {
   const content = "发布说明正文".repeat(100);
@@ -80,4 +80,20 @@ it("长正文默认提供可读节选，展开后能核对完整内容且无执�
   expect(details.open).toBe(false); expect(details.querySelector("p")!.textContent).toBe(content);
   fireEvent.click(screen.getByText("展开完整内容"));
   expect((screen.getByRole("button", { name: "确认执行" }) as HTMLButtonElement).disabled).toBe(true);
+});
+it("工作项长描述收起全文，让确认操作保持可发现，冲突记录恢复后禁用再次确认", async () => {
+  const content = "核对任务实施说明\n".repeat(60);
+  rows["/api/v1/work-items/work-item"] = { id: "work-item", projectId: P, key: "DEV-2", title: "实施说明", version: 1, description: "旧说明" };
+  mount(proposal("workitem.update", { workItemId: "work-item", description: content }, { targetId: "work-item", expectedVersion: 1, lastFailure: { code: "CONFLICT", recordedAt: "2026-11-25T10:00:00Z" } }));
+  await screen.findByText("实施说明");
+  const details = document.querySelector(".assistant-action-content") as HTMLDetailsElement;
+  expect(details).not.toBeNull(); expect(details.open).toBe(false);
+  expect(details.querySelector("p")!.textContent).toBe(content);
+  expect((screen.getByRole("button", { name: "确认执行" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByText(/上次确认遇到版本冲突/)).toBeTruthy();
+});
+it("评论执行后仍可打开所属任务核对当前业务状态", () => {
+  mount(proposal("workitem.comment", { workItemId: "work-item", body: "验收结论" }, { status: "confirmed", target: { kind: "workItem", id: "work-item", fingerprint: "original" }, result: { observedAt: "2026-11-25T10:00:00Z", resources: [{ kind: "comment", id: "comment" }], value: { id: "comment", projectId: P, targetId: "work-item", body: "验收结论" } } }));
+  expect(screen.getByRole("button", { name: "查看所属工作项" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "确认执行" })).toBeNull();
 });

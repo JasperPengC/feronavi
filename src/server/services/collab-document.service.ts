@@ -25,6 +25,7 @@ import * as wiki from "./wiki.service.ts";
 import * as knowledge from "./knowledge.service.ts";
 import { publishProjectEvent, publishResourceEvent, publishRoomEvent } from "./collab-events.service.ts";
 import { lockProjectTree } from "./project-tree.ts";
+import { loadActor } from "../auth/actor-loader.ts";
 
 export interface DocumentState {
   state: Uint8Array;
@@ -116,6 +117,12 @@ export async function applyUpdate(input: {
   if (!room) throw new DomainError("NOT_FOUND", "协作房间不存在", null);
   const parsed = validateDocumentUpdate({ operationId: input.operationId, updateBase64: input.updateBase64 });
   const result = await db.transaction(async (tx) => {
+    if (room.resourceType === "PAGE") {
+      await lockProjectTree(room.projectId);
+      const actor = await loadActor(input.actorId);
+      if (!actor) throw new DomainError("FORBIDDEN", "账号不可用", null);
+      await wiki.assertPageWritable(actor, room.resourceId, room.projectId);
+    }
     await tx.execute(drizzleSql`select pg_advisory_xact_lock(hashtextextended(${input.roomId}, 0))`);
     const lockedRoom = (await tx.select().from(collabRoom).where(eq(collabRoom.id, input.roomId)).limit(1))[0];
     if (!lockedRoom) throw new DomainError("NOT_FOUND", "协作房间不存在", null);
@@ -195,6 +202,7 @@ export async function finishPagePublication(actor: Actor, input: {
 
 export async function publishPage(actor: Actor, roomId: string, input: {
   expectedRevisionId: string;
+  expectedStructureVersion?: number;
   title?: string;
   changeSummary?: string;
 }) {
@@ -217,6 +225,7 @@ export async function publishPage(actor: Actor, roomId: string, input: {
       title: input.title,
       content,
       expectedRevisionId: input.expectedRevisionId,
+      expectedStructureVersion: input.expectedStructureVersion,
       changeSummary: input.changeSummary ?? "协作草稿发布",
     }, { collaborationPublish: true });
     const synchronized = await loadDocument(roomId);

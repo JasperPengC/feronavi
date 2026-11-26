@@ -24,6 +24,7 @@ export const createWorkItemSchema = z.object({
   iterationId: z.string().uuid().nullable().optional(),
   releaseId: z.string().uuid().nullable().optional(),
   moduleId: z.string().uuid().nullable().optional(),
+  productId: z.string().uuid().nullable().optional(),
 });
 export type CreateWorkItemInput = z.infer<typeof createWorkItemSchema>;
 
@@ -50,6 +51,7 @@ export const updateWorkItemSchema = z.object({
   iterationId: z.string().uuid().nullable().optional(),
   releaseId: z.string().uuid().nullable().optional(),
   moduleId: z.string().uuid().nullable().optional(),
+  productId: z.string().uuid().nullable().optional(),
   /**
    * 不可改字段用 strict() 拦住。
    * `number` / `key` / `projectId` / `type` 传了就 400 —— 与项目 key 同理，静默忽略会误导调用方。
@@ -68,6 +70,10 @@ export const listWorkItemsQuerySchema = z.object({
   q: z.string().max(200).optional(),
   statusKey: z.string().max(40).optional(),
   assigneeId: z.string().uuid().optional(),
+  milestoneId: z.string().uuid().optional(),
+  iterationId: z.string().uuid().optional(),
+  releaseId: z.string().uuid().optional(),
+  moduleId: z.string().uuid().optional(),
   type: workItemTypeSchema.optional(),
   priority: prioritySchema.optional(),
   sortBy: z.enum(["created_at", "updated_at", "due_date", "priority", "number"]).optional(),
@@ -80,4 +86,6 @@ export const boardQuerySchema = z.object({
   pageSizePerColumn: z.coerce.number().int().min(1).max(100).default(25),
   q: z.string().trim().max(200).optional(),
   priority: prioritySchema.optional(),
+  type: z.enum(["TASK", "REQUIREMENT", "DEFECT", "SUBTASK"]).optional(),
+  workflowId: z.string().uuid().optional(),
 });

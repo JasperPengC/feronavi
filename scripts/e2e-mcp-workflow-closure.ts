@@ -16,6 +16,7 @@ import * as comments from "../src/server/services/comment.service.ts";
 import * as plans from "../src/server/services/planning.service.ts";
 import * as lifecycle from "../src/server/services/planning-lifecycle.service.ts";
 import { ensureInitialized } from "./_test-helpers.ts";
+import { prepareReadyRelease } from "../tests/support/release-ready-fixture.ts";
 
 const marker = randomUUID().replaceAll("-", "").slice(0, 6).toUpperCase();
 let checks = 0, rpcId = 0;
@@ -164,6 +165,7 @@ try {
 
   const finishedRelease = await plans.createPlan(admin, project.id, "release", { name: "阻断重开版本" });
   const releasedTask = await items.updateWorkItem(admin, pendingTask.id, { version: pendingFinal.version, releaseId: finishedRelease.id });
+  await prepareReadyRelease(admin, project.id, finishedRelease.id);
   await lifecycle.complete(admin, finishedRelease.id, "release");
   await db.insert(workflowTransition).values({ workflowId: pendingTask.workflowId, fromStateId: terminal.id, toStateId: ongoing.id, allowedRoleIds: [] }).onConflictDoNothing();
   const blockedKey = `blocked-${marker}`;

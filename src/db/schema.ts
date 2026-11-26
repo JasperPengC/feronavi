@@ -113,7 +113,7 @@ export const role = pgTable("role", {
 }, (t) => [uniqueIndex("role_key_key").on(t.key)]);
 
 export const permission = pgTable("permission", {
-  // 主键就是 key：权限是平台固定的 47 个动作，没有独立标识的必要
+  // 主键就是 key：权限是平台固定的动作目录，没有独立标识的必要
   key: text("key").primaryKey(),
   group: text("group").notNull(),                     // 展示分组
   description: text("description").notNull(),
@@ -285,6 +285,24 @@ export const project = pgTable("project", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(now),
 }, (t) => [uniqueIndex("project_key_key").on(t.key)]);
 
+/** 产品是持续演进对象，可由多个交付项目共同维护。 */
+export const product = pgTable("product", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(), description: text("description"),
+  version: integer("version").notNull().default(1),
+  createdBy: uuid("created_by").references(() => member.id, { onDelete: "set null" }),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(now),
+}, t => [check("product_version_positive", sql`${t.version} > 0`)]);
+
+export const productProject = pgTable("product_project", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  productId: uuid("product_id").notNull().references(() => product.id, { onDelete: "restrict" }),
+  projectId: uuid("project_id").notNull().references(() => project.id, { onDelete: "restrict" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
+}, t => [uniqueIndex("product_project_unique").on(t.productId, t.projectId), index("product_project_project_idx").on(t.projectId)]);
+
 // ══ 2.3 项目成员 ══════════════════════════════════════════════
 
 export const projectMembership = pgTable("project_membership", {
@@ -321,6 +339,7 @@ export const workItem = pgTable("work_item", {
   iterationId: uuid("iteration_id").references(() => iteration.id, { onDelete: "set null" }),
   releaseId: uuid("release_id").references(() => release.id, { onDelete: "set null" }),
   moduleId: uuid("module_id").references(() => module.id, { onDelete: "set null" }),
+  productId: uuid("product_id").references(() => product.id, { onDelete: "restrict" }),
   assigneeId: uuid("assignee_id").references(() => member.id, { onDelete: "set null" }),  // NULL = 未指派
   reporterId: uuid("reporter_id").notNull().references(() => member.id, { onDelete: "restrict" }),
   priority: text("priority"),                          // LOWEST / LOW / MEDIUM / HIGH / URGENT
@@ -342,6 +361,113 @@ export const workItem = pgTable("work_item", {
   // 软删过滤后列表按项目分页
   index("work_item_project_created_idx").on(t.projectId, t.createdAt),
 ]);
+
+/** 需求正文的独立不可变快照；与工作项乐观锁版本分开。 */
+export const requirementRevision = pgTable("requirement_revision", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  workItemId: uuid("work_item_id").notNull().references(() => workItem.id, { onDelete: "cascade" }),
+  revisionNo: integer("revision_no").notNull(),
+  workItemVersion: integer("work_item_version").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  authorId: uuid("author_id").references(() => member.id, { onDelete: "set null" }),
+  source: text("source").$type<"INITIAL" | "EDIT" | "BASELINE">().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
+}, t => [
+  uniqueIndex("requirement_revision_number_key").on(t.workItemId, t.revisionNo),
+  uniqueIndex("requirement_revision_version_key").on(t.workItemId, t.workItemVersion),
+  check("requirement_revision_positive", sql`${t.revisionNo} > 0 and ${t.workItemVersion} > 0`),
+  check("requirement_revision_source", sql`${t.source} in ('INITIAL', 'EDIT', 'BASELINE')`),
+]);
+
+/** 正式变更提案与当时的影响快照，正文版本仍由 requirement_revision 保存。 */
+export const requirementChange = pgTable("requirement_change", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  workItemId: uuid("work_item_id").notNull().references(() => workItem.id, { onDelete: "restrict" }),
+  projectId: uuid("project_id").notNull().references(() => project.id, { onDelete: "restrict" }),
+  number: integer("number").notNull(),
+  baseRevisionId: uuid("base_revision_id").notNull().references(() => requirementRevision.id, { onDelete: "restrict" }),
+  requestedWorkItemVersion: integer("requested_work_item_version").notNull(),
+  proposedTitle: text("proposed_title").notNull(), proposedDescription: text("proposed_description"), reason: text("reason").notNull(),
+  impactFingerprint: text("impact_fingerprint").notNull(),
+  status: text("status").$type<import("../shared/schemas/requirement-change.ts").ChangeStatus>().notNull().default("PENDING"),
+  version: integer("version").notNull().default(1),
+  requestedBy: uuid("requested_by").references(() => member.id, { onDelete: "set null" }),
+  decidedBy: uuid("decided_by").references(() => member.id, { onDelete: "set null" }),
+  decidedAt: timestamp("decided_at", { withTimezone: true }), reviewNote: text("review_note"),
+  cancelledBy: uuid("cancelled_by").references(() => member.id, { onDelete: "set null" }),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }), cancelNote: text("cancel_note"),
+  appliedBy: uuid("applied_by").references(() => member.id, { onDelete: "set null" }),
+  appliedAt: timestamp("applied_at", { withTimezone: true }),
+  appliedRevisionId: uuid("applied_revision_id").references(() => requirementRevision.id, { onDelete: "restrict" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
+}, t => [uniqueIndex("requirement_change_number_key").on(t.workItemId,t.number),
+  check("requirement_change_status",sql`${t.status} in ('PENDING','APPROVED','REJECTED','CANCELLED','APPLIED')`),
+  check("requirement_change_positive",sql`${t.number}>0 and ${t.version}>0 and ${t.requestedWorkItemVersion}>0`),
+  check("requirement_change_applied",sql`(${t.status}='APPLIED') = (${t.appliedAt} is not null and ${t.appliedRevisionId} is not null)`)]);
+
+export const requirementChangeImpact = pgTable("requirement_change_impact", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  changeId: uuid("change_id").notNull().references(() => requirementChange.id, { onDelete: "cascade" }),
+  kind: text("kind").$type<import("../shared/schemas/requirement-change.ts").ImpactKind>().notNull(), targetId: uuid("target_id").notNull(),
+  snapshot: jsonb("snapshot").$type<import("../shared/schemas/requirement-change.ts").RequirementImpactSnapshot>().notNull(),
+  acknowledgedBy: uuid("acknowledged_by").references(() => member.id, { onDelete: "set null" }),
+  acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }), note: text("note"),
+}, t => [uniqueIndex("requirement_change_impact_target_key").on(t.changeId,t.kind,t.targetId),
+  check("requirement_change_impact_kind",sql`${t.kind} in ('WORK_ITEM','MILESTONE','ITERATION','RELEASE','TEST_CASE')`)]);
+
+export const testSuite = pgTable("test_suite", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`), projectId: uuid("project_id").notNull().references(()=>project.id,{onDelete:"restrict"}),
+  name:text("name").notNull(),description:text("description").notNull().default(""),version:integer("version").notNull().default(1),
+  createdBy:uuid("created_by").references(()=>member.id,{onDelete:"set null"}),archivedAt:timestamp("archived_at",{withTimezone:true}),
+  createdAt:timestamp("created_at",{withTimezone:true}).notNull().default(now),updatedAt:timestamp("updated_at",{withTimezone:true}).notNull().default(now),
+},t=>[check("test_suite_version",sql`${t.version}>0`)]);
+
+export const testCase = pgTable("test_case", {
+  id:uuid("id").primaryKey().default(sql`gen_random_uuid()`),projectId:uuid("project_id").notNull().references(()=>project.id,{onDelete:"restrict"}),
+  number:integer("number").notNull(),title:text("title").notNull(),
+  status:text("status").$type<"DRAFT"|"READY"|"ARCHIVED">().notNull().default("DRAFT"),priority:text("priority").$type<"LOWEST"|"LOW"|"MEDIUM"|"HIGH"|"URGENT">().notNull().default("MEDIUM"),
+  suiteId:uuid("suite_id").references(()=>testSuite.id,{onDelete:"restrict"}),ownerId:uuid("owner_id").references(()=>member.id,{onDelete:"set null"}),
+  currentRevisionId:uuid("current_revision_id").references(():AnyPgColumn=>testCaseRevision.id,{onDelete:"restrict"}),version:integer("version").notNull().default(1),
+  createdBy:uuid("created_by").references(()=>member.id,{onDelete:"set null"}),
+  createdAt:timestamp("created_at",{withTimezone:true}).notNull().default(now),updatedAt:timestamp("updated_at",{withTimezone:true}).notNull().default(now),
+},t=>[uniqueIndex("test_case_project_number").on(t.projectId,t.number),check("test_case_status",sql`${t.status} in ('DRAFT','READY','ARCHIVED')`),
+  check("test_case_priority",sql`${t.priority} in ('LOWEST','LOW','MEDIUM','HIGH','URGENT')`),check("test_case_positive",sql`${t.number}>0 and ${t.version}>0`)]);
+
+export const testCaseRevision = pgTable("test_case_revision", {
+  id:uuid("id").primaryKey().default(sql`gen_random_uuid()`),caseId:uuid("case_id").notNull().references(()=>testCase.id,{onDelete:"restrict"}),
+  revisionNo:integer("revision_no").notNull(),title:text("title").notNull(),preconditions:text("preconditions").notNull().default(""),
+  steps:jsonb("steps").$type<import("../shared/schemas/test-management.ts").TestStep[]>().notNull(),
+  createdBy:uuid("created_by").references(()=>member.id,{onDelete:"set null"}),createdAt:timestamp("created_at",{withTimezone:true}).notNull().default(now),
+},t=>[uniqueIndex("test_case_revision_number").on(t.caseId,t.revisionNo),check("test_case_steps",sql`jsonb_typeof(${t.steps})='array'`),check("test_case_revision_no_positive",sql`${t.revisionNo}>0`)]);
+
+export const testCaseRequirement = pgTable("test_case_requirement", {
+  id:uuid("id").primaryKey().default(sql`gen_random_uuid()`),caseRevisionId:uuid("case_revision_id").notNull().references(()=>testCaseRevision.id,{onDelete:"restrict"}),
+  workItemId:uuid("work_item_id").notNull().references(()=>workItem.id,{onDelete:"restrict"}),requirementRevisionId:uuid("requirement_revision_id").notNull().references(()=>requirementRevision.id,{onDelete:"restrict"}),
+},t=>[uniqueIndex("test_case_requirement_unique").on(t.caseRevisionId,t.workItemId),index("test_case_requirement_work_item_idx").on(t.workItemId)]);
+
+export const testPlan = pgTable("test_plan", {
+ id:uuid("id").primaryKey().default(sql`gen_random_uuid()`),projectId:uuid("project_id").notNull().references(()=>project.id,{onDelete:"restrict"}),
+ number:integer("number").notNull(),title:text("title").notNull(),build:text("build").notNull(),environment:text("environment").notNull(),
+ status:text("status").$type<"DRAFT"|"RUNNING"|"COMPLETED"|"CANCELLED">().notNull().default("DRAFT"),version:integer("version").notNull().default(1),
+ createdBy:uuid("created_by").references(()=>member.id,{onDelete:"set null"}),startedAt:timestamp("started_at",{withTimezone:true}),finishedAt:timestamp("finished_at",{withTimezone:true}),cancelReason:text("cancel_reason"),
+ createdAt:timestamp("created_at",{withTimezone:true}).notNull().default(now),updatedAt:timestamp("updated_at",{withTimezone:true}).notNull().default(now),
+},t=>[uniqueIndex("test_plan_project_number").on(t.projectId,t.number),check("test_plan_positive",sql`${t.number}>0 and ${t.version}>0`),check("test_plan_status_check",sql`${t.status} in ('DRAFT','RUNNING','COMPLETED','CANCELLED')`)]);
+export const testPlanCase = pgTable("test_plan_case", {
+ id:uuid("id").primaryKey().default(sql`gen_random_uuid()`),planId:uuid("plan_id").notNull().references(()=>testPlan.id,{onDelete:"restrict"}),
+ caseId:uuid("case_id").notNull().references(()=>testCase.id,{onDelete:"restrict"}),revisionId:uuid("revision_id").notNull().references(()=>testCaseRevision.id,{onDelete:"restrict"}),position:integer("position").notNull(),
+},t=>[uniqueIndex("test_plan_case_unique").on(t.planId,t.caseId),uniqueIndex("test_plan_case_position").on(t.planId,t.position),check("test_plan_case_position_check",sql`${t.position}>=0`)]);
+export const testRun = pgTable("test_run", {
+ id:uuid("id").primaryKey().default(sql`gen_random_uuid()`),projectId:uuid("project_id").notNull().references(()=>project.id,{onDelete:"restrict"}),planCaseId:uuid("plan_case_id").notNull().references(()=>testPlanCase.id,{onDelete:"restrict"}),
+ build:text("build").notNull(),environment:text("environment").notNull(),
+ attempt:integer("attempt").notNull(),retestOf:uuid("retest_of").references(():AnyPgColumn=>testRun.id,{onDelete:"restrict"}),
+ status:text("status").$type<"IN_PROGRESS"|"PASSED"|"FAILED"|"BLOCKED"|"SKIPPED"|"CANCELLED">().notNull().default("IN_PROGRESS"),results:jsonb("results").$type<import("../shared/schemas/test-execution.ts").TestStepResult[]>().notNull().default(sql`'[]'::jsonb`),version:integer("version").notNull().default(1),
+ source:text("source").$type<"MANUAL"|"AGENT"|"AUTOMATION">().notNull(),sourceReference:text("source_reference"),executorId:uuid("executor_id").references(()=>member.id,{onDelete:"set null"}),startedAt:timestamp("started_at",{withTimezone:true}).notNull().default(now),finishedAt:timestamp("finished_at",{withTimezone:true}),cancelReason:text("cancel_reason"),
+},t=>[uniqueIndex("test_run_attempt").on(t.planCaseId,t.attempt),uniqueIndex("test_run_one_active").on(t.planCaseId).where(sql`${t.status}='IN_PROGRESS'`),check("test_run_status_check",sql`${t.status} in ('IN_PROGRESS','PASSED','FAILED','BLOCKED','SKIPPED','CANCELLED')`),check("test_run_source_check",sql`${t.source} in ('MANUAL','AGENT','AUTOMATION')`),check("test_run_attempt_check",sql`${t.attempt}>0`),check("test_run_version_check",sql`${t.version}>0`),check("test_run_results_check",sql`jsonb_typeof(${t.results})='array'`)]);
+export const testRunDefect = pgTable("test_run_defect", {
+ id:uuid("id").primaryKey().default(sql`gen_random_uuid()`),runId:uuid("run_id").notNull().references(()=>testRun.id,{onDelete:"restrict"}),defectId:uuid("defect_id").notNull().references(()=>workItem.id,{onDelete:"restrict"}),
+ createdBy:uuid("created_by").references(()=>member.id,{onDelete:"set null"}),generated:boolean("generated").notNull().default(false),createdAt:timestamp("created_at",{withTimezone:true}).notNull().default(now),
+},t=>[uniqueIndex("test_run_defect_unique").on(t.runId,t.defectId),uniqueIndex("test_run_generated_defect").on(t.runId).where(sql`${t.generated}=true`)]);
 
 // ══ 8.3 设置与初始化状态 ══════════════════════════════════════
 
@@ -1100,6 +1226,10 @@ export const page = pgTable("page", {
   title: text("title").notNull(),
   slug: text("slug").notNull(),
   parentId: uuid("parent_id").references((): AnyPgColumn => page.id, { onDelete: "set null" }),
+  kind: text("kind").notNull().default("DOCUMENT"),
+  structureVersion: integer("structure_version").notNull().default(1),
+  createdBy: uuid("created_by").references(() => member.id, { onDelete: "set null" }),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   visibility: text("visibility").notNull().default("PROJECT"),
   sortOrder: integer("sort_order").notNull().default(0),
   /** tsvector 派生列（GIN 索引在迁移里手写补，见 0020） */
@@ -1113,6 +1243,9 @@ export const page = pgTable("page", {
   uniqueIndex("page_project_slug_key").on(t.projectId, t.slug),
   index("page_project_parent_idx").on(t.projectId, t.parentId),
   check("page_visibility_allowed", sql`${t.visibility} IN ('PROJECT','RESTRICTED')`),
+  check("page_kind_allowed", sql`${t.kind} IN ('DOCUMENT','FOLDER')`),
+  check("page_structure_version_positive", sql`${t.structureVersion} > 0`),
+  check("page_folder_no_revision", sql`${t.kind} <> 'FOLDER' OR ${t.currentRevisionId} IS NULL`),
 ]);
 
 /** 页面级 ACL：仅 `visibility='RESTRICTED'` 时生效 */
@@ -1802,3 +1935,30 @@ export const assistantArtifact = pgTable("assistant_artifact", {
   check("assistant_artifact_scope_check", sql`jsonb_typeof(${t.allowedProjectIds}) = 'array' and jsonb_array_length(${t.allowedProjectIds}) between 1 and 20`),
   check("assistant_artifact_size_check", sql`${t.sizeBytes} is null or (${t.sizeBytes} > 0 and ${t.sizeBytes} <= 8388608)`),
 ]);
+
+// 交付来源与不可变证据。外部状态和核验渠道分别保存。
+export const deliverySource=pgTable('delivery_source',{
+ id:uuid('id').primaryKey().default(sql`gen_random_uuid()`),projectId:uuid('project_id').notNull().references(()=>project.id,{onDelete:'restrict'}),integrationId:uuid('integration_id').references(()=>integration.id,{onDelete:'restrict'}),
+ repository:text('repository').notNull(),apiBaseUrl:text('api_base_url').notNull(),integrationUpdatedAt:timestamp('integration_updated_at',{withTimezone:true}).notNull(),webhookSecretEncrypted:text('webhook_secret_encrypted'),enabled:boolean('enabled').notNull().default(true),version:integer('version').notNull().default(1),createdBy:uuid('created_by').references(()=>member.id,{onDelete:'set null'}),createdAt:timestamp('created_at',{withTimezone:true}).notNull().default(now),updatedAt:timestamp('updated_at',{withTimezone:true}).notNull().default(now),
+},t=>[uniqueIndex('delivery_source_integration').on(t.integrationId)]);
+export const deliveryEvidence=pgTable('delivery_evidence',{
+ id:uuid('id').primaryKey().default(sql`gen_random_uuid()`),projectId:uuid('project_id').notNull().references(()=>project.id,{onDelete:'restrict'}),sourceId:uuid('source_id').references(()=>deliverySource.id,{onDelete:'restrict'}),sourceVersion:integer('source_version'),
+ kind:text('kind').notNull().$type<'COMMIT'|'PULL_REQUEST'|'CI'|'BUILD'|'DEPLOYMENT'>(),title:text('title').notNull(),repository:text('repository').notNull(),commitSha:text('commit_sha').notNull(),build:text('build').notNull(),environment:text('environment'),status:text('status').notNull().$type<'PENDING'|'SUCCEEDED'|'FAILED'|'CANCELLED'>(),verification:text('verification').notNull().$type<'SELF_REPORTED'|'PROVIDER_API'>(),externalId:text('external_id').notNull(),attempt:integer('attempt').notNull().default(1),providerUpdatedAt:timestamp('provider_updated_at',{withTimezone:true}),url:text('url').notNull(),details:jsonb('details').notNull().default(sql`'{}'::jsonb`).$type<Record<string,string|number|boolean|null>>(),createdBy:uuid('created_by').references(()=>member.id,{onDelete:'set null'}),receivedAt:timestamp('received_at',{withTimezone:true}).notNull().default(now),
+},t=>[index('delivery_evidence_project_order').on(t.projectId,t.receivedAt,t.id),index('delivery_evidence_source_object').on(t.sourceId,t.kind,t.externalId,t.attempt,t.providerUpdatedAt)]);
+export const deliveryEvidenceLink=pgTable('delivery_evidence_link',{
+ id:uuid('id').primaryKey().default(sql`gen_random_uuid()`),evidenceId:uuid('evidence_id').notNull().references(()=>deliveryEvidence.id,{onDelete:'restrict'}),workItemId:uuid('work_item_id').notNull().references(()=>workItem.id,{onDelete:'restrict'}),createdBy:uuid('created_by').references(()=>member.id,{onDelete:'set null'}),createdAt:timestamp('created_at',{withTimezone:true}).notNull().default(now),
+},t=>[uniqueIndex('delivery_evidence_link_unique').on(t.evidenceId,t.workItemId)]);
+export const deliveryReceipt=pgTable('delivery_receipt',{
+ id:uuid('id').primaryKey().default(sql`gen_random_uuid()`),sourceId:uuid('source_id').notNull().references(()=>deliverySource.id,{onDelete:'restrict'}),sourceVersion:integer('source_version').notNull(),deliveryId:text('delivery_id').notNull(),payloadHash:text('payload_hash').notNull(),eventType:text('event_type').notNull(),evidenceId:uuid('evidence_id').notNull().references(()=>deliveryEvidence.id,{onDelete:'restrict'}),receivedAt:timestamp('received_at',{withTimezone:true}).notNull().default(now),
+},t=>[uniqueIndex('delivery_receipt_unique').on(t.sourceId,t.deliveryId)]);
+
+export const releaseCandidate=pgTable('release_candidate',{
+ id:uuid('id').primaryKey().default(sql`gen_random_uuid()`),projectId:uuid('project_id').notNull().references(()=>project.id,{onDelete:'restrict'}),releaseId:uuid('release_id').notNull().references(()=>release.id,{onDelete:'restrict'}),number:integer('number').notNull(),sourceId:uuid('source_id').notNull().references(()=>deliverySource.id,{onDelete:'restrict'}),sourceVersion:integer('source_version').notNull(),repository:text('repository').notNull(),commitSha:text('commit_sha').notNull(),build:text('build').notNull(),environment:text('environment').notNull(),
+ workflowIds:jsonb('workflow_ids').notNull().$type<number[]>(),testPlanIds:jsonb('test_plan_ids').notNull().$type<string[]>(),workItems:jsonb('work_items').notNull().$type<import('../shared/schemas/release-gate.ts').ReleaseScopeItem[]>(),createdBy:uuid('created_by').references(()=>member.id,{onDelete:'set null'}),createdAt:timestamp('created_at',{withTimezone:true}).notNull().default(now),
+},t=>[uniqueIndex('release_candidate_number').on(t.releaseId,t.number)]);
+export const releaseVerification=pgTable('release_verification',{
+ id:uuid('id').primaryKey().default(sql`gen_random_uuid()`),projectId:uuid('project_id').notNull().references(()=>project.id,{onDelete:'restrict'}),releaseId:uuid('release_id').notNull().unique().references(()=>release.id,{onDelete:'restrict'}),candidateId:uuid('candidate_id').notNull().unique().references(()=>releaseCandidate.id,{onDelete:'restrict'}),snapshot:jsonb('snapshot').notNull().$type<import('../shared/schemas/release-gate.ts').ReleaseGateSnapshot>(),createdBy:uuid('created_by').references(()=>member.id,{onDelete:'set null'}),createdAt:timestamp('created_at',{withTimezone:true}).notNull().default(now),
+});
+export const releaseFeedback=pgTable('release_feedback',{
+ id:uuid('id').primaryKey().default(sql`gen_random_uuid()`),projectId:uuid('project_id').notNull().references(()=>project.id,{onDelete:'restrict'}),releaseId:uuid('release_id').notNull().references(()=>release.id,{onDelete:'restrict'}),workItemId:uuid('work_item_id').notNull().references(()=>workItem.id,{onDelete:'restrict'}),sourceUrl:text('source_url').notNull(),conclusion:text('conclusion').notNull(),outcome:text('outcome').notNull().$type<'RESOLVED'|'FOLLOW_UP'>(),createdBy:uuid('created_by').references(()=>member.id,{onDelete:'set null'}),createdAt:timestamp('created_at',{withTimezone:true}).notNull().default(now),
+},t=>[index('release_feedback_order').on(t.releaseId,t.createdAt,t.id)]);

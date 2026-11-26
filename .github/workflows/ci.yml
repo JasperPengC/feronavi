@@ -89,8 +89,13 @@ jobs:
 
   # ── ③ 集成：真数据库（含分词与向量）+ 迁移 + 种子计数门禁 ────
   integration:
-    needs: toolchain
+    needs: [toolchain, quality]
     runs-on: ubuntu-24.04
+    # 一次性候选部署，验证后清理；不是生产环境发布。
+    environment: ci-candidate
+    permissions:
+      contents: read
+      deployments: write
     # 数据库镜像在 CI 内构建（带层缓存），不依赖已发布镜像
     env:
       TEST_DATABASE_ADMIN_URL: postgres://feronavi:ci-only-password@127.0.0.1:5432/postgres
@@ -108,6 +113,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: 读取候选版本
+        id: candidate_meta
+        run: |
+          node -e 'require("node:fs").appendFileSync(process.env.GITHUB_OUTPUT, "version=" + require("./package.json").version + "\n")'
       - uses: docker/setup-buildx-action@v3
       - name: 构建数据库镜像（带层缓存）
         uses: docker/build-push-action@v6
@@ -142,6 +151,14 @@ jobs:
         run: pnpm test:assistant-business
       - name: 产品整改故障与并发门禁
         run: pnpm test:product-regressions
+      - name: 产品开发测试独立身份交接、并发与撤权
+        run: pnpm test:team-handoff
+      - name: 已发布0.2.1及历史迁移升级、失败回滚与幂等
+        run: pnpm test:product-upgrade
+      - name: 数据库与附件密钥完整恢复、恢复中途失败回滚
+        env:
+          PG_CONTAINER: db
+        run: pnpm test:upgrade-restore
       # 浏览器套件另建新库和临时构建目录，测试当前源码编译出的服务。
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
@@ -160,6 +177,11 @@ jobs:
           file: Dockerfile
           load: true
           tags: feronavi-app:ci
+          build-args: |
+            FERONAVI_VERSION=${{ steps.candidate_meta.outputs.version }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.candidate_meta.outputs.version }}
           cache-from: type=gha,scope=app
           cache-to: type=gha,scope=app,mode=max
       - name: 导出本次应用与数据库镜像供OS扫描
@@ -217,11 +239,31 @@ jobs:
           if-no-files-found: error
       - name: 验证镜像中的运行入口与静态文件
         run: docker run --rm --entrypoint node feronavi-app:ci -e "const fs = require('node:fs'); for (const path of ['dist-server/server/server.js', 'dist-server/server/worker.js', 'dist-server/db/seed-data.json', 'dist/index.html', 'drizzle/meta/_journal.json']) fs.accessSync(path)"
+      - name: 验收本地MCP候选包与新安装镜像
+        run: |
+          mkdir -p "$RUNNER_TEMP/feronavi-mcp-package"
+          npm pack ./packages/feronavi-mcp --pack-destination "$RUNNER_TEMP/feronavi-mcp-package"
+          MCP_PACKAGE_SPEC="$RUNNER_TEMP/feronavi-mcp-package/feronavi-mcp-$(node -p "require('./packages/feronavi-mcp/package.json').version").tgz" \
+            DEPLOY_IMAGE=feronavi-app:ci DEPLOY_DB_IMAGE=feronavi-db:ci \
+            NPX_DOCKER_OUT=.cache/candidate-package-acceptance \
+            node scripts/accept-published-npx-docker.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: candidate-package-acceptance
+          path: .cache/candidate-package-acceptance/report.json
       - name: 全新数据卷启动 Compose 应用与独立 worker
         run: |
           docker compose -p feronavi-ci -f compose.yaml -f compose.ci.yaml up -d --wait --wait-timeout 180
           curl --fail http://127.0.0.1:33000/setup -o /tmp/feronavi-setup.html
           docker compose -p feronavi-ci -f compose.yaml -f compose.ci.yaml ps --status running --services | grep -qx worker
+      - name: 保存同一提交的实际候选部署回执
+        run: node scripts/record-ci-deployment.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidate-deployment
+          path: .cache/candidate-deployment/receipt.json
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
         with:

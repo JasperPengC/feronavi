@@ -176,6 +176,11 @@ export function useRagConversation(id: string | undefined, project: string | und
     } finally { if (isCurrent()) void client.invalidateQueries({ queryKey: conversationKey(id) }); }
   }
   const decisionLocks = useRef(new Set<string>());
+  async function refreshExecution(requestId: string) {
+    if (!isCurrent() || !id) return;
+    const result = await apiGet<RagMessageResult>(`${base}/${id}/requests/${requestId}`);
+    if (isCurrent()) saveResult(result);
+  }
   async function decide(requestId: string, actionId: string, decision: "confirm" | "reject") {
     if (!isCurrent() || !id || decisionLocks.current.has(actionId)) return;
     const target = id;
@@ -215,6 +220,6 @@ export function useRagConversation(id: string | undefined, project: string | und
     } catch (cause) { if (isCurrent() && active.current === id) setActionError(cause instanceof ApiError ? cause.message : t("assistant.actionFailed")); return undefined; }
     finally { if (isCurrent()) setChanging(false); }
   }
-  return { detail, conversation, messages, draft, setDraft, pending, streamFor: (requestId: string) => local?.requestId === requestId ? local.stream : undefined, decide, cancelledBeforeSend: local?.cancelled, error: serverPending ? undefined : local?.error, submit, cancel, update, changing, actionError,
+  return { detail, conversation, messages, draft, setDraft, pending, streamFor: (requestId: string) => local?.requestId === requestId ? local.stream : undefined, decide, refreshExecution, cancelledBeforeSend: local?.cancelled, error: serverPending ? undefined : local?.error, submit, cancel, update, changing, actionError,
     newBlank: () => setBlankId(crypto.randomUUID()), clearActionError: () => setActionError(undefined) };
 }

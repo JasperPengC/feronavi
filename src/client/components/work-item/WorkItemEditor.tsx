@@ -20,6 +20,9 @@ import { DraftNavigationGuard } from "../ui/DraftNavigationGuard.tsx";
 import { Select } from "../Select.tsx";
 import { DatePicker } from "../DatePicker.tsx";
 import { confirmDialog } from "../Dialog.tsx";
+import type { ProductSummary } from "../../../shared/schemas/product.ts";
+import { WorkItemPicker, type WorkItemOption } from "./WorkItemPicker.tsx";
+import { WorkItemPlanningFields, type WorkItemPlanValues } from "./WorkItemPlanningFields.tsx";
 
 const TYPES = ["REQUIREMENT", "TASK", "DEFECT", "SUBTASK"] as const;
 const PRIORITIES = ["LOWEST", "LOW", "MEDIUM", "HIGH", "URGENT"] as const;
@@ -29,26 +32,34 @@ export interface EditableWorkItem {
   id: string; projectId: string; type: string; title: string; description: string | null;
   priority: string | null; severity?: string | null; assigneeId: string | null;
   dueDate: string | null; startDate?: string | null; parentId?: string | null; version: number;
+  productId?: string | null;
+  milestoneId?: string | null; iterationId?: string | null; releaseId?: string | null; moduleId?: string | null;
 }
+
+export type WorkItemParent = WorkItemOption & Pick<EditableWorkItem, "type" | "priority" | "dueDate" | "startDate" | "milestoneId" | "iterationId" | "releaseId" | "moduleId">;
 
 interface ProjectMember { id: string; name: string; username: string }
 
-interface FormState {
+interface FormState extends WorkItemPlanValues {
   type: string; title: string; description: string; priority: string;
   severity: string; assigneeId: string; dueDate: string; startDate: string; parentId: string;
+  productId: string;
 }
 
 const EMPTY: FormState = {
   type: "TASK", title: "", description: "", priority: "", severity: "",
-  assigneeId: "", dueDate: "", startDate: "", parentId: "",
+  assigneeId: "", dueDate: "", startDate: "", parentId: "", productId: "",
+  milestoneId: "", iterationId: "", releaseId: "", moduleId: "",
 };
 
 export function WorkItemEditor({
-  open, projectId, workItem, initialDueDate, onClose, onSaved,
+  open, projectId, workItem, initialDueDate, initialParent, initialPlanning, onClose, onSaved,
 }: {
   open: boolean;
   projectId: string;
   initialDueDate?: string;
+  initialPlanning?: Partial<Record<"milestoneId" | "iterationId" | "releaseId" | "moduleId", string>>;
+  initialParent?: WorkItemParent;
   /** 传入 = 编辑；不传 = 新建 */
   workItem?: EditableWorkItem | null;
   onClose: () => void;
@@ -58,6 +69,7 @@ export function WorkItemEditor({
   const editing = !!workItem;
   const [form, setForm] = useState<FormState>(EMPTY);
   const [error, setError] = useState<string | null>(null);
+  const [plansValid, setPlansValid] = useState(true);
   const formId = useId();
   const session = useRef<{ key: string; initial: FormState; version?: number } | null>(null);
   const confirming = useRef(false);
@@ -68,7 +80,7 @@ export function WorkItemEditor({
 
   useEffect(() => {
     if (!open) { session.current = null; createdDraft.current = null; resetImages(); return; }
-    const key = workItem?.id ?? projectId;
+    const key = workItem?.id ?? `${projectId}:${initialParent?.id ?? ""}`;
     if (session.current?.key === key) return;
     setError(null);
     createdDraft.current = null; resetImages();
@@ -82,10 +94,17 @@ export function WorkItemEditor({
       dueDate: workItem.dueDate ?? "",
       startDate: workItem.startDate ?? "",
       parentId: workItem.parentId ?? "",
-    } : { ...EMPTY, dueDate: initialDueDate ?? "" };
+      productId: workItem.productId ?? "",
+      milestoneId: workItem.milestoneId ?? "", iterationId: workItem.iterationId ?? "",
+      releaseId: workItem.releaseId ?? "", moduleId: workItem.moduleId ?? "",
+    } : { ...EMPTY, dueDate: initialDueDate ?? initialParent?.dueDate ?? "", startDate: initialParent?.startDate ?? "",
+      type: !initialParent || initialParent.type === "REQUIREMENT" ? "TASK" : "SUBTASK",
+      parentId: initialParent?.id ?? "", priority: initialParent?.priority ?? "",
+      milestoneId: initialParent?.milestoneId ?? initialPlanning?.milestoneId ?? "", iterationId: initialParent?.iterationId ?? initialPlanning?.iterationId ?? "",
+      releaseId: initialParent?.releaseId ?? initialPlanning?.releaseId ?? "", moduleId: initialParent?.moduleId ?? initialPlanning?.moduleId ?? "" };
     session.current = { key, initial, version: workItem?.version };
     setForm(initial);
-  }, [open, workItem, initialDueDate, projectId, resetImages]);
+  }, [open, workItem, initialDueDate, initialParent, initialPlanning, projectId, resetImages]);
 
   const members = useQuery({
     queryKey: ["project-members", projectId],
@@ -95,16 +114,8 @@ export function WorkItemEditor({
     staleTime: 60_000,
   });
 
-  const parents = useQuery({
-    queryKey: ["work-item-parent-options", projectId, workItem?.id ?? ""],
-    enabled: open && !!projectId,
-    retry: false,
-    queryFn: () => apiGet<{ rows?: { id: string; key: string; title: string }[] }>(`/api/v1/projects/${projectId}/work-items`, { view: "table", pageSize: 100 }),
-  });
-  const parentOptions = [
-    { value: "", label: t("wie.noParent") },
-    ...(parents.data?.rows ?? []).filter((r) => r.id !== workItem?.id).map((r) => ({ value: r.id, label: `${r.key} ${r.title}` })),
-  ];
+  const products = useQuery({ queryKey: ["project-products", projectId], enabled: open && form.type === "REQUIREMENT", retry: false,
+    queryFn: () => apiGet<{ products: ProductSummary[] }>(`/api/v1/projects/${projectId}/products`, { includeArchived: true }).then(r => r.products) });
   const save = useMutation({
     mutationFn: async () => {
       const body: Record<string, unknown> & { description: string | null } = {
@@ -114,9 +125,12 @@ export function WorkItemEditor({
         assigneeId: form.assigneeId || null,
         dueDate: form.dueDate || null,
         startDate: form.startDate || null,
-        parentId: form.type === "SUBTASK" ? form.parentId || null : null,
+        parentId: form.parentId || null,
+        milestoneId: form.milestoneId || null, iterationId: form.iterationId || null,
+        releaseId: form.releaseId || null, moduleId: form.moduleId || null,
       };
       if (form.type === "DEFECT") body.severity = form.severity || null;
+      if (form.type === "REQUIREMENT") body.productId = form.productId || null;
       if (editing && workItem) {
         const description = await images.persist(form.description, "WORK_ITEM", workItem.id);
         return apiPatch(`/api/v1/work-items/${workItem.id}`, { ...body, description: description.trim() || null, version: session.current?.version });
@@ -127,6 +141,7 @@ export function WorkItemEditor({
       await Promise.all([
         invalidateWorkItemQueries(qc, (saved as { id?: string } | undefined)?.id ?? workItem?.id),
         qc.invalidateQueries({ queryKey: ["attachments", "WORK_ITEM"] }),
+        qc.invalidateQueries({ queryKey: ["project-products", projectId] }),
       ]);
       onSaved?.(saved as { id: string });
       onClose();
@@ -139,7 +154,7 @@ export function WorkItemEditor({
     { value: "", label: t("wie.unassigned") },
     ...(members.data ?? []).map((m) => ({ value: m.id, label: m.name || m.username, secondaryLabel: `@${m.username}` })),
   ];
-  const disabled = !form.title.trim() || (form.type === "SUBTASK" && !form.parentId) || save.isPending;
+  const disabled = !form.title.trim() || (form.type === "SUBTASK" && !form.parentId) || !plansValid || save.isPending;
   const dirty = !!session.current && JSON.stringify(form) !== JSON.stringify(session.current.initial);
   const submit = () => {
     if (disabled || saveLock.current) return;
@@ -188,11 +203,12 @@ export function WorkItemEditor({
           <Select label={t("wiDetail.type")} value={form.type} ariaLabel={t("wiDetail.type")}
             disabled={editing || !!createdDraft.current} onChange={(v) => setForm({ ...form, type: v })}
             options={TYPES.map((x) => ({ value: x, label: t(`type.${x}`) }))} />
-          {form.type === "SUBTASK" && (
-            <Select label={t("wie.parent")} value={form.parentId} ariaLabel={t("wie.parent")} searchable
-              onChange={(v) => setForm({ ...form, parentId: v })}
-              options={parentOptions} />
-          )}
+          {open && <WorkItemPicker projectId={projectId} value={form.parentId} onChange={parentId => setForm({ ...form, parentId })}
+            label={t("wie.parent")} emptyLabel={t("wie.noParent")} excludeId={workItem?.id} selected={initialParent} required={form.type === "SUBTASK"} />}
+          {form.type === "REQUIREMENT" && <Select label={t("product.attribution")} ariaLabel={t("product.attribution")} value={form.productId} searchable
+            onChange={value => setForm({ ...form, productId: value })} disabled={products.isLoading || products.isError}
+            error={products.isError ? <span>{t("common.loadFailedShort")} <Button size="sm" onClick={() => void products.refetch()}>{t("common.reload")}</Button></span> : undefined}
+            options={[{ value: "", label: t("product.none") }, ...(products.data ?? []).filter(p => !p.archivedAt || p.id === session.current?.initial.productId).map(p => ({ value: p.id, label: p.name + (p.archivedAt ? ` · ${t("product.archived")}` : "") }))]} />}
           <Select label={t("common.priority")} value={form.priority} ariaLabel={t("common.priority")}
             onChange={(v) => setForm({ ...form, priority: v })}
             options={[{ value: "", label: t("wie.none") }, ...PRIORITIES.map((x) => ({ value: x, label: t(`prio.${x}`) }))]} />
@@ -208,6 +224,9 @@ export function WorkItemEditor({
           <DatePicker label={t("common.dueDate")} value={form.dueDate} onChange={(v) => setForm({ ...form, dueDate: v })}
             ariaLabel={t("common.dueDate")} placeholder={t("common.pickDate")} clearable />
         </div></fieldset>
+
+        {open && <WorkItemPlanningFields projectId={projectId} values={form} existing={editing ? session.current?.initial : undefined}
+          onChange={(field, value) => setForm(current => ({ ...current, [field]: value }))} onValidityChange={setPlansValid} />}
 
         </fieldset>
         {error && createdDraft.current && <p className="muted" role="status">{t("md.createdRetry")}</p>}

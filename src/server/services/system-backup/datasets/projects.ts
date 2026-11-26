@@ -1,4 +1,4 @@
-import { defineDataset } from "../types.ts";
+import { defineDataset, type DeferredReferenceColumn } from "../types.ts";
 
 const projectData = (
   tableName: string,
@@ -7,7 +7,7 @@ const projectData = (
   orderBy: readonly string[],
   dependsOn: readonly string[],
   minimumMode: "safe" | "full" = "safe",
-  extra: { selfReferenceColumns?: readonly string[] } = {},
+  extra: { secretColumns?: readonly string[]; rewrapColumns?: readonly string[]; safeTransform?: (row: Record<string,unknown>)=>Record<string,unknown>; selfReferenceColumns?: readonly string[]; deferredReferenceColumns?: readonly DeferredReferenceColumn[] } = {},
 ) =>
   defineDataset({
     name: `projects.${tableName}`,
@@ -23,6 +23,44 @@ const projectData = (
   });
 
 export const projectDatasets = [
+  projectData('release_candidate',['id','project_id','release_id','number','source_id','source_version','repository','commit_sha','build','environment','workflow_ids','test_plan_ids','work_items','created_by','created_at'],['created_at'],['release_id','number'],['projects.project','projects.release','projects.delivery_source','projects.test_plan','projects.work_item','identity.member']),
+  projectData('release_verification',['id','project_id','release_id','candidate_id','snapshot','created_by','created_at'],['created_at'],['id'],['projects.project','projects.release','projects.release_candidate','projects.delivery_evidence','projects.test_run','identity.member']),
+  projectData('release_feedback',['id','project_id','release_id','work_item_id','source_url','conclusion','outcome','created_by','created_at'],['created_at'],['id'],['projects.project','projects.release','projects.work_item','identity.member']),
+  // integration外键延迟到事务结束；safe包移除绑定和凭据，保留历史来源及证据。
+  projectData('delivery_source',['id','project_id','integration_id','repository','api_base_url','integration_updated_at','webhook_secret_encrypted','enabled','version','created_by','created_at','updated_at'],['integration_updated_at','created_at','updated_at'],['id'],['projects.project','identity.member'],'safe',{secretColumns:['webhook_secret_encrypted'],rewrapColumns:['webhook_secret_encrypted'],safeTransform:row=>({...row,integration_id:null,webhook_secret_encrypted:null,enabled:false})}),
+  projectData('delivery_evidence',['id','project_id','source_id','source_version','kind','title','repository','commit_sha','build','environment','status','verification','external_id','attempt','provider_updated_at','url','details','created_by','received_at'],['provider_updated_at','received_at'],['id'],['projects.project','projects.delivery_source','identity.member']),
+  projectData('delivery_evidence_link',['id','evidence_id','work_item_id','created_by','created_at'],['created_at'],['id'],['projects.delivery_evidence','projects.work_item','identity.member']),
+  projectData('delivery_receipt',['id','source_id','source_version','delivery_id','payload_hash','event_type','evidence_id','received_at'],['received_at'],['id'],['projects.delivery_source','projects.delivery_evidence']),
+  projectData("test_plan",["id","project_id","number","title","build","environment","status","version","created_by","started_at","finished_at","cancel_reason","created_at","updated_at"],
+    ["started_at","finished_at","created_at","updated_at"],["project_id","number"],["projects.project","identity.member"]),
+  projectData("test_plan_case",["id","plan_id","case_id","revision_id","position"],[],["plan_id","position"],["projects.test_plan","projects.test_case","projects.test_case_revision"]),
+  // retest_of为延迟外键，按attempt直接恢复原值，避免篡改已结束执行。
+  projectData("test_run",["id","project_id","plan_case_id","build","environment","attempt","retest_of","status","results","version","source","source_reference","executor_id","started_at","finished_at","cancel_reason"],
+    ["started_at","finished_at"],["plan_case_id","attempt"],["projects.project","projects.test_plan_case","identity.member"]),
+  projectData("test_run_defect",["id","run_id","defect_id","created_by","generated","created_at"],["created_at"],["id"],["projects.test_run","projects.work_item","identity.member"]),
+  projectData("test_suite", ["id","project_id","name","description","version","created_by","archived_at","created_at","updated_at"],
+    ["archived_at","created_at","updated_at"], ["id"], ["projects.project","identity.member"]),
+  projectData("test_case", ["id","project_id","number","title","status","priority","suite_id","owner_id","current_revision_id","version","created_by","created_at","updated_at"],
+    ["created_at","updated_at"], ["project_id","number"], ["projects.project","projects.test_suite","identity.member"], "safe",
+    {deferredReferenceColumns:[{column:"current_revision_id",targetDataset:"projects.test_case_revision",targetColumn:"id"}]}),
+  projectData("test_case_revision", ["id","case_id","revision_no","title","preconditions","steps","created_by","created_at"],
+    ["created_at"], ["case_id","revision_no"], ["projects.test_case","identity.member"]),
+  projectData("test_case_requirement", ["id","case_revision_id","work_item_id","requirement_revision_id"],
+    [], ["id"], ["projects.test_case_revision","projects.work_item","projects.requirement_revision"]),
+  projectData("requirement_change", ["id", "work_item_id", "project_id", "number", "base_revision_id", "requested_work_item_version", "proposed_title", "proposed_description", "reason", "impact_fingerprint", "status", "version", "requested_by", "decided_by", "decided_at", "review_note", "cancelled_by", "cancelled_at", "cancel_note", "applied_by", "applied_at", "applied_revision_id", "created_at"],
+    ["decided_at", "cancelled_at", "applied_at", "created_at"], ["work_item_id", "number"], ["projects.work_item", "projects.project", "projects.requirement_revision", "identity.member"]),
+  projectData("requirement_change_impact", ["id", "change_id", "kind", "target_id", "snapshot", "acknowledged_by", "acknowledged_at", "note"],
+    ["acknowledged_at"], ["change_id", "id"], ["projects.requirement_change", "identity.member"]),
+  projectData("product", ["id", "name", "description", "version", "created_by", "archived_at", "created_at", "updated_at"],
+    ["archived_at", "created_at", "updated_at"], ["id"], ["identity.member"]),
+  projectData("product_project", ["id", "product_id", "project_id", "created_at"], ["created_at"], ["id"], ["projects.product", "projects.project"]),
+  projectData(
+    "requirement_revision",
+    ["id", "work_item_id", "revision_no", "work_item_version", "title", "description", "author_id", "source", "created_at"],
+    ["created_at"],
+    ["work_item_id", "revision_no"],
+    ["projects.work_item", "identity.member"],
+  ),
   projectData(
     "project_status_def",
     ["id", "key", "name", "category", "color", "sort_order"],
@@ -205,6 +243,7 @@ export const projectDatasets = [
       "iteration_id",
       "release_id",
       "module_id",
+      "product_id",
       "assignee_id",
       "reporter_id",
       "priority",
@@ -228,6 +267,8 @@ export const projectDatasets = [
       "projects.iteration",
       "projects.release",
       "projects.module",
+      "projects.product",
+      "projects.product_project",
       "identity.member",
     ],
     "safe",
