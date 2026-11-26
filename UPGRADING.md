@@ -1,12 +1,14 @@
 # 0.3.0 安装、升级与恢复
 
+以下步骤面向 0.3.0 目标版本。执行前请在[正式版本页](https://github.com/JasperPengC/feronavi/releases)确认目标镜像和配套包已发布；README 的默认安装入口固定到已发布的 0.2.1，不可混作 0.3.0 安装文件。
+
 Feronavi 是自托管软件。0.3.0 面向软件研发团队，包含需求正文版本与变更影响、正式测试与缺陷复测、交付证据和发布门禁、文档目录，以及当前 Codex 的业务读写闭环。
 
 应用镜像版本为 `0.3.0`；数据库镜像继续使用 `16-0.2.0`（PostgreSQL 16）；stdio 桥接包为 `feronavi-mcp@0.1.1`。桥接器独立编号，工具定义与权限来自服务端。当前镜像验收平台是 Linux amd64；其他架构请先自行演练。
 
 ## 全新安装
 
-按 README 下载本版 `compose.yaml`，生成 `.env` 中的 `DB_PASSWORD`，执行 `docker compose up -d --wait`。默认仅绑定本机 `127.0.0.1:3000`；远程服务器可以先使用 SSH 转发：
+确认 0.3.0 正式发布后，从该版本下载 `compose.yaml`，生成 `.env` 中的 `DB_PASSWORD`，执行 `docker compose up -d --wait`。默认仅绑定本机 `127.0.0.1:3000`；远程服务器可以先使用 SSH 转发：
 
 ```bash
 ssh -L 3000:127.0.0.1:3000 user@your-server

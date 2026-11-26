@@ -188,6 +188,61 @@ try {
     },
   );
   await check(
+    "dependency confirmation is stable across query plans and still rejects changed facts",
+    async () => {
+      const a = (await workItems.createWorkItem(actor, project.id, {
+        type: "TASK", title: "稳定依赖上游",
+      }))!;
+      const b = (await workItems.createWorkItem(actor, project.id, {
+        type: "TASK", title: "稳定依赖下游",
+      }))!;
+      // 两条同序出边的物理插入顺序与UUID索引顺序相反；查询计划变化不等于业务变更。
+      const [flow] = await sql`insert into workflow(project_id,name,applies_to_type)
+        values(${project.id},'同序迁移边','TASK') returning id`;
+      const initialId = "80000000-0000-4000-8000-000000000000";
+      const firstId = "f0000000-0000-4000-8000-000000000001";
+      const secondId = "10000000-0000-4000-8000-000000000002";
+      await sql`insert into workflow_state(id,workflow_id,key,name,category,color,sort_order) values
+        (${initialId},${flow!.id},'TODO','待办','NOT_STARTED','neutral',0),
+        (${firstId},${flow!.id},'ACTIVE','进行中','IN_PROGRESS','blue',1),
+        (${secondId},${flow!.id},'DONE','完成','TERMINAL','green',2)`;
+      await sql`insert into workflow_transition(workflow_id,from_state_id,to_state_id) values
+        (${flow!.id},${initialId},${firstId}),(${flow!.id},${initialId},${secondId})`;
+      await sql`update work_item set workflow_id=${flow!.id},status_id=${initialId} where id in (${a.id},${b.id})`;
+      const withReadPlan = <T>(index: boolean, run: () => Promise<T>) => db.transaction(async () => {
+        for (const [name, enabled] of Object.entries({
+          enable_seqscan: !index, enable_indexscan: index, enable_bitmapscan: index,
+          enable_hashjoin: !index, enable_nestloop: index, enable_mergejoin: false,
+        })) await sql`select set_config(${name},${enabled ? "on" : "off"},true)`;
+        return run();
+      });
+      const args = { fromWorkItemId: b.id, toWorkItemId: a.id, type: "BLOCKED_BY" };
+      const action = await withReadPlan(false, () => propose("workitem.link", args));
+      const before = await withReadPlan(false, () => assistant.observeAssistantReads(access, action.observations!));
+      const message = await save(action);
+      const current = await withReadPlan(true, () => assistant.assertAssistantObservationsCurrent(access, action));
+      assert.deepEqual(current.map(row => row.fingerprint), before.map(row => row.fingerprint));
+      const stableItem = await workItems.getWorkItem(actor, b.id);
+      assert.deepEqual((await workItems.allowedTransitions(actor, stableItem)).map(edge => edge.toStateKey), ["ACTIVE", "DONE"]);
+      const done = await withReadPlan(true, () => decide(message, action));
+      assert.equal(done.message.reply!.actions![0]!.status, "confirmed");
+      const relations = await import("../../src/server/services/relation.service.ts");
+      const linked = await relations.listRelations(actor, b.id);
+      assert.equal(linked.blockedBy.length, 1);
+      assert.equal(linked.blockedBy[0]!.workItemId, a.id);
+      const replay = await withReadPlan(false, () => decide(message, action));
+      assert.equal(replay.message.reply!.actions![0]!.status, "confirmed");
+      assert.deepEqual(await relations.listRelations(actor, b.id), linked);
+
+      const unlink = await propose("workitem.unlink", { workItemId: b.id, relationId: linked.blockedBy[0]!.id });
+      await sql`update workflow_transition set label='需要复核的状态说明' where workflow_id=${flow!.id} and to_state_id=${firstId}`;
+      await assert.rejects(decide(await save(unlink), unlink), { code: "CONFLICT" });
+      assert.deepEqual(await relations.listRelations(actor, b.id), linked);
+      await sql`update workflow_transition set sort_order=-1 where workflow_id=${flow!.id} and to_state_id=${secondId}`;
+      assert.deepEqual((await workItems.allowedTransitions(actor, stableItem)).map(edge => edge.toStateKey), ["DONE", "ACTIVE"], "管理员显式设置的迁移顺序优先");
+    },
+  );
+  await check(
     "dependencies validate both ends, reject stale collections and reread removals",
     async () => {
       const a = (await workItems.createWorkItem(actor, project.id, {

@@ -52,7 +52,8 @@ export async function listTransitionsFrom(workflowId: string, fromStateId: strin
       eq(workflowTransition.workflowId, workflowId),
       eq(workflowTransition.fromStateId, fromStateId),
     ))
-    .orderBy(workflowTransition.sortOrder);
+    // 默认迁移边可同序；用目标状态顺序和唯一key稳定并列项，避免助手复核误报事实变化。
+    .orderBy(workflowTransition.sortOrder, workflowState.sortOrder, workflowState.key);
   return rows;
 }
 
