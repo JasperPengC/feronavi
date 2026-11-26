@@ -15,6 +15,7 @@
   <p>
     <a href="https://feronavi.com/en/">Website</a> ·
     <a href="https://feronavi.com/en/docs/overview/">Documentation</a> ·
+    <a href="CHANGELOG.md">Changelog (Chinese)</a> ·
     <strong><a href="#get-started">Deploy Feronavi</a></strong> ·
     <a href="#overview">Highlights</a> ·
     <a href="#collaboration">Collaboration</a> ·

@@ -21,6 +21,8 @@ describe("源码发布包的公开边界", () => {
       execFileSync("git", ["init", "--quiet"], { cwd: directory });
       const fixtures = [
         "README.md",
+        "CHANGELOG.md",
+        "UPGRADING.md",
         "docs/screenshots/10-workbench-light.png",
         "docs/screenshots/11-wiki-light.png",
         "docs/screenshots/01-workbench-dark.png",
@@ -74,7 +76,9 @@ describe("源码发布包的公开边界", () => {
       expect(archivePaths).toEqual([
         ".env.example",
         ".github/ISSUE_TEMPLATE/bug_report.yml",
+        "CHANGELOG.md",
         "README.md",
+        "UPGRADING.md",
         "docs/screenshots/01-workbench-dark.png",
         "docs/screenshots/04-wiki-dark.png",
         "docs/screenshots/10-workbench-light.png",
