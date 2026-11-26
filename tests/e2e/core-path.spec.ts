@@ -141,12 +141,14 @@ test("登录改密、项目工作项、缺陷、Wiki 与 CSV 导入持久化", a
     const handle = card.locator(".board-drag-handle").first();
     const target = page.locator(".board-columns > .board-column[data-state-key='IN_PROGRESS']");
     await expect(handle).toBeVisible();
-    await target.scrollIntoViewIfNeeded();
+    await handle.scrollIntoViewIfNeeded();
     const from = (await handle.boundingBox())!;
     const transition = page.waitForResponse((response) => response.url().endsWith("/transition") && response.request().method() === "POST");
     await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
     await page.mouse.down();
     await page.mouse.move(from.x + from.width / 2 + 12, from.y + from.height / 2, { steps: 3 });
+    await expect(page.locator(".board-root")).toHaveClass(/is-dragging/u);
+    await target.scrollIntoViewIfNeeded();
     // 拖拽期间自动滚动会改变列的位置。每次校准真实指针，并在渲染后检查该指针下的列。
     await expect.poll(async () => {
       const to = (await target.locator(".board-column-body").boundingBox())!;
@@ -529,10 +531,13 @@ test("登录改密、项目工作项、缺陷、Wiki 与 CSV 导入持久化", a
     const batchRow = page.getByRole("row").filter({ hasText: "browser-import.csv" });
     await expect(batchRow).toContainText("已完成");
     await page.goto(`${baseURL}/projects/${project.id}/table`);
+    const numberColumn = page.getByRole("columnheader").filter({ has: page.getByRole("button", { name: "按编号排序", exact: true }) });
+    await expect(numberColumn).toHaveAttribute("aria-sort", "ascending");
     await page.getByRole("button", { name: "按编号排序", exact: true }).click();
+    await expect(numberColumn).toHaveAttribute("aria-sort", "descending");
     await expect(page.getByText("浏览器CSV导入的任务", { exact: true })).toBeVisible();
     await page.reload();
-    await page.getByRole("button", { name: "按编号排序", exact: true }).click();
+    await expect(numberColumn).toHaveAttribute("aria-sort", "descending");
     await expect(page.getByText("浏览器CSV导入的任务", { exact: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("import-persisted.png"), fullPage: true });
   });
