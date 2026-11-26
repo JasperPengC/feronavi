@@ -15,6 +15,7 @@
   <p>
     <a href="https://feronavi.com/zh/">官网</a> ·
     <a href="https://feronavi.com/zh/docs/overview/">使用文档</a> ·
+    <a href="CHANGELOG.md">变更日志</a> ·
     <strong><a href="#get-started">开始部署</a></strong> ·
     <a href="#overview">产品亮点</a> ·
     <a href="#collaboration">多人协作</a> ·

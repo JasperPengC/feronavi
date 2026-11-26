@@ -6,7 +6,7 @@ import { resolve, dirname } from 'node:path';
 const output = resolve(process.argv[2] ?? '.cache/source-package/feronavi-source.tar.gz');
 // Keep this explicit: newly added plans, reviews and agent files are private by default.
 const publicFiles = new Set([
-  'README.md', 'README.en.md', 'UPGRADING.md', 'LICENSE', 'NOTICE', 'SECURITY.md',
+  'README.md', 'README.en.md', 'CHANGELOG.md', 'UPGRADING.md', 'LICENSE', 'NOTICE', 'SECURITY.md',
   'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'index.html',
   'Dockerfile', 'compose.yaml', 'compose.ci.yaml', 'compose.dev.yaml', 'compose.source.yaml',
   'tsconfig.json', 'tsconfig.server.json', 'vite.config.ts', 'vitest.config.ts',
